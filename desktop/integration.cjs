@@ -45,10 +45,14 @@ function attachIntegration(window) {
             else if (action === 'test') result = await host.test(data);
             else if (action === 'mcp') {
                 result = await mcp.change(data);
+            } else if (action === 'mcp-lan') {
+                result = await mcp.lan(data);
             } else if (action === 'reset-mcp') {
                 result = await mcp.reset();
             } else if (action === 'copy-mcp') {
-                clipboard.writeText(JSON.stringify(await mcp.connection(data), null, 2)); result = true;
+                const client = typeof data === 'string' ? data : data?.client;
+                const useLan = typeof data === 'object' ? Boolean(data?.useLan) : false;
+                clipboard.writeText(JSON.stringify(await mcp.connection(client, { useLan }), null, 2)); result = true;
             } else if (action === 'copy-text') {
                 if (typeof data !== 'string' || data.length > 100000) throw new Error('复制内容无效或超过 100000 字');
                 clipboard.writeText(data); result = true;

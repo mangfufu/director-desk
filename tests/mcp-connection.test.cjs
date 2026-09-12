@@ -12,7 +12,7 @@ test('MCP configuration survives stop/start and a new host; reset invalidates ol
     const make = () => createMcpHost({ directory, safeStorage, definitions: [], call: async () => ({ ok: true }), version: '1.0.0' });
     let host = make();
     const connection = async () => (await host.connection()).mcpServers['director-desk'];
-    const status = c => fetch(c.url, { method: 'POST', headers: { ...c.headers, 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }).then(r => r.status);
+    const status = c => fetch(c.url, { method: 'POST', headers: { ...c.headers, 'content-type': 'application/json', accept: 'application/json, text/event-stream', connection: 'close' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }).then(r => r.status);
     try {
         await host.change(true); const first = await connection(); assert.equal(await status(first), 200);
         await host.change(false); await host.change(true); assert.deepEqual(await connection(), first);

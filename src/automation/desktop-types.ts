@@ -19,10 +19,11 @@ declare global {
         test(id: string): Promise<DesktopResult>;
         run(data: Record<string, unknown>): Promise<DesktopResult>;
         stop(): Promise<DesktopResult>;
-        mcp(enabled?: boolean): Promise<DesktopResult<{ enabled: boolean; url?: string }>>;
-        copyMcp(client?: 'http' | 'claude-code' | 'claude-desktop' | 'stdio'): Promise<DesktopResult>;
+        mcp(enabled?: boolean): Promise<DesktopResult<{ enabled: boolean; url?: string; lanEnabled?: boolean; lanUrl?: string; lanIp?: string; lanPort?: number }>>;
+        mcpLan(enabled?: boolean): Promise<DesktopResult<{ enabled: boolean; url?: string; lanEnabled?: boolean; lanUrl?: string; lanIp?: string; lanPort?: number }>>;
+        copyMcp(client?: 'http' | 'claude-code' | 'claude-desktop' | 'stdio' | { client: string; useLan?: boolean }, useLan?: boolean): Promise<DesktopResult>;
         copyText?(text: string): Promise<DesktopResult>;
-        resetMcp(): Promise<DesktopResult<{ enabled: boolean; url?: string }>>;
+        resetMcp(): Promise<DesktopResult<{ enabled: boolean; url?: string; lanEnabled?: boolean; lanUrl?: string; lanIp?: string; lanPort?: number }>>;
         onEvent(callback: (event: AgentEvent) => void): () => void;
         onTool(callback: (name: string, args: Record<string, unknown>) => Promise<unknown>): () => void;
     } }

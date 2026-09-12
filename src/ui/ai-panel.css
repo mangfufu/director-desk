@@ -29,11 +29,11 @@
 #ai-settings>.ai-buttons{margin-top:auto}
 #ai-panel p{font-size:11px;color:#999;margin:0;line-height:1.5}
 #ai-mcp{display:flex;flex-direction:column;gap:16px}
-.ai-mcp-heading{padding:8px 0}
+.ai-mcp-heading{display:flex;flex-direction:column;gap:6px;padding:4px 0}
 .ai-connection{display:grid;gap:8px;padding:12px;border:1px solid #333;background:#111;border-radius:5px;min-width:0}
 .ai-connection>span{font-size:11px;color:#aaa}
-#ai-mcp-status{font:12px/1.6 Consolas,monospace;overflow-wrap:anywhere}
-#ai-mcp-copy{min-height:32px;font-size:12px}
+#ai-mcp-status,#ai-mcp-lan-status{font:12px/1.6 Consolas,monospace;overflow-wrap:anywhere}
+#ai-mcp-copy,#ai-mcp-lan-copy{min-height:32px;font-size:12px}
 .ai-footer{display:flex;gap:6px;align-items:center;padding-top:8px;border-top:1px solid #333;flex-shrink:0;min-width:0}
 #ai-panel #ai-status{height:42px;min-height:42px;font-size:11px;padding:3px 0;color:#aaa;border:0;background:transparent;flex:1}
 #ai-background-stop{min-height:30px;padding:4px 8px;font-size:11px}
