@@ -25,7 +25,9 @@ function getLanIPv4() {
     return candidates[0]?.ip || '127.0.0.1';
 }
 
-async function startLanProxy({ targetPort, proxyPort = 0 }) {
+const DEFAULT_LAN_PORT = 54321;
+
+async function startLanProxy({ targetPort, proxyPort = DEFAULT_LAN_PORT }) {
     let closed = false;
     const connections = new Set();
     const server = http.createServer((req, res) => {
@@ -69,10 +71,45 @@ async function startLanProxy({ targetPort, proxyPort = 0 }) {
         socket.on('close', () => connections.delete(socket));
     });
 
-    await new Promise((resolve, reject) => {
-        server.once('error', e => reject(Error(e.code === 'EADDRINUSE' ? `局域网代理端口 ${proxyPort} 已被占用` : '无法启动局域网代理服务')));
-        server.listen(proxyPort, '0.0.0.0', resolve);
-    });
+    const basePort = proxyPort > 0 ? proxyPort : DEFAULT_LAN_PORT;
+    const maxAttempts = 100;
+    let bound = false;
+    let lastError = null;
+
+    for (let offset = 0; offset < maxAttempts; offset++) {
+        const port = basePort + offset;
+        if (port > 65535) break;
+        if (port === targetPort) continue;
+
+        try {
+            await new Promise((resolve, reject) => {
+                const onError = err => {
+                    server.off('listening', onListening);
+                    reject(err);
+                };
+                const onListening = () => {
+                    server.off('error', onError);
+                    resolve();
+                };
+                server.once('error', onError);
+                server.once('listening', onListening);
+                server.listen(port, '0.0.0.0');
+            });
+            bound = true;
+            break;
+        } catch (err) {
+            lastError = err;
+            if (err.code !== 'EADDRINUSE') {
+                throw Error(`无法启动局域网代理服务: ${err.message}`);
+            }
+        }
+    }
+
+    if (!bound) {
+        throw Error(lastError?.code === 'EADDRINUSE'
+            ? `局域网代理端口（${basePort} 至 ${basePort + maxAttempts - 1}）均已被占用`
+            : '无法启动局域网代理服务');
+    }
 
     const actualPort = server.address().port;
     const ip = getLanIPv4();
@@ -94,4 +131,4 @@ async function startLanProxy({ targetPort, proxyPort = 0 }) {
     };
 }
 
-module.exports = { getLanIPv4, startLanProxy };
+module.exports = { getLanIPv4, startLanProxy, DEFAULT_LAN_PORT };

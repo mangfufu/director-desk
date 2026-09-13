@@ -44,6 +44,7 @@ test('MCP host LAN toggle, configuration generation, and proxy forwarding', asyn
         assert(typeof lanState.lanUrl === 'string');
         assert(lanState.lanUrl.startsWith('http://'));
         assert(lanState.lanUrl.endsWith('/mcp'));
+        assert(lanState.lanPort >= 54321);
 
         // Local connection config
         const localConn = (await host.connection('http', { useLan: false })).mcpServers['director-desk'];
@@ -98,5 +99,35 @@ test('MCP host LAN toggle, configuration generation, and proxy forwarding', asyn
     } finally {
         await host.close();
         fs.rmSync(directory, { recursive: true, force: true });
+    }
+});
+
+test('startLanProxy uses fixed default port and increments by +1 when port is occupied', async () => {
+    const http = require('node:http');
+    const { startLanProxy, DEFAULT_LAN_PORT } = require('../desktop/mcp-lan-proxy.cjs');
+
+    // Create a target MCP server
+    const target = http.createServer((req, res) => res.writeHead(200).end());
+    await new Promise(r => target.listen(0, '127.0.0.1', r));
+    const targetPort = target.address().port;
+
+    const blocker1 = http.createServer();
+    const blocker2 = http.createServer();
+
+    try {
+        // Block base port 54321
+        await new Promise(r => blocker1.listen(DEFAULT_LAN_PORT, '0.0.0.0', r));
+        // Block 54322
+        await new Promise(r => blocker2.listen(DEFAULT_LAN_PORT + 1, '0.0.0.0', r));
+
+        // Proxy should skip 54321 and 54322, binding to 54323
+        const proxy = await startLanProxy({ targetPort, proxyPort: DEFAULT_LAN_PORT });
+        assert.equal(proxy.port, DEFAULT_LAN_PORT + 2);
+        assert.equal(proxy.url.includes(String(DEFAULT_LAN_PORT + 2)), true);
+        await proxy.close();
+    } finally {
+        await new Promise(r => blocker1.close(r));
+        await new Promise(r => blocker2.close(r));
+        await new Promise(r => target.close(r));
     }
 });

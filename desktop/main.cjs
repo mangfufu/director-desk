@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, protocol, dialog } = require('electron');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 const path = require('node:path');
 const { attachIntegration } = require('./integration.cjs');
 const { attachUpdates } = require('./updates.cjs');
@@ -45,7 +46,9 @@ else {
     app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
     app.whenReady().then(() => {
         app.setAppUserModelId('app.directordesk.desktop');
-        const webRoot = path.join(app.getAppPath(), 'dist');
+        const webRoot = fsSync.existsSync(path.join(app.getAppPath(), 'dist'))
+            ? path.join(app.getAppPath(), 'dist')
+            : path.resolve(__dirname, '../dist');
         protocol.handle('director', async request => {
             try {
                 const url = new URL(request.url), relative = decodeURIComponent(url.pathname).replace(/^\//, '') || 'index.html';
