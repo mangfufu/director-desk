@@ -1,6 +1,6 @@
 import type { Entity, Project } from '../model.ts';
 export interface EditLocation { entityId?: string; name: string; action: 'added' | 'updated' | 'removed'; field: string; start: number; end: number }
-const labels: Record<string, string> = { position: '位置', rotation: '旋转', scale: '缩放', path: '运动路径', clips: '动作', pose: '姿态', poseKeys: '姿态关键帧', camera: '摄影机', light: '灯光', color: '颜色', visible: '显隐', handBinding: '手持绑定', name: '名称', cuts: '切镜', production: '剧情与提示词', lighting: '场景光影', room: '房间', resources: '资源', references: '参考图', duration: '时长', aspect: '画幅', fps: '帧率' };
+const labels: Record<string, string> = { memberPaths:'群演独立路线', physics:'物理', groups: '编组', position: '位置', rotation: '旋转', scale: '缩放', path: '运动路径', clips: '动作', pose: '姿态', poseKeys: '姿态关键帧', camera: '摄影机', light: '灯光', color: '颜色', visible: '显隐', handBinding: '手持绑定', name: '名称', cuts: '切镜', production: '剧情与提示词', lighting: '场景光影', room: '房间', resources: '资源', references: '参考图', duration: '时长', aspect: '画幅', fps: '帧率' };
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 /** Conservative affected intervals: key neighbours are included, static edits span the scene. */
 function interval(a: unknown, b: unknown, duration: number): [number, number] {

@@ -9,6 +9,7 @@ export function poseAnimal(rig: Rig, e: Entity, time: number) {
     rig.hips.position.y = rig.restHipHeight ?? 0;
     rig.hips.rotation.set(0, 0, 0);
     for (const [key, value] of Object.entries(samplePose(e, time))) {
+        if (Array.isArray(value)) continue; // Animal poses retain their existing single-axis contract.
         if (key === 'headYaw') rig.head.rotation.y = T.MathUtils.degToRad(value);
         else if (rig.joints[key]) {
             const axis = rig.poseAxes?.[key] ?? 'x';

@@ -25,6 +25,7 @@ function attachIntegration(window) {
     };
     const mcp = createMcpHost({ directory: app.getPath('userData'), safeStorage, definitions: MCP_TOOL_DEFINITIONS, call: callTool, version: releaseVersion(app.getVersion()),
         bridgeRuntime: { command: process.execPath, bridgePath: app.isPackaged ? path.join(process.resourcesPath, 'mcp', 'stdio-bridge.cjs') : path.join(app.getAppPath(), 'desktop', 'mcp-stdio.cjs') } });
+    void mcp.initialize();
     const host = createAIHost({ directory: app.getPath('userData'), safeStorage, definitions: TOOL_DEFINITIONS, discussionTools: DISCUSSION_TOOLS, isDiscussionToolCall, callTool,
         skill: BUILTIN_SKILL, skills,
         send: data => { if (!window.isDestroyed()) window.webContents.send('director-ai-event', data); } });
@@ -61,7 +62,7 @@ function attachIntegration(window) {
             return { ok: true, data: result };
         } catch (e) { return { ok: false, error: e.message }; }
     });
-    window.webContents.on('did-start-loading', () => { ready = false; host.stop(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '页面重新载入，调用结果未确认；请重新读取工程，不要直接重复写入' }); } pending.clear(); });
+    window.webContents.on('did-start-navigation', details => { if (!details.isMainFrame || details.isSameDocument) return; ready = false; host.stop(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '页面重新载入，调用结果未确认；请重新读取工程，不要直接重复写入' }); } pending.clear(); });
     window.on('closed', () => { host.stop(); void mcp.close(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '软件已关闭，调用结果未确认；请重新读取工程，不要直接重复写入' }); }
         ipcMain.removeHandler('director-host'); ipcMain.removeListener('director-tool-result', resultHandler); ipcMain.removeListener('director-tools-ready', readyHandler); });
     return { isBusy: () => host.isRunning() || skillHost.isBusy() || pending.size > 0 };

@@ -68,9 +68,9 @@ export function createRigEditor(ctx: AppContext, refresh: () => void) {
         const button = (action: string, label: string) => `<button data-rig-action="${action}" class="subtle">${label}</button>`;
         const mode = select('rig-view', '骨架编辑方式', modes, view);
         if (view === 'mapping') {
-            return `<div class="rig-editor" title="${escape(missing ? '待映射：' + missing : '映射齐全；自然动作适配尚未接入')}"><div class="rig-pair">${mode}${select('rig-part', '人体部位', Object.entries(HUMAN_BONES), part)}</div>${select('rig-bone', '对应源骨骼', [['', '未映射'], ...bones], rig?.bones[part] ?? '')}<div class="rig-buttons">${button('auto', '自动识别')}${button('clear', '清除映射')}${button('focus', '定位')}</div></div>`;
+            return `<div class="rig-editor" title="${escape(missing ? '待映射：' + missing : '骨骼对应已设置')}"><div class="rig-pair">${mode}${select('rig-part', '人体部位', Object.entries(HUMAN_BONES), part)}</div>${select('rig-bone', '对应源骨骼', [['', '未映射'], ...bones], rig?.bones[part] ?? '')}<div class="rig-buttons">${button('auto', '自动识别')}${button('clear', '清除映射')}${button('focus', '定位')}</div></div>`;
         }
         const angles = e.external!.defaultPose?.[bonePath] ?? [0, 0, 0];
-        return `<div class="rig-editor" title="局部 XYZ 旋转／度；默认姿态随工程保存，仅在原生动画片段外显示；通用动作适配待完成"><div class="rig-pair">${mode}${select('rig-bone', '调整源骨骼', bones, bonePath)}</div><div class="rig-angles">${['X', 'Y', 'Z'].map((axis, i) => `<label>${axis}<input type="number" data-rig-axis="${i}" aria-label="局部 ${axis} 旋转／度" min="-360" max="360" step="1" value="${Number((angles[i] * 180 / Math.PI).toFixed(4))}"/></label>`).join('')}</div><div class="rig-buttons">${button('reset-one', '此骨骼复位')}${button('reset-all', '全部复位')}${button('focus', '定位')}</div></div>`;
+        return `<div class="rig-editor" title="调整骨骼的默认旋转角度"><div class="rig-pair">${mode}${select('rig-bone', '调整源骨骼', bones, bonePath)}</div><div class="rig-angles">${['X', 'Y', 'Z'].map((axis, i) => `<label>${axis}<input type="number" data-rig-axis="${i}" aria-label="局部 ${axis} 旋转／度" min="-360" max="360" step="1" value="${Number((angles[i] * 180 / Math.PI).toFixed(4))}"/></label>`).join('')}</div><div class="rig-buttons">${button('reset-one', '此骨骼复位')}${button('reset-all', '全部复位')}${button('focus', '定位')}</div></div>`;
     } };
 }

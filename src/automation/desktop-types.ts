@@ -7,8 +7,12 @@ export interface SkillRequest { action: 'list' | 'read' | 'enable' | 'remove' | 
 export interface AgentEvent { type: string; text?: string; name?: string; status?: string; model?: string; channel?: string; sessionId: string; summary?: unknown; usage?: unknown; timing?: { rounds: number; modelMs: number; toolMs: number; toolCalls: number; totalMs: number; firstTextMs?: number } }
 declare global {
     interface Window { directorDesktop?: {
+        extensions?(args:Record<string,unknown>):Promise<DesktopResult<any>>;
+        onExtensionRequest?(callback:(request:{id:string;plugin:string;method:string;args:any})=>Promise<unknown>):()=>void;
+        pathForFile?(file: File): string;
+        closingState?(data: { busy: boolean }): void;
         skills?(data: SkillRequest): Promise<DesktopResult<SkillResult>>;
-        files?(action: 'locations' | 'choose' | 'save-project' | 'save-export', data?: unknown): Promise<DesktopResult<{ projects?: string; exports?: string; saved?: boolean; filename?: string }>>;
+        files?(action: 'locations' | 'set-locations' | 'choose' | 'choose-export-directory' | 'save-project' | 'save-export' | 'automation-read' | 'automation-write-begin' | 'automation-write-chunk' | 'automation-write-close' | 'automation-write-abort', data?: unknown): Promise<DesktopResult<{ projects?: string; exports?: string; saved?: boolean; filename?: string; name?: string; id?: string; path?: string; content?: string; package?: import('../resources/model-package.ts').ModelPackage }>>;
         onSaveBeforeClose?(callback: () => Promise<boolean>): () => void;
         update(action: 'state' | 'save' | 'check' | 'download' | 'install' | 'page', data?: unknown): Promise<DesktopResult<import('../updates/types.ts').UpdateState>>;
         onUpdate(callback: (state: import('../updates/types.ts').UpdateState) => void): () => void;

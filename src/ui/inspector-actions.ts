@@ -22,7 +22,7 @@ export function createActionInspector(navigation: InspectorNavigation, refresh: 
         const clip = e.clips.find(c => c.id === selected);
         const presets = actionPickerMarkup(supported);
         const clips = !clip ? '<p class="action-empty">尚无动作，选择上方动作即可添加。</p>' : `<label class="field"><span>动作片段</span><select id="basic-clip-choice">${options(e.clips.map(c => [c.id, `${clipLabel(c)} · ${c.start.toFixed(2)}—${c.end.toFixed(2)} 秒`]), selected)}</select></label><div class="field-pair">${(['start', 'end'] as const).map(key => `<label class="field"><span>${key === 'start' ? '开始' : '结束'} / 秒</span><input data-clip="${clip.id}" data-prop="${key}" type="number" step=".1" min="0" value="${clip[key]}"/></label>`).join('')}</div><div class="clip-speed-row"><label class="field"><span>动作速度</span><input data-clip="${clip.id}" data-prop="speed" type="number" step=".1" min=".1" max="5" value="${clip.speed}"/></label>${button('remove-clip', '移除', 'trash', 'subtle', `data-id="${clip.id}"`)}</div>`;
-        const settings = (animal ? '' : e.kind === 'actor' ? select('脚底贴合表面', 'footContact', [['false', '关闭'], ['true', '开启 · 地面 / 台阶']], String(e.footContact ?? false)) : '')
+        const settings = (animal ? '' : e.kind === 'actor' && !e.external ? select('脚底贴合表面', 'footContact', [['false', '关闭'], ['true', '开启 · 地面 / 台阶']], String(e.footContact ?? false)) : '')
             + num('基础动作衔接 / 秒', 'actionBlend', e.actionBlend ?? .2, '.05', 'min="0" max="2"');
         return navigation.render(`${e.id}:actions`, [{ id: 'presets', label: '添加动作', html: presets }, { id: 'clips', label: '编辑片段', html: clips }, { id: 'settings', label: '设置', html: settings }]);
     } };

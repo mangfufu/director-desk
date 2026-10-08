@@ -1,6 +1,7 @@
 const { dialog, shell } = require('electron');
 const { localPackage } = require('./package.cjs');
 const { githubPackage } = require('./github.cjs');
+const path = require('node:path');
 
 function createSkillHost({ store, window, isRunning }) {
     let importing = false;
@@ -16,6 +17,11 @@ function createSkillHost({ store, window, isRunning }) {
             if (action === 'enable') await store.enable(id, data.enabled);
             else if (action === 'remove') await store.remove(id);
             else if (action === 'import') {
+                if (data.path !== undefined) {
+                    if (typeof data.path !== 'string' || !path.isAbsolute(data.path)) throw Error('技能导入需要绝对路径');
+                    await store.install(await localPackage(data.path), '本地导入', id);
+                    return { skills: await store.list() };
+                }
                 const chosen = await dialog.showOpenDialog(window, { title: data.kind === 'folder' ? '选择包含 SKILL.md 的技能目录' : '选择技能说明',
                     properties: [data.kind === 'folder' ? 'openDirectory' : 'openFile'], ...(data.kind === 'folder' ? {} : { filters: [{ name: '技能说明', extensions: ['md'] }] }) });
                 if (!chosen.canceled && chosen.filePaths[0]) await store.install(await localPackage(chosen.filePaths[0]), '本地导入', id);

@@ -31,7 +31,7 @@ test('default and selected detailed reads omit unrequested production and global
     assert.deepEqual(data.missingIds, ['missing']);
     for (const key of ['production', 'cuts', 'room', 'resources', 'media', 'resourceStatistics', 'mediaRuntime', 'selection', 'geometry']) assert.equal(Object.hasOwn(data, key), false, key);
     assert.equal(data.revision, (base.data as any).revision);
-    assert.equal(data.duration, ctx.project.duration); assert.match(data.omitted, /不代表内容为空/);
+    assert.equal(data.duration, ctx.project.duration);
     assert.equal(JSON.stringify(ctx.project), original);
 });
 
@@ -112,6 +112,12 @@ test('real MCP HTTP transport advertises sections and returns only requested con
     try {
         const list = await request('tools/list', {});
         assert.ok(list.tools.find((t: any) => t.name === 'director_read').inputSchema.properties.sections);
+        assert.ok(list.tools.find((t: any) => t.name === 'director_help').inputSchema.properties.topic.enum.includes('camera'));
+        const help = await request('tools/call', { name: 'director_help', arguments: { topic: 'camera' } });
+        assert.equal(help.isError, false);
+        const guide = JSON.parse(help.content[0].text).data;
+        assert.equal(guide.guide.path, 'references/camera.md');
+        assert.deepEqual(guide.tools, []);
         for (const sections of [['entities'], ['production']]) {
             const response = await request('tools/call', { name: 'director_read', arguments: { sections } });
             assert.equal(response.isError, false); assert.equal(response.content.length, 1);

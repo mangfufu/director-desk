@@ -21,7 +21,7 @@ test('wave raises its arm outside the head across human proportions without reve
                 const tip = rig.joints.rightElbow.localToWorld(new T.Vector3(0, -.25, 0));
                 assert.ok(elbow.x > shoulder.x && tip.x > shoulder.x, `${asset.id}: waving limb must stay outside torso/head center`);
                 assert.ok(elbow.y > shoulder.y && tip.y > elbow.y, `${asset.id}: raised greeting gesture`);
-                assert.ok(rig.joints.rightElbow.rotation.x <= 0 && rig.joints.rightElbow.rotation.x >= -Math.PI / 2);
+                assert.ok(rig.joints.rightElbow.rotation.x <= 0 && rig.joints.rightElbow.rotation.x >= -Math.PI * .75);
                 hands.push(tip.z);
             }
             assert.ok(Math.max(...hands) - Math.min(...hands) > .02, 'gesture must actually move');

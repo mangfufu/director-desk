@@ -48,7 +48,8 @@ const legacyAssets = [
 
 export const ASSETS: readonly AssetDefinition[] = [...legacyAssets, ...HUMAN_ASSETS, ...ANIMAL_ASSETS, ...CREATURE_ASSETS, ...SHAPE_ASSETS, ...FURNITURE_ASSETS, ...HAND_PROP_ASSETS, ...ARCHITECTURE_ASSETS, ...CIRCULATION_ASSETS, ...ROAD_ASSETS, ...PLANT_ASSETS, ...TERRAIN_ASSETS, ...BUILDING_ASSETS, ...INDUSTRIAL_ASSETS, ...THEMED_ASSETS, ...VEHICLE_ASSETS, ...ROOM_PART_ASSETS, ...LIGHT_ASSETS, ...VISUAL_ASSETS];
 export const ASSET_GROUPS = [...new Set(ASSETS.map(a => a.group))];
-export const findAsset = (id: string) => ASSETS.find(a => a.id === id);
+const assetsById = new Map(ASSETS.map(asset => [asset.id, asset]));
+export const findAsset = (id: string) => assetsById.get(id);
 export const isAnimalAsset = (id: string) => ['quadruped', 'bird', 'fish', 'serpent'].includes(findAsset(id)?.capabilities?.rig ?? '');
 export const assetJoints = (id: string) => findAsset(id)?.joints ?? HUMAN_JOINTS;
 export function searchAssets(query: string, group = '全部') {

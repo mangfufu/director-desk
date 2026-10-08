@@ -6,7 +6,7 @@ import { publicFiles as publicSkillFiles } from './builtin-skill-files.cjs';
 
 // Scan compiled web payload only. Never put this script or its local denylist in the installer.
 const root = path.resolve('dist');
-const allowed = /^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.core|model-import\.worker)-[A-Za-z0-9_-]+\.js)$/;
+const allowed = /^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.core|model-import\.worker|planner\.worker)-[A-Za-z0-9_-]+\.js)$/;
 const rules = [
     ['absolute-windows-path', /[A-Za-z]:[\\/](?:[\w .-]+[\\/])/],
     ['user-home-path', /(?:\/Users\/|\/home\/|file:\/\/\/)[^\s"'<>]+/],
@@ -82,10 +82,11 @@ async function inspect(dir) {
 await inspect(root);
 if (!embeddedMotion) failures.push({ file: 'dist', rule: 'missing-builtin-motion-payload' });
 // Desktop entry code is copied separately; apply the same content checks before staging it.
-const extraFiles = ['desktop/main.cjs', 'desktop/preload.cjs', 'desktop/integration.cjs', 'desktop/media-import.cjs', 'desktop/ai-host.cjs', 'desktop/ai-conversation.cjs', 'desktop/providers.cjs', 'desktop/model-limits.cjs', 'desktop/director-prompt.cjs', 'desktop/mcp-server.cjs', 'desktop/mcp-config.cjs', 'desktop/mcp-host.cjs', ...publicSkillFiles.map(file => 'skills/director-desk/' + file)];
-extraFiles.push('desktop/file-host.cjs', 'desktop/files.cjs', 'desktop/update-config.cjs', 'desktop/update-host.cjs', 'desktop/updates.cjs');
+const extraFiles = ['desktop/main.cjs', 'desktop/preload.cjs', 'desktop/integration.cjs', 'desktop/media-import.cjs', 'desktop/ai-host.cjs', 'desktop/ai-conversation.cjs', 'desktop/conversation-store.cjs', 'desktop/ai-call-batches.cjs', 'desktop/providers.cjs', 'desktop/model-limits.cjs', 'desktop/director-prompt.cjs', 'desktop/mcp-server.cjs', 'desktop/mcp-config.cjs', 'desktop/mcp-host.cjs', ...publicSkillFiles.map(file => 'skills/director-desk/' + file)];
+extraFiles.push('desktop/automation-files.cjs', 'desktop/model-files.ts', 'desktop/file-host.cjs', 'desktop/files.cjs', 'desktop/update-config.cjs', 'desktop/update-host.cjs', 'desktop/updates.cjs');
+extraFiles.push('desktop/extensions.cjs','desktop/extensions/host.cjs','desktop/extensions/store.cjs','desktop/extensions/worker.cjs');
 extraFiles.push('desktop/mcp-connection.cjs', 'desktop/mcp-stdio.cjs');
-if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/mcp-stdio.cjs');
+if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/mcp-stdio.cjs','.audit/desktop-app/desktop/extensions.cjs','.audit/desktop-app/desktop/extension-worker.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/files.cjs', '.audit/desktop-app/desktop/integration.cjs', '.audit/desktop-app/desktop/tools-contract.cjs', '.audit/desktop-app/desktop/updates.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push(...publicSkillFiles.map(file => '.audit/desktop-app/skills/director-desk/' + file));
 for (const file of extraFiles) {

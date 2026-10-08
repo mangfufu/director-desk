@@ -20,6 +20,7 @@ import { freezeCamera } from './camera-editing.ts';
 import { libraryPreferences } from '../assets/library-preferences.ts';
 import { simplifyFreehand, timeFreehand } from './freehand-path.ts';
 import { pathDrawingPosition } from './path-drawing-position.ts';
+import { removeGroupMember } from '../building/entity-groups.ts';
 export function createEditingTools(ctx: AppContext) {
     function addAsset(id: string, position?: Vec3) {
         const asset = ASSETS.find(a => a.id === id);
@@ -301,6 +302,7 @@ export function createEditingTools(ctx: AppContext) {
             for (const child of ctx.project.entities) if (child.structureLink?.parentId === id) disconnectStructure(child);
             removeCameraVisibilityReference(ctx.project, id);
             ctx.project.entities = ctx.project.entities.filter(e => e.id !== id);
+            removeGroupMember(ctx.project, id);
             if (ctx.project.editorView) ctx.project.editorView.hiddenEntityIds = ctx.project.editorView.hiddenEntityIds.filter(entityId => entityId !== id);
             ctx.project.production?.notes.forEach(note => { if (note.actorId === id) note.actorId = ''; });
             ctx.project.cuts.forEach(c => {

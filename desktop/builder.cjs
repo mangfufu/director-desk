@@ -7,7 +7,7 @@ if (metadata.shortVersion !== version) throw Error('Public release version does 
 module.exports = {
     appId: 'app.directordesk.desktop', productName: '导演台', copyright: 'Copyright © 2026 DirectorDesk',
     directories: { app: '.audit/desktop-app', output: 'release', buildResources: 'desktop' },
-    files: ['package.json', 'LICENSE', 'desktop/main.cjs', 'desktop/files.cjs', 'desktop/preload.cjs', 'desktop/integration.cjs', 'desktop/updates.cjs', 'desktop/tools-contract.cjs', 'desktop/icon.ico', ...publicSkillFiles.map(file => 'skills/director-desk/' + file), 'dist/index.html', 'dist/favicon.svg', 'dist/assets/*.js', 'dist/assets/*.css', 'THIRD-PARTY-LICENSES.txt', '!node_modules{,/**/*}'],
+    files: ['package.json', 'LICENSE', 'desktop/main.cjs', 'desktop/extensions.cjs', 'desktop/extension-worker.cjs', 'desktop/files.cjs', 'desktop/preload.cjs', 'desktop/integration.cjs', 'desktop/updates.cjs', 'desktop/tools-contract.cjs', 'desktop/icon.ico', ...publicSkillFiles.map(file => 'skills/director-desk/' + file), 'dist/index.html', 'dist/favicon.svg', 'dist/assets/*.js', 'dist/assets/*.css', 'THIRD-PARTY-LICENSES.txt', '!node_modules{,/**/*}'],
     // Shareable skill beside the executable, copied only from the audited staging payload.
     extraFiles: [{ from: '.audit/desktop-app/skills/director-desk', to: 'skills/director-desk',
         filter: publicSkillFiles },

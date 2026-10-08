@@ -2,7 +2,7 @@ import { clone, uid, type Project } from '../model.ts';
 import { sameModelPackage } from '../resources/package-validation.ts';
 import { assertResourceHeader, type ModelResource } from '../resources/project-resources.ts';
 import { assertRigDefinition, rigStatus } from '../resources/rig-definition.ts';
-import { canRetarget, type RetargetAnimation } from '../resources/retarget-animation.ts';
+import { assertRetargetOptions, canRetarget, type RetargetAnimation } from '../resources/retarget-animation.ts';
 
 export interface UserMotion {
     id: string;
@@ -18,12 +18,14 @@ export function assertUserMotion(motion: UserMotion) {
     if (!motion || typeof motion.name !== 'string' || !motion.name.trim() || motion.name.length > 100
         || !Number.isFinite(motion.duration) || motion.duration <= 0 || !motion.data) throw Error('用户动作名称或时长无效');
     const data = motion.data;
+    if (typeof data !== 'object' || Array.isArray(data) || Object.keys(data).some(k => !['resourceId','index','loop','unitScale','orientation','rig','referencePose','motion','locomotion','grounding','footPlant','blend'].includes(k))) throw Error('用户动作设置包含未知字段');
     if (!/^model-[a-f0-9]{64}$/.test(data.resourceId) || !Number.isInteger(data.index) || data.index < 0
         || motion.id !== userMotionId(data.resourceId, data.index) || typeof data.loop !== 'boolean'
         || !Number.isFinite(data.unitScale) || data.unitScale <= 0 || data.unitScale > 10000
         || !Array.isArray(data.orientation) || data.orientation.length !== 3 || !data.orientation.every(Number.isFinite)) throw Error('用户动作参数无效');
     assertRigDefinition(data.rig, data.referencePose);
     if (data.motion && (data.motion.mode !== 'inPlace' || typeof data.motion.node !== 'string')) throw Error('动作走位设置无效');
+    assertRetargetOptions(data);
 }
 export function includeUserMotionResource(project: Project, asset: UserMotionAsset) {
     assertUserMotion(asset.motion); assertResourceHeader(asset.resource);

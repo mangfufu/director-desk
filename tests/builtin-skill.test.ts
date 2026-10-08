@@ -13,7 +13,7 @@ const { referenceFiles, publicFiles }: { referenceFiles: string[]; publicFiles: 
 
 test('bundled skill is fresh and versioned by content rather than the application release', async () => {
     const files = ['skills/director-desk/SKILL.md', ...referenceFiles.map(file => 'skills/director-desk/' + file),
-        'src/automation/contract.ts', 'src/automation/tool-summaries.ts', 'src/media/help.ts', 'src/automation/read-sections.ts'];
+        'src/automation/contract.ts', 'src/automation/file-contract.ts', 'src/automation/control-contract.ts', 'src/automation/extension-contract.ts', 'src/automation/tool-summaries.ts', 'src/automation/help-topics.ts', 'src/media/help.ts', 'src/automation/read-sections.ts', 'src/scenes/query-contract.ts'];
     const contents = await Promise.all(files.map(file => fs.readFile(file, 'utf8').then(s => s.replace(/\r\n/g, '\n'))));
     assert.equal(BUILTIN_SKILL.version, 'sha256:' + createHash('sha256').update(JSON.stringify(contents)).digest('hex'));
     assert.equal(BUILTIN_SKILL.instructions, await fs.readFile('skills/director-desk/references/online-workflow.md', 'utf8').then(s => s.replace(/\r\n/g, '\n')));

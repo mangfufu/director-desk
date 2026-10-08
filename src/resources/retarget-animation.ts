@@ -37,6 +37,10 @@ export function assertRetargetClip(clip: Clip, entity: Entity, project: Project)
     if (!Number.isFinite(data.unitScale) || data.unitScale <= 0 || data.unitScale > 10000 || !Array.isArray(data.orientation) || data.orientation.length !== 3 || !data.orientation.every(Number.isFinite)) throw Error('适配动作的单位或朝向校正无效');
     assertRigDefinition(data.rig, data.referencePose);
     if (!rigStatus(data.rig).complete) throw Error('适配动作来源需要完整人形映射');
+    assertRetargetOptions(data);
+}
+/** Shared optional settings validation, also usable while a library rig is still being mapped. */
+export function assertRetargetOptions(data: RetargetAnimation) {
     if (data.locomotion !== undefined) {
         const l = data.locomotion;
         if (!l || typeof l !== 'object' || Array.isArray(l) || Object.keys(l).some(k => !['mode', 'cycleDistance'].includes(k))

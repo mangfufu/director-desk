@@ -3,12 +3,14 @@ import { ACTIONS, type Action, type Clip } from '../model.ts';
 import type { HumanoidRig } from '../resources/rig-definition.ts';
 import { footPlantProfile } from './foot-plant-presets.ts';
 import type { FootPlantOptions } from './foot-plant-plan.ts';
+import { ACTION_TIMING } from './action-timing.ts';
 
 export interface MotionPreset { id: string; name: string; sourceClip?: string; index?: number; basicAction?: Action; duration: number; loop: boolean; defaultDuration: number; group: string; footPlant?: FootPlantOptions }
 export const BUILTIN_MOTION_RESOURCE_ID = manifest.resourceId;
 export function motionPresets(query = ''): MotionPreset[] {
     const term = query.trim().toLowerCase();
-    const basic: MotionPreset[] = Object.entries(ACTIONS).filter(([action]) => action !== 'idle').map(([action, name]) => ({ id: `basic-${action}`, name, basicAction: action as Action, duration: 3, defaultDuration: 3, loop: false, group: '基础姿态' }));
+    const basic: MotionPreset[] = Object.entries(ACTIONS).filter(([action]) => action !== 'idle').map(([action, name]) => ({ id: `basic-${action}`, name, basicAction: action as Action,
+        duration: ACTION_TIMING[action].duration, defaultDuration: ACTION_TIMING[action].duration, loop: ACTION_TIMING[action].loop, group: '基础动作' }));
     return structuredClone([...manifest.presets.map(p => ({ ...p, ...(footPlantProfile(p.id) ? { footPlant: footPlantProfile(p.id) } : {}) })), ...basic]
         .filter(p => `${p.id} ${p.name} ${p.sourceClip ?? ''} ${p.group}`.toLowerCase().includes(term)));
 }

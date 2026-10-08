@@ -4,7 +4,7 @@ import { referenceFiles } from './builtin-skill-files.cjs';
 
 // The skill changes with its instructions/contracts, not with the application version.
 const sources = ['skills/director-desk/SKILL.md', ...referenceFiles.map(file => 'skills/director-desk/' + file),
-    'src/automation/contract.ts', 'src/automation/tool-summaries.ts', 'src/media/help.ts', 'src/automation/read-sections.ts'];
+    'src/automation/contract.ts', 'src/automation/file-contract.ts', 'src/automation/control-contract.ts', 'src/automation/extension-contract.ts', 'src/automation/tool-summaries.ts', 'src/automation/help-topics.ts', 'src/media/help.ts', 'src/automation/read-sections.ts', 'src/scenes/query-contract.ts'];
 const contents = await Promise.all(sources.map(file => fs.readFile(file, 'utf8').then(text => text.replace(/\r\n/g, '\n'))));
 const version = 'sha256:' + createHash('sha256').update(JSON.stringify(contents)).digest('hex');
 const references = Object.fromEntries(referenceFiles.map((file, i) => [file, contents[i + 1]]));

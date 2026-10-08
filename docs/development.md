@@ -62,3 +62,14 @@ npm run desktop:pack:mac
 | `desktop/` | 桌面入口、AI 协议、MCP 服务和更新客户端 |
 | `skills/director-desk/` | 技能说明与离线工程工具 |
 | `scripts/`、`tests/` | 构建与验证工具 |
+
+## 当前开发
+
+文件交互已统一：桌面保存绑定当前工程路径，另存为使用 `Ctrl/⌘+Shift+S`；文件路径和保存点属于本机会话历史，不写入 `.director`。撤销跨工程操作时一并恢复文件关联，恢复副本单独保存路径与未保存状态。MCP 打开／导出工程复用同一保存状态。
+
+桌面视频导出与 MCP 共用 `src/files/desktop-output.ts` 分块原子写入；取消清理未完成文件，重试跳过同一工程版本、规格及目标目录下已完成的视频。导出偏好仅存本机。`tests/document-file-state.test.ts`、`tests/export-retry.test.ts` 和 `scripts/test-interactions-desktop.mjs` 验证这些流程。
+
+当前源码新增对象编组、对齐与阵列、用户布景库，使用入口、共用契约及验证方式见[布景编辑与复用](staging-workflow.md)。已包含在 0.4.11 版本中。
+新增人形动作与可选通用物理，见[物理与动作](physics.md)。23 个默认人形动作使用 `src/assets/authored-human-actions.ts` 的手工关键姿态，已替换原默认成品曲线与公式动作；原有动作素材库和导入功能仍保留。关节节点在布景窗口选择及旋转，右侧三轴偏移使用共用 pose/poseKeys，保持旧单轴工程兼容。`node scripts/verify-human-actions.mjs` 生成全部基础动作的真实渲染检查图，并验证多种人形随机跳帧；`node --experimental-strip-types --test tests/physics.test.ts` 验证共用数据与求值，`node scripts/verify-physics.mjs` 验证界面和导出，`node scripts/test-physics-desktop.mjs` 验证隔离桌面配置与真实 MCP。
+
+人物曲面由 `src/assets/human-surfaces.ts` 的平滑截面生成；骨架与接拍节点路径保持兼容。手工动作通过 `src/animation/authored-curve.ts` 的五次 Hermite 曲线匹配关键帧速度与加速度。衔接期间继续求值前一个动作，不能改成定格姿态后再混合。`tests/human-motion-quality.test.ts` 检查曲线与实际骨骼速度、衔接边界、轮廓法线及模型成本；`node scripts/verify-human-motion-playback.mjs` 逐帧检查 23 个动作并生成完整 60fps 播放视频，输出保存在非发布目录。

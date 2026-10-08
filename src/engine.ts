@@ -1,3 +1,4 @@
+import { PluginRenderHooks } from './plugins/render-hooks.ts';
 import {collectWarps} from './visuals/warps.ts';
 import {sampleVisual,disposeVisual} from './visuals/runtime.ts';
 import {sampleFields,sampleParticleFields} from './visuals/fields.ts';
@@ -10,6 +11,7 @@ import { SceneRenderCache } from './editor/scene-render-cache.ts';
 import type { DepthRange } from './cinematography/depth-video.ts';
 import { DepthRangeSampler } from './cinematography/depth-range-sampler.ts';
 import { FreehandPathInput } from './editor/freehand-path-input.ts';
+import { memberSample } from './navigation/member-paths.ts';
 import { pathDrawingPosition } from './editor/path-drawing-position.ts';
 import { ReferenceLabels } from './production/reference-labels.ts';
 import { cameraLookAt } from './animation/camera-look.ts';
@@ -43,6 +45,14 @@ import { crowdAnimationPhase } from './resources/retarget-animation.ts';
 import type { Entity, Project, Vec3 } from './model.ts';
 import { aspectNumber } from './model.ts';
 import { activeCameraId, entityPosition, entityYaw, sampledAction, pathPosition } from './timeline.ts';
+import { groupPivot } from './building/group-editing.ts';
+import { PhysicsRuntime } from './physics/runtime.ts';
+import { rigPhysicsBones } from './physics/ragdoll.ts';
+import { JointNodes, humanJointNode } from './editor/joint-nodes.ts';
+import { jointAngles } from './assets/joint-schema.ts';
+import type { Joint } from './model.ts';
+import { samplePose } from './timeline.ts';
+import { isAnimalAsset } from './asset-catalog.ts';
 export function configureCamera(camera: T.PerspectiveCamera, focal: number, aspect: number) {
     camera.aspect = aspect;
     camera.filmGauge = 36;
@@ -53,6 +63,8 @@ export function configureCamera(camera: T.PerspectiveCamera, focal: number, aspe
 }
 interface Callbacks {
     select: (id: string) => void;
+    joint?: (joint: Joint) => void;
+    selection?: () => string[];
     point: (index: number) => void;
     ground: (point: Vec3) => void;
     stroke?: (points: Vec3[]) => void;
@@ -73,12 +85,14 @@ export class Engine {
     private initialPoses = new InitialPoseRuntime();
     externalModels = new SceneModels();
     scene = new T.Scene();
+    pluginHooks = new PluginRenderHooks();
     editorCamera = new T.PerspectiveCamera(45, 1, .03, 2000);
     editorRenderer: T.WebGLRenderer;
     shotRenderer: T.WebGLRenderer;
     orbit: OrbitControls;
     gizmo: TransformControls;
     models = new Map<string, T.Group>();
+    physics = new PhysicsRuntime(this.models, e => e.external ? this.externalModels.physicsBones(e) : this.rigs.has(e.id) ? rigPhysicsBones(this.rigs.get(e.id)!) : undefined, () => this.roomGroup);
     rigs = new Map<string, Rig>();
     cameras = new Map<string, T.PerspectiveCamera>();
     crowdRigs = new Map<string, Rig[]>();
@@ -86,10 +100,22 @@ export class Engine {
     roomGroup = new T.Group();
     helpers = new T.Group();
     pathHelpers = new T.Group();
+    get selectionIds(): string[] {
+        const ids = this.cb.selection?.() ?? [];
+        if (ids.length < 2) return ids;
+        const existing = new Set(this.project.entities.map(e => e.id));
+        return ids.filter(id => existing.has(id));
+    }
     cameraVisuals = new Map<string, T.Group>();
     proxy = new T.Group();
     selected = '';
     selectedPoint = -1;
+    selectedJoint: Joint | '' = '';
+    jointNodesVisible = true;
+    readonly jointNodes = new JointNodes();
+    private previousTransformMode: 'translate' | 'rotate' | 'scale' = 'translate';
+    private jointBase?: T.Quaternion;
+    private jointOwner = '';
     drawingPath = false;
     pathDrawMode: 'points' | 'freehand' = 'points';
     pathDrawDuration = 5;
@@ -157,7 +183,7 @@ export class Engine {
         this.orbit.maxDistance = 100;
         this.orbit.maxPolarAngle = Math.PI * .49;
         this.orbit.update();
-        this.scene.add(this.helpers, this.pathHelpers, this.proxy);
+        this.scene.add(this.helpers, this.pathHelpers, this.proxy, this.jointNodes.root);
         this.gizmo = new TransformControls(this.editorCamera, this.editorRenderer.domElement);
         this.gizmo.addEventListener('change', () => { this.needsRender = true; });
         this.gizmo.setSize(.78);
@@ -165,7 +191,7 @@ export class Engine {
         helper.traverse(o => o.layers.set(1));
         this.gizmo.getRaycaster().layers.enable(1);
         this.scene.add(helper);
-        this.gizmo.addEventListener('mouseDown', () => { this.dragging = true; this.orbit.enabled = false; this.objectSnapTarget = ''; this.snapTargets = null; this.cb.transformStart(); });
+        this.gizmo.addEventListener('mouseDown', () => { this.captureJointBase(); this.dragging = true; this.orbit.enabled = false; this.objectSnapTarget = ''; this.snapTargets = null; this.cb.transformStart(); });
         this.gizmo.addEventListener('objectChange', () => { if (this.dragging)
             this.cb.transform(this.proxy.position.toArray() as Vec3, [this.proxy.rotation.x, this.proxy.rotation.y, this.proxy.rotation.z], this.proxy.scale.toArray() as Vec3); });
         this.gizmo.addEventListener('mouseUp', () => this.finishTransform());
@@ -211,6 +237,7 @@ export class Engine {
     }
     private renderer() { const r = new T.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true }); r.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap; r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.05; return r; }
     rebuild(project: Project) {
+        this.physics.invalidate();
         this.freehandInput?.cancel();
         this.externalModels.assertReady(project);
         this.referenceLabels.clear();
@@ -281,7 +308,8 @@ export class Engine {
         this.dragging=false;this.gizmo.dragging=false;this.orbit.enabled=true;this.snapTargets=null;
         this.cb.transformEnd(cancel);
     }
-    sample(time: number) {
+    sample(time: number, physicsBaseline = false) {
+        this.physics.restore();
         this.needsRender = true;
         this.time = time;
         for (const e of this.project.entities) {
@@ -303,7 +331,14 @@ export class Engine {
                 if (e.kind === 'crowd')
                     this.crowdRigs.get(e.id)?.forEach((r, i) => { const phase = crowdAnimationPhase(e.seed, i);
                         if (this.externalModels.sampleHuman(e, time, `${e.id}:${i}`, phase)) applyHumanPose(r, e, time); else animateHuman(r, e, time, phase);
-                        colorHuman(r, this.monochrome ? '#d9dcd7' : e.color); });
+                        colorHuman(r, this.monochrome ? '#d9dcd7' : e.color);
+                        if (e.memberPaths || r.root.userData.navigation) {
+                            const member = memberSample(e, i, time);
+                            if (e.memberPaths && !member.moving) animateHuman(r, { ...e, clips: [] }, time, phase);
+                            r.root.position.copy(member.position); r.root.rotation.y = member.yaw;
+                            r.root.userData.navigation = !!e.memberPaths;
+                        }
+                    });
             }
         }
         this.deformations.prepareVisuals();
@@ -352,6 +387,10 @@ export class Engine {
             };
             contactActors.forEach(e=>fitFeetToSurface(this.rigs.get(e.id)!,surface));
         }
+        if (physicsBaseline) { this.scene.updateMatrixWorld(true); return; }
+        this.physics.sample(this.project, time, at => this.sample(at, true));
+        this.time = time;
+        this.pluginHooks.sample({time,project:this.project,exporting:this.exporting});
         for (const e of this.project.entities) if (e.handBinding) {
             const root = this.models.get(e.id)!;
             applyHandBinding(root, e.handBinding, this.handFrame(e.handBinding));
@@ -384,9 +423,10 @@ export class Engine {
                 }
                 else {
                     const lagTime = Math.max(0, time - (c.effects?.followLag ?? 0));
+                    const physical = this.physics.rootAt(target.id, lagTime);
                     if (c.inheritRotation)
-                        offset.applyAxisAngle(new T.Vector3(0, 1, 0), c.effects?.followLag ? entityYaw(target, lagTime, this.project) : targetRoot.rotation.y);
-                    camera.position.copy(c.effects?.followLag && !target.handBinding ? entityPosition(target, lagTime) : targetRoot.position).add(offset);
+                        offset.applyAxisAngle(new T.Vector3(0, 1, 0), physical?.rotation.y ?? (c.effects?.followLag ? entityYaw(target, lagTime, this.project) : targetRoot.rotation.y));
+                    camera.position.copy(physical?.position ?? (c.effects?.followLag && !target.handBinding ? entityPosition(target, lagTime) : targetRoot.position)).add(offset);
                     camera.lookAt(this.targetPosition(e));
                 }
             }
@@ -394,7 +434,7 @@ export class Engine {
                 camera.rotation.set(...e.rotation);
             else
                 camera.lookAt(this.targetPosition(e));
-            const aimResponse = cameraAimResponseQuaternion(e, this.project, time, target ? this.models.get(target.id) : undefined);
+            const aimResponse = cameraAimResponseQuaternion(e, this.project, time, target ? this.models.get(target.id) : undefined, target ? at=>this.physics.rootAt(target.id,at) : undefined);
             if (aimResponse) camera.quaternion.copy(aimResponse);
             configureCamera(camera, cameraFocal(c.effects, time, c.focal, camera.position.distanceTo(this.targetPosition(e))), aspectNumber(this.project.aspect));
             applyCameraEffects(camera, c.effects, time);
@@ -420,26 +460,66 @@ export class Engine {
         try { this.sample(at); return collectSpatialReport(this, cameraId, options.includeCrowdMembers ?? true, options.occlusionKeys); }
         finally { this.sample(previous); }
     }
-    select(id: string, point = -1) { this.selected = id; this.selectedPoint = point; this.setPlacementSnap(this.placementSnap); this.refreshHelpers(); this.syncProxy(); const e = this.project.entities.find(e => e.id === id); if (e && !e.locked && !this.drawingPath && editorEntityVisible(this.project, e))
+    select(id: string, point = -1) { if(this.selectedJoint&&(id!==this.jointOwner||point>=0))this.selectJoint(''); this.selected = id; this.selectedPoint = point; this.setPlacementSnap(this.placementSnap); this.refreshHelpers(); this.syncProxy(); const e = this.project.entities.find(e => e.id === id); if (e && !e.locked && !this.drawingPath && editorEntityVisible(this.project, e) && !this.jointEditingBlocked())
         this.gizmo.attach(this.proxy);
     else
         this.gizmo.detach(); }
+    private jointEditingBlocked() { const e=this.project.entities.find(e=>e.id===this.selected); return !!this.selectedJoint && !!e?.physics?.enabled && !!this.project.physics?.enabled && e.physics.mode==='dynamic' && this.time>=e.physics.start; }
+    selectJoint(joint: Joint | '') {
+        const rig=this.rigs.get(this.selected),entity=this.project.entities.find(e=>e.id===this.selected);
+        if(joint&&(!rig||!entity||entity.kind!=='actor'||entity.external||isAnimalAsset(entity.asset)||!humanJointNode(rig,joint)))return;
+        if(!this.selectedJoint&&joint)this.previousTransformMode=this.gizmo.getMode();
+        this.selectedJoint=joint;this.jointOwner=joint?this.selected:'';this.jointNodes.select(joint);this.gizmo.setMode(joint?'rotate':this.previousTransformMode);
+        this.gizmo.setSpace(joint?'local':'world');this.jointBase=undefined;this.syncProxy();this.needsRender=true;
+        const e=this.project.entities.find(e=>e.id===this.selected);
+        if(e&&!e.locked&&!this.jointEditingBlocked())this.gizmo.attach(this.proxy);else this.gizmo.detach();
+    }
+    private captureJointBase() {
+        const rig=this.rigs.get(this.selected),e=this.project.entities.find(e=>e.id===this.selected);
+        if(!rig||!e||!this.selectedJoint){this.jointBase=undefined;return;}
+        const bone=humanJointNode(rig,this.selectedJoint);if(!bone)return;
+        const angles=jointAngles(samplePose(e,this.time)[this.selectedJoint],this.selectedJoint).map(T.MathUtils.degToRad);
+        const base=new T.Euler().setFromQuaternion(bone.quaternion);base.x-=angles[0];base.y-=angles[1];base.z-=angles[2];
+        this.jointBase=new T.Quaternion().setFromEuler(base);
+    }
+    jointRotation(worldRotation: Vec3): Vec3 | undefined {
+        const rig=this.rigs.get(this.selected);if(!rig||!this.selectedJoint||!this.jointBase)return;
+        const bone=humanJointNode(rig,this.selectedJoint),desired=new T.Quaternion().setFromEuler(new T.Euler(...worldRotation));
+        if(bone.parent)desired.premultiply(bone.parent.getWorldQuaternion(new T.Quaternion()).invert());
+        const current=new T.Euler().setFromQuaternion(desired),base=new T.Euler().setFromQuaternion(this.jointBase);
+        return [current.x-base.x,current.y-base.y,current.z-base.z].map(T.MathUtils.radToDeg) as Vec3;
+    }
     syncProxy() {
         if (this.dragging)
             return;
         const e = this.project.entities.find(x => x.id === this.selected);
         if (!e)
             return;
+        if(this.selectedJoint){
+            const rig=this.rigs.get(e.id),bone=rig&&humanJointNode(rig,this.selectedJoint);
+            if(!bone||e.kind!=='actor'||e.external||isAnimalAsset(e.asset)){this.selectJoint('');return;}
+            if(e.locked||this.drawingPath||!editorEntityVisible(this.project,e)||this.jointEditingBlocked())this.gizmo.detach();
+            else if(this.gizmo.object!==this.proxy)this.gizmo.attach(this.proxy);
+            bone.getWorldPosition(this.proxy.position);bone.getWorldQuaternion(this.proxy.quaternion);this.proxy.scale.set(1,1,1);return;
+        }
+        const selection = this.selectionIds;
+        if (selection.length > 1 && this.selectedPoint < 0) {
+            this.proxy.position.fromArray(groupPivot(this.project, selection, this.time));
+            this.proxy.rotation.set(0, 0, 0); this.proxy.scale.set(1, 1, 1); return;
+        }
         const point = this.selectedPoint >= 0 ? e.path?.points[this.selectedPoint] : null;
         if (!point) this.selectedPoint = -1;
         this.proxy.position.copy(point ? new T.Vector3(...point.position) : entityPosition(e, this.time));
         this.proxy.rotation.fromArray([e.rotation[0], e.rotation[1], e.rotation[2], 'XYZ']);
         this.proxy.scale.fromArray(point ? [1, 1, 1] : e.scale);
+        if (!point && this.project.physics?.enabled && e.physics?.enabled) {
+            const root = this.models.get(e.id); if (root) this.proxy.position.copy(root.getWorldPosition(new T.Vector3()));
+        }
         if (e.handBinding) { const root = this.models.get(e.id)!; this.proxy.position.copy(root.position); this.proxy.quaternion.copy(root.quaternion); }
         if (e.kind === 'camera' && !point)
             this.proxy.position.copy(this.cameras.get(e.id)!.position);
     }
-    setTransformMode(mode: 'translate' | 'rotate' | 'scale') { this.gizmo.setMode(mode); this.gizmo.showY = true; this.gizmo.showX = true; this.gizmo.showZ = true; }
+    setTransformMode(mode: 'translate' | 'rotate' | 'scale') { if(this.selectedJoint)this.selectJoint(''); this.previousTransformMode=mode;this.gizmo.setMode(mode); this.gizmo.showY = true; this.gizmo.showX = true; this.gizmo.showZ = true; }
     setPlacementSnap(step: number) { this.placementSnap = step; const prop = this.project.entities.find(e => e.id === this.selected)?.kind === 'prop'; this.gizmo.setTranslationSnap(this.objectSnapEnabled && prop && this.selectedPoint < 0 ? null : step || null); this.gizmo.setRotationSnap(step ? T.MathUtils.degToRad(15) : null); }
     setObjectSnap(enabled: boolean) { this.objectSnapEnabled = enabled; this.objectSnapTarget = ''; this.snapTargets = null; this.setPlacementSnap(this.placementSnap); }
     snapPosition(position: Vec3): Vec3 { return this.placementSnap ? position.map(v => Math.round(v / this.placementSnap) * this.placementSnap) as Vec3 : [...position]; }
@@ -515,6 +595,13 @@ export class Engine {
                 this.pathHelpers.add(line);
                 e.path.points.forEach((p, i) => { const point = new T.Mesh(new T.SphereGeometry(.055, 12, 8), new T.MeshBasicMaterial({ color: i === this.selectedPoint ? '#ffffff' : '#87add9', depthTest: false })); point.position.fromArray(p.position); point.position.y += .025; point.userData.pointIndex = i; point.userData.entityId = e.id; point.renderOrder = 3; this.pathHelpers.add(point); });
             }
+            if (e.memberPaths && root) {
+                root.updateWorldMatrix(true,false);
+                for (const path of e.memberPaths) {
+                    const points = path.points.map(p => new T.Vector3(...p.position).applyMatrix4(root.matrixWorld).add(new T.Vector3(0,.025,0)));
+                    this.pathHelpers.add(new T.Line(new T.BufferGeometry().setFromPoints(points),new T.LineBasicMaterial({color:e.color,transparent:true,opacity:.6})));
+                }
+            }
             if (e.kind === 'camera') {
                 const helper = new T.CameraHelper(this.cameras.get(e.id)!);
                 const tint = new T.Color('#9eafc1');
@@ -526,6 +613,10 @@ export class Engine {
         this.pathHelpers.traverse(o => o.layers.set(1));
     }
     private prepareView(editor: boolean, id = this.previewId) {
+        const rig=this.rigs.get(this.selected),selected=this.project.entities.find(e=>e.id===this.selected);
+        this.jointNodes.bind(rig&&selected?.kind==='actor'&&!selected.external&&!isAnimalAsset(selected.asset)?rig:undefined);
+        this.jointNodes.root.visible=editor&&this.jointNodesVisible&&!!rig&&!!selected&&editorEntityVisible(this.project,selected)&&!this.drawingPath;
+        if(editor&&this.jointNodes.root.visible)this.jointNodes.update(this.editorCamera,this.stage.clientHeight);
         const cameraEntity = this.cameraEntity(id);
         for (const e of this.project.entities) {
             const root = this.models.get(e.id); if (!root) continue;
@@ -576,7 +667,7 @@ export class Engine {
         this.surfaces.sample(this.project,this.models,this.time);
         this.prepareView(true);
         if (this.stage.clientWidth)
-            this.editorRenderer.render(this.scene, this.editorCamera);
+            this.pluginHooks.render({time:this.time,project:this.project,exporting:this.exporting,renderer:this.editorRenderer,scene:this.scene,camera:this.editorCamera,view:'stage',depth:false},()=>this.editorRenderer.render(this.scene, this.editorCamera));
         this.prepareView(false);
         if (this.shot.clientWidth) {
             this.renderShot(this.previewId);
@@ -624,7 +715,7 @@ export class Engine {
     private renderShot(id: string, depth: DepthRange | null = this.project.depthVideo?.enabled ? this.project.depthVideo : null) {
         const camera = this.getShotCamera(id), effects = this.cameraEntity(id).camera!.effects;
         const focusTarget = effects?.focusTargetId ? this.models.get(effects.focusTargetId)?.getWorldPosition(new T.Vector3()) : undefined;
-        this.shotEffects.render(this.shotRenderer, this.scene, camera, effects, this.time, cameraFocusDistance(camera, effects, this.time, focusTarget), cam => this.renderReferenceLabels(cam, id),collectWarps(this.project.entities,this.models,camera,this.time), depth);
+        this.pluginHooks.render({time:this.time,project:this.project,exporting:this.exporting,renderer:this.shotRenderer,scene:this.scene,camera,view:'shot',depth:!!depth},()=>this.shotEffects.render(this.shotRenderer, this.scene, camera, effects, this.time, cameraFocusDistance(camera, effects, this.time, focusTarget), cam => this.renderReferenceLabels(cam, id),collectWarps(this.project.entities,this.models,camera,this.time), depth));
     }
     focusBounds(bounds: T.Box3) {
         if (bounds.isEmpty()) return;
@@ -668,6 +759,7 @@ export class Engine {
             const point = this.pathPointFromRay(ray); if (point) this.cb.ground(point);
             return;
         }
+        const joint=this.jointNodes.pick(ray);if(joint){this.selectJoint(joint);this.cb.joint?.(joint);return;}
         const points = ray.intersectObjects(this.pathHelpers.children, false).find(x => x.object.userData.pointIndex !== undefined);
         if (points) {
             this.cb.point(points.object.userData.pointIndex);
@@ -688,9 +780,10 @@ export class Engine {
     }
     projectionSignature(id = this.previewId) { const c = this.getShotCamera(id); return { cameraId: this.cameraEntity(id).id, time: this.time, world: c.matrixWorld.toArray(), projection: c.projectionMatrix.toArray() }; }
     dispose() {
+        this.physics.dispose();
         if (this.disposed) return;
         this.disposed = true; this.events.abort(); this.resizeObserver.disconnect();
-        this.freehandInput.dispose();
+        this.freehandInput.dispose(); this.jointNodes.dispose();
         this.gizmo.detach(); this.gizmo.dispose(); this.orbit.dispose();
         this.surfaces.dispose();this.deformations.dispose();for(const root of this.models.values())disposeVisual(root);
         this.referenceLabels.clear(); this.shotEffects.dispose(); this.depthRangeSampler?.dispose(); this.lighting.dispose();

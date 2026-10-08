@@ -20,6 +20,7 @@ import { boundsData, boxRelationship, frameBounds, geometryBounds, type BoundsDa
 
 export interface SpatialOptions { time?: number; cameraId?: string; includeCrowdMembers?: boolean; occlusionKeys?: string[] }
 export interface SpatialObject {
+    physics?: { mode:string; active:boolean; ragdoll:boolean; bodies:number };
     zoneIds?: string[];
     key: string;
     entityId: string | null;
@@ -108,9 +109,10 @@ export function collectSpatialReport(engine: Engine, cameraId: string, includeCr
                 ...(data.locomotion ? { locomotion: { ...data.locomotion, playbackRate: rate, warning: rate > 3 ? 'too-fast' : rate > 1e-6 && rate < .25 ? 'too-slow' : null } } : {}) };
         };
         annotateRetarget();
-        const contact = engine.externalModels.humanContactState(e.id); if (contact) objects.at(-1)!.footGrounding = contact;
-        const plants = engine.externalModels.humanPlantState(e.id); if (plants) objects.at(-1)!.footPlant = plants;
-        const transition = engine.externalModels.motionTransitionState(e.id); if (transition) objects.at(-1)!.motionTransition = transition;
+        if(e.physics?.enabled){const physical=engine.physics.state(e.id);objects.at(-1)!.physics={mode:e.physics.mode,active:!!engine.project.physics?.enabled&&e.physics.mode==='dynamic'&&engine.time>=e.physics.start,ragdoll:e.physics.ragdoll,bodies:physical?.bodies??0};}
+        const contact = engine.externalModels.humanContactState(e.id); if (contact && !objects.at(-1)!.physics?.active) objects.at(-1)!.footGrounding = contact;
+        const plants = engine.externalModels.humanPlantState(e.id); if (plants && !objects.at(-1)!.physics?.active) objects.at(-1)!.footPlant = plants;
+        const transition = engine.externalModels.motionTransitionState(e.id); if (transition && !objects.at(-1)!.physics?.active) objects.at(-1)!.motionTransition = transition;
         if (includeCrowdMembers && e.kind === 'crowd') engine.crowdRigs.get(e.id)!.forEach((r, index) => { item(r.root, {
             key: `crowd:${e.id}:${index}`, entityId: e.id, memberIndex: index, name: `${e.name} / 第 ${index + 1} 人`,
             kind: 'crowd-member', asset: 'person', enabled: e.visible, action: sampledAction(e, engine.time).action

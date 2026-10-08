@@ -6,7 +6,7 @@ import { demoProject, clone, assertProject } from '../src/model.ts';
 import { packModelFiles } from '../src/resources/model-package.ts';
 import { modelResourceId } from '../src/resources/project-resources.ts';
 import { applyOperationsWithResources } from '../src/automation/edits.ts';
-import { userMotionId, type UserMotionAsset } from '../src/animation/user-motion.ts';
+import { assertUserMotion, userMotionId, type UserMotionAsset } from '../src/animation/user-motion.ts';
 import { assertRigDefinition, type HumanoidRig } from '../src/resources/rig-definition.ts';
 
 test('animated skeletons load without meshes; malformed/empty sources still fail', () => {
@@ -35,6 +35,15 @@ async function asset(): Promise<UserMotionAsset> {
     return { resource: { id, name: 'test', package: data, copyright: '', license: 'CC0', source: '' },
         motion: { id: userMotionId(id, 0), name: '动作', duration: 1.1, data: { resourceId: id, index: 0, unitScale: 1, orientation: [0, 0, 0], loop: false, rig: clone(rig) } } };
 }
+
+test('user library rejects invalid optional motion settings before any clip is inserted', async () => {
+    const source = await asset(); source.motion.data.rig.bones = {};
+    assert.doesNotThrow(() => assertUserMotion(source.motion), 'incomplete mapping can be saved for later calibration');
+    source.motion.data.blend = 10; assert.throws(() => assertUserMotion(source.motion), /衔接/);
+    delete source.motion.data.blend;
+    source.motion.data.grounding = { mode: 'preventPenetration', maxCorrection: -1 };
+    assert.throws(() => assertUserMotion(source.motion), /防穿透/);
+});
 test('user motions share atomic editing, same-batch targets, portable resources, timing and locks', async () => {
     assertRigDefinition(rig, undefined);
     const source = await asset(), map = new Map([[source.motion.id, source]]), before = demoProject();

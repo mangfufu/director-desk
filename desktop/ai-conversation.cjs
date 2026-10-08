@@ -1,7 +1,6 @@
-const fs = require('node:fs/promises');
-const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { appendResult } = require('./providers.cjs');
+const { conversationStore } = require('./conversation-store.cjs');
 
 const fresh = () => ({ version: 1, sessionId: randomUUID(), profileId: '', entries: [] });
 const missingResult = (turn, call) => ({ id: call.id, result: {
@@ -13,12 +12,9 @@ const missingResult = (turn, call) => ({ id: call.id, result: {
 
 /** One durable conversation. Native provider data is retained; protocol conversion is a request view only. */
 function createConversation({ directory, safeStorage }) {
-    const file = path.join(directory, 'ai-conversation.json');
-    let state = fresh(), writes = Promise.resolve(), loadError = '';
-    const ready = fs.readFile(file, 'utf8').then(text => {
-        const envelope = JSON.parse(text);
-        const saved = envelope.encrypted
-            ? JSON.parse(safeStorage.decryptString(Buffer.from(envelope.data, 'base64'))) : envelope;
+    const store = conversationStore(directory, safeStorage);
+    let state = fresh(), loadError = '';
+    const ready = store.load().then(saved => {
         if (saved.version !== 1 || typeof saved.sessionId !== 'string' || !Array.isArray(saved.entries)
             || saved.entries.some(e => !e || !['user', 'partial', 'notice', 'turn'].includes(e.type) || typeof e.text !== 'string'
                 || e.type === 'turn' && (!Array.isArray(e.calls) || !Array.isArray(e.results) || !Array.isArray(e.started)))) throw Error('Invalid conversation');
@@ -27,16 +23,7 @@ function createConversation({ directory, safeStorage }) {
         if (error.code !== 'ENOENT') loadError = '本机会话无法读取，原文件已保留；请恢复文件，或手动点击新对话。';
     });
     const assertLoaded = () => { if (loadError) throw Error(loadError); };
-    function save() {
-        const text = JSON.stringify(state);
-        const encoded = safeStorage.isEncryptionAvailable()
-            ? JSON.stringify({ encrypted: true, data: safeStorage.encryptString(text).toString('base64') }) : text;
-        const pending = writes.then(async () => {
-            await fs.mkdir(directory, { recursive: true });
-            await fs.writeFile(file + '.tmp', encoded, { mode: 0o600 }); await fs.rename(file + '.tmp', file);
-        });
-        writes = pending.catch(() => {}); return pending;
-    }
+    function save(entry) { assertLoaded(); return store.save(state, entry); }
     function messages(profile) {
         assertLoaded();
         const result = [];
@@ -83,7 +70,7 @@ function createConversation({ directory, safeStorage }) {
         },
         async notice(text) { state.entries.push({ type: 'notice', text }); await save(); },
         async partial(text) { if (text) { state.entries.push({ type: 'partial', text }); await save(); } },
-        async reset() { await ready; await writes; state = fresh(); await save(); loadError = ''; return snapshot(); },
+        async reset() { await ready; await store.idle(); const next = fresh(); await store.save(next); state = next; loadError = ''; return snapshot(); },
     };
 }
 module.exports = { createConversation };

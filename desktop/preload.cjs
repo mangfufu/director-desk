@@ -1,8 +1,12 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const invoke = (action, data) => ipcRenderer.invoke('director-host', { action, data });
 contextBridge.exposeInMainWorld('directorDesktop', {
+    extensions: data => ipcRenderer.invoke('director-extensions', data),
+    onExtensionRequest: callback => {const listener=async(_event,request)=>{try{ipcRenderer.send('director-extension-reply',{id:request.id,result:await callback(request)});}catch(error){ipcRenderer.send('director-extension-reply',{id:request.id,error:error.message});}};ipcRenderer.on('director-extension-request',listener);return()=>ipcRenderer.removeListener('director-extension-request',listener);},
     skills: data => invoke('skills', data),
     files: (action, data) => ipcRenderer.invoke('director-files', { action, data }),
+    pathForFile: file => webUtils.getPathForFile(file),
+    closingState: data => ipcRenderer.sendSync('director-close-state', data),
     onSaveBeforeClose: callback => { const fn = async (_event, data) => {
         let saved = false; try { saved = await callback() === true; } catch { }
         ipcRenderer.send('director-save-close-result', { id: data.id, saved });

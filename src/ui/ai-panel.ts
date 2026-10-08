@@ -1,3 +1,4 @@
+import { aiUsageText } from './ai-usage.ts';
 import { mountAIMcp } from './ai-mcp.ts';
 import { mountAISelection } from './ai-selection.ts';
 import type { AppContext } from '../app-context.ts';
@@ -44,7 +45,7 @@ export function mountAI(ctx: AppContext) {
         find('ai-key').value = ''; refresh(); find('ai-channel').value = id || profiles.at(-1)!.id; find('ai-edit-channel').value = find('ai-channel').value; status('渠道已保存；密钥不进入工程。');
     }); };
     find('ai-remove').onclick = () => { if (bridge && find('ai-edit-channel').value) safe(async () => { profiles = check(await bridge.configure({ removeId: find('ai-edit-channel').value })); refresh(); editing(); }); };
-    find('ai-test').onclick = () => { if (bridge && !active) safe(async () => { busy(true); try { status('正在进行小规模连通测试…'); check(await bridge.test(find('ai-edit-channel').value || find('ai-channel').value)); status('连通测试通过；工具能力仍需任务验证。'); } finally { busy(false); } }); };
+    find('ai-test').onclick = () => { if (bridge && !active) safe(async () => { busy(true); try { status('正在测试连接…'); check(await bridge.test(find('ai-edit-channel').value || find('ai-channel').value)); status('连接成功'); } finally { busy(false); } }); };
     function busy(value: boolean) { active = value; panel.dataset.running = String(value); find('ai-background-stop').hidden = !value; find('ai-send').disabled = value; find('ai-test').disabled = value; find('ai-stop').disabled = !value; find('ai-channel').disabled = value; find('ai-mode').disabled = value; find('ai-new').disabled = value; }
     find('ai-send').onclick = () => { if (!bridge || active) return; const prompt = find('ai-prompt').value.trim(); if (!prompt) return;
         const profile = profiles.find(p => p.id === find('ai-channel').value); if (!profile) { status('请先保存渠道'); return; }
@@ -60,14 +61,14 @@ export function mountAI(ctx: AppContext) {
     find('ai-background-stop').onclick = () => { if (bridge) safe(() => bridge.stop()); };
     find('ai-new').onclick = () => { if (bridge && !active) safe(async () => { busy(true); try { restoreConversation(check(await bridge.newConversation())); status('已手动开始新对话'); } finally { busy(false); } }); };
     find('ai-undo').onclick = () => { if (!active) void ctx.act('undo', document.createElement('button')); else status('请先停止任务，再撤销'); };
-    find('ai-channel').onchange = () => { status('已切换渠道，保留当前对话上下文。'); };
+    find('ai-channel').onchange = () => { status('已切换渠道'); };
     const mcpState = mountAIMcp(panel, status);
     function event(data: AgentEvent) {
         sessionId = data.sessionId;
         if (data.type === 'text') log(data.text || '');
         if (data.type === 'status' || data.type === 'error') status(data.text || '');
         if (data.type === 'tool') { status(`${data.name} · ${data.status}`); if (data.status !== 'running') log(`\n[${data.name}：${data.status}]${data.summary ? JSON.stringify(data.summary) : ''}\n`); }
-        if (data.type === 'usage') status('本轮用量：' + JSON.stringify(data.usage));
+        if (data.type === 'usage') status(aiUsageText(data.usage));
         if (data.type === 'done') { status('任务完成，可检查场景或撤销一步。' + (data.timing ? ` ${data.timing.rounds} 轮 · 模型 ${(data.timing.modelMs / 1000).toFixed(1)}s · 工具 ${(data.timing.toolMs / 1000).toFixed(1)}s` : '')); busy(false); }
         if (data.type === 'error') { log('\n' + data.text + '\n'); busy(false); }
     }
@@ -77,7 +78,7 @@ export function mountAI(ctx: AppContext) {
         mcpState(check(connection));
         const conversation = check(await bridge.conversation()); restoreConversation(conversation);
         if (profiles.some(p => p.id === conversation.profileId)) find('ai-channel').value = conversation.profileId;
-        if (conversation.transcript) status('已恢复本机对话，可继续；点击新对话才清空。');
+        if (conversation.transcript) status('已恢复对话');
     });
     else panel.querySelectorAll<HTMLButtonElement | HTMLInputElement>('input,select,textarea,button').forEach(e => { if (!['ai-close', 'ai-collapse', 'ai-scene-prompt', 'ai-scope-toggle'].includes(e.id) && !e.dataset.aiView) e.disabled = true; });
 }

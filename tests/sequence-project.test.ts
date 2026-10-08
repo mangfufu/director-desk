@@ -12,9 +12,9 @@ test('scene query keeps reference identity without sending image payloads or cha
     const p = demoProject();
     p.references = [{ id: 'reference-a', name: '角色参考', data: 'data:image/png;base64,AAAA' }];
     p.entities[0].reference = 'reference-a';
-    const document = readSceneDocument(p), before = clone(document), result = readIndependentScene(document);
+    const document = readSceneDocument(p), before = clone(document), result = readIndependentScene(document, undefined, { sections: ['all'], details: true });
     assert.deepEqual(result.project.references, [{ id: 'reference-a', name: '角色参考' }]);
-    assert.equal(result.project.entities[0].reference, 'reference-a');
+    assert.equal(result.project.entities![0].reference, 'reference-a');
     assert.equal(JSON.stringify(result).includes('data:image/'), false);
     assert.deepEqual(document, before);
 });

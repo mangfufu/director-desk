@@ -39,6 +39,6 @@ test('action transitions are continuous, deterministic and unchanged by splittin
 });
 test('foot contact lifts a sole onto a reachable step and remains deterministic',()=>{
  const e=entity('actor','person','Actor'),r=makeHuman(e);animateHuman(r,e,0);fitFeetToSurface(r,()=>.18);
- for(const side of ['left','right']){const foot=r.joints[side+'Ankle'].getWorldPosition(new T.Vector3());assert.ok(Math.abs(foot.y-.037-.18)<1e-5);}
+ for(const side of ['left','right']){const sole=new T.Box3().setFromObject(r.joints[side+'Ankle'],true).min.y;assert.ok(Math.abs(sole-.18)<1e-5,'actual sole touches the step with its animated rotation');}
  const a=signature(r);animateHuman(r,e,0);fitFeetToSurface(r,()=>.18);assert.deepEqual(signature(r),a);disposeTree(r.root);
 });

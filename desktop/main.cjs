@@ -5,6 +5,7 @@ const path = require('node:path');
 const { attachIntegration } = require('./integration.cjs');
 const { attachUpdates } = require('./updates.cjs');
 const { attachFiles } = require('./files.cjs');
+const { attachExtensions } = require('./extensions.cjs');
 
 const origin = 'director://app';
 protocol.registerSchemesAsPrivileged([{ scheme: 'director', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
@@ -13,7 +14,8 @@ if (!app.isPackaged && app.commandLine.hasSwitch('director-test-profile'))
     app.setPath('userData', path.resolve(app.commandLine.getSwitchValue('director-test-profile')));
 app.setName('DirectorDesk');
 let window;
-const csp = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self' blob:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+let extensions;
+const csp = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 async function createWindow() {
     const windowTitle = app.isPackaged ? '导演台' : '导演台 · 开发测试版';
@@ -27,6 +29,7 @@ async function createWindow() {
     });
     const integration = attachIntegration(window), updates = attachUpdates(window, integration);
     const files = attachFiles(window);
+    extensions = attachExtensions(window);
     Menu.setApplicationMenu(null);
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event, url) => { if (url !== origin + '/') event.preventDefault(); });
@@ -52,7 +55,12 @@ else {
         protocol.handle('director', async request => {
             try {
                 const url = new URL(request.url), relative = decodeURIComponent(url.pathname).replace(/^\//, '') || 'index.html';
-                if (url.hostname !== 'app' || request.method !== 'GET' || !/^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.core|model-import\.worker)-[A-Za-z0-9_-]+\.js)$/.test(relative))
+                if(url.hostname==='app'&&request.method==='GET'&&relative.startsWith('extensions/')){
+                    const [,id,digest,...parts]=relative.split('/');const resource=parts.join('/');
+                    const mime={'.js':'text/javascript','.mjs':'text/javascript','.cjs':'text/javascript','.json':'application/json','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.wasm':'application/wasm','.woff2':'font/woff2'}[path.extname(resource)]||'application/octet-stream';
+                    return new Response(await extensions.asset(id,digest,resource),{headers:{'Content-Type':mime,'X-Content-Type-Options':'nosniff'}});
+                }
+                if (url.hostname !== 'app' || request.method !== 'GET' || !/^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.core|model-import\.worker|planner\.worker)-[A-Za-z0-9_-]+\.js)$/.test(relative))
                     return new Response('Not found', { status: 404 });
                 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' }[path.extname(relative)];
                 return new Response(await fs.readFile(path.join(webRoot, relative)), { headers: {

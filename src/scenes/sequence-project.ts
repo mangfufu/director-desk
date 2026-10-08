@@ -7,6 +7,7 @@ import { assertContinuityOrigin, type ContinuityOrigin } from './continuity-orig
 
 /** Version 3 is the whole production document. The renderer still receives one ordinary Project. */
 export interface SceneDocument {
+    projectId?: string;
     format: 'director-desk';
     version: 3;
     name: string;
@@ -16,8 +17,8 @@ export interface SceneDocument {
     scenes: SceneEntry[];
 }
 export interface SceneEntry { id: string; name: string; state: SceneState; origin?: ContinuityOrigin }
-export type SceneState = Pick<Project, 'duration' | 'fps' | 'aspect' | 'room' | 'entities' | 'cuts' | 'references' | 'production' | 'floors' | 'zones' | 'editorView' | 'creationMode' | 'referenceLabels' | 'depthVideo' | 'lighting'>;
-const stateKeys = ['duration', 'fps', 'aspect', 'room', 'entities', 'cuts', 'references', 'production', 'floors', 'zones', 'editorView', 'creationMode', 'referenceLabels', 'depthVideo', 'lighting'] as const;
+export type SceneState = Pick<Project, 'duration' | 'fps' | 'aspect' | 'room' | 'entities' | 'cuts' | 'references' | 'production' | 'floors' | 'zones' | 'groups' | 'editorView' | 'creationMode' | 'referenceLabels' | 'depthVideo' | 'physics' | 'lighting' | 'extensions'>;
+const stateKeys = ['duration', 'fps', 'aspect', 'room', 'entities', 'cuts', 'references', 'production', 'floors', 'zones', 'groups', 'editorView', 'creationMode', 'referenceLabels', 'depthVideo', 'physics', 'lighting', 'extensions'] as const;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[\p{L}\p{N}_:.-]{1,200}$/u.test(id);
 const validName = (name: unknown): name is string => typeof name === 'string' && name.trim().length > 0 && name.length <= 200;
@@ -32,8 +33,9 @@ function projection(document: SceneDocument, scene: SceneEntry): Project {
 /** All scene references are checked against their own scene, with one shared source catalog. */
 export function assertSceneDocument(input: unknown): asserts input is SceneDocument {
     if (!record(input) || input.format !== 'director-desk' || input.version !== 3
-        || Object.keys(input).some(key => !['format', 'version', 'name', 'activeSceneId', 'resources', 'media', 'scenes'].includes(key))) throw Error('多戏段工程格式无效');
+        || Object.keys(input).some(key => !['projectId', 'format', 'version', 'name', 'activeSceneId', 'resources', 'media', 'scenes'].includes(key))) throw Error('多戏段工程格式无效');
     const document = input as unknown as SceneDocument;
+    if (document.projectId !== undefined && !validId(document.projectId)) throw Error('工程标识无效');
     if (typeof document.name !== 'string' || document.name.length > 200 || !Array.isArray(document.scenes) || !document.scenes.length || !Array.isArray(document.resources)) throw Error('多戏段工程需要名称、戏段及资源列表');
     assertModelResources({ version: 2, resources: document.resources } as Project);
     assertMediaResources(document.media);

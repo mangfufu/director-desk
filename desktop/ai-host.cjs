@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { validateProfile, complete } = require('./providers.cjs');
 const { createConversation } = require('./ai-conversation.cjs');
 const { DIRECTOR_SYSTEM_PROMPT } = require('./director-prompt.cjs');
+const { callBatches } = require('./ai-call-batches.cjs');
 function createAIHost({ directory, safeStorage, definitions, discussionTools, isDiscussionToolCall, callTool, send, workflow = '', skill, skills }) {
     let profiles = [], running = null; const keys = new Map();
     const conversation = createConversation({ directory, safeStorage });
@@ -92,12 +93,14 @@ function createAIHost({ directory, safeStorage, definitions, discussionTools, is
                 // Validate the whole turn's tool permissions before dispatching its first call.
                 if (result.calls.some(tool => !tools.some(t => t.name === tool.name)
                     || (mode === 'discuss' && !isDiscussionToolCall(tool.name, tool.args)))) throw new Error('模型请求了当前模式不允许的工具操作，本轮工具均未执行');
-                for (const tool of result.calls) {
+                for (const batch of callBatches(result.calls)) {
                     controller.signal.throwIfAborted();
-                    emit({ type: 'tool', name: tool.name, status: 'running' });
-                    turn.started.push(tool.id); await conversation.save();
-                    const output = await invokeTool(tool.name, tool.args); turn.results.push({ id: tool.id, result: output }); await conversation.save();
-                    emit({ type: 'tool', name: tool.name, status: output.ok ? 'completed' : 'failed', summary: output.ok && tool.name === 'director_apply'
+                    for (const tool of batch.calls) { emit({ type: 'tool', name: tool.name, status: 'running' }); turn.started.push(tool.id); }
+                    await conversation.save(turn);
+                    const output = await invokeTool(batch.name, batch.args);
+                    for (const tool of batch.calls) turn.results.push({ id: tool.id, result: output });
+                    await conversation.save(turn);
+                    emit({ type: 'tool', name: batch.name, status: output.ok ? 'completed' : 'failed', summary: output.ok && batch.name === 'director_apply'
                         ? { ...output.data?.summary, preview: output.data?.preview, committed: output.data?.committed, message: output.data?.message }
                         : output.data?.summary || output.error });
                     // The remaining calls may depend on this stale scene. Leave them not-started,

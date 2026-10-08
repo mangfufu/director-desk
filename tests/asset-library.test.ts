@@ -83,6 +83,10 @@ test('recoloring affects joints and body while preserving independent instances'
     const original = b.skin.color.clone(); colorHuman(a, '#f01020');
     assert.ok(b.skin.color.equals(original));
     assert.ok(a.jointSkin!.color.equals(a.skin.color.clone().multiplyScalar(.91)));
+    for (const joint of ['rightArm', 'rightElbow', 'rightKnee']) {
+        const surface = a.joints[joint].children[0] as T.Mesh;
+        assert.ok((surface.material as T.MeshStandardMaterial).color.equals(a.skin.color), 'human joints share the new continuous body color');
+    }
     disposeTree(a.root); disposeTree(b.root);
 });
 

@@ -5,7 +5,7 @@ export function createModalPages(ctx:AppContext) {
     const root=document.querySelector<HTMLElement>('#modal-root')!;
     const parents:{node:HTMLElement;title:string;focus:HTMLElement|null;scroll:number}[]=[];
     const active=()=>root.firstElementChild as HTMLElement|null;
-    const allowed=()=>!ctx.busy && (root.querySelector('.modal')?.dispatchEvent(new Event('director-before-close',{cancelable:true}))??true);
+    const allowed=()=>{ if (ctx.busy) { ctx.toast('请先完成或取消当前操作'); return false; } return root.querySelector('.modal')?.dispatchEvent(new Event('director-before-close',{cancelable:true}))??true; };
     const close=()=>{
         if(!allowed())return;
         // Close hooks belong to their own mounted form, including any saved parent draft.
@@ -29,13 +29,18 @@ export function createModalPages(ctx:AppContext) {
         button.textContent='返回';button.title='返回 '+parents.at(-1)!.title;
         button.onclick=event=>{event.stopPropagation();back();};footer.append(button);
     };
-    return {close, show(title:string,node:HTMLElement){
+    return {close, show(title:string,node:HTMLElement, child = false){
         title=node.querySelector('.modal')?.getAttribute('aria-label')??title;
         const current=active(),modal=current?.querySelector('.modal'),oldTitle=modal?.getAttribute('aria-label')??'';
         if(current && oldTitle!==title) {
-            const existing=parents.findIndex(p=>p.title===title);
-            if(existing>=0)parents.splice(existing);
-            else parents.push({node:current,title:oldTitle,focus:document.activeElement as HTMLElement,scroll:root.querySelector('.modal-body')?.scrollTop??0});
+            if (child) {
+                const existing=parents.findIndex(p=>p.title===title);
+                if(existing>=0)parents.splice(existing);
+                else parents.push({node:current,title:oldTitle,focus:document.activeElement as HTMLElement,scroll:root.querySelector('.modal-body')?.scrollTop??0});
+            } else {
+                if (!ctx.busy) { close(); if (active()) return; }
+                parents.length = 0;
+            }
         }
         root.replaceChildren(node);decorate();
     }};

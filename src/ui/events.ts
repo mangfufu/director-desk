@@ -6,6 +6,7 @@ import * as T from 'three';
 import type { AppContext } from '../app-context.ts';
 import type { Action, Joint, Vec3 } from '../model.ts';
 import { clip } from '../model.ts';
+import { actionDuration } from '../animation/action-timing.ts';
 import { readRecoverableDocument } from './resource-recovery-panel.ts';
 import { samplePose } from '../timeline.ts';
 import { $ } from '../ui/common.ts';
@@ -69,11 +70,11 @@ export function bindEvents(ctx: AppContext) {
             const e = ctx.current();
             if (e)
                 ctx.change(() => {
-                    let start = ctx.time;
+                    let start = ctx.time; const duration = Math.ceil(actionDuration(addAction.dataset.addAction!) * ctx.project.fps - 1e-8) / ctx.project.fps;
                     for (const c of [...e.clips].sort((a, b) => a.start - b.start))
-                        if (c.start < start + 3 && c.end > start)
+                        if (c.start < start + duration && c.end > start)
                             start = c.end;
-                    e.clips.push(clip(addAction.dataset.addAction as Action, start, start + 3));
+                    e.clips.push(clip(addAction.dataset.addAction as Action, start, start + duration));
                     ctx.extendDuration();
                 }, false);
             return;
@@ -192,11 +193,18 @@ export function bindEvents(ctx: AppContext) {
             ctx.busy = true; ctx.playing = false; ctx.updateTimeUI();
             try {
                 const original = ctx.project, checkpoint = JSON.stringify(original), sceneContext = ctx.scenes.context;
-                const p = await readRecoverableDocument(ctx, JSON.parse(await target.files[0].text()));
+                let repaired = false;
+                const p = await readRecoverableDocument(ctx, JSON.parse(await target.files[0].text()), undefined, 'project', () => { repaired = true; });
+                await identifyImportedDocument(p);
                 await prepareDocumentModels(ctx.engine.externalModels, p);
                 if (ctx.draft || ctx.history.pending || ctx.project !== original || JSON.stringify(ctx.project) !== checkpoint)
                     throw new Error('读取期间工程或操作状态已改变，请结束当前操作后重新导入');
                 ctx.busy = false; ctx.applyDocument(p, sceneContext, '打开工程', true);
+                const filename = window.directorDesktop?.pathForFile?.(target.files[0]) ?? '';
+                ctx.scenes.setFile(/\.director$/i.test(filename) ? filename : '', !repaired);
+                ctx.dirty = repaired;
+                ctx.busy = true;
+                await ctx.flushRecovery?.().catch(() => ctx.toast('自动备份失败', true));
                 ctx.toast('项目已导入，可以继续编辑');
             }
             catch (error) {
@@ -250,7 +258,7 @@ export function bindEvents(ctx: AppContext) {
         }
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
             event.preventDefault();
-            ctx.saveProject();
+            ctx.saveProject(event.shiftKey);
             return;
         }
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
@@ -260,6 +268,9 @@ export function bindEvents(ctx: AppContext) {
         }
         if ((event.ctrlKey || event.metaKey) && event.code === 'KeyD') {
             event.preventDefault(); void ctx.act('duplicate', document.body); return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.code === 'KeyG') {
+            event.preventDefault(); void ctx.act(event.shiftKey ? 'group-ungroup' : 'group-create', document.body); return;
         }
         if(event.code==='KeyK' && !event.ctrlKey && !event.metaKey && !event.altKey){event.preventDefault();void ctx.act('position-key',document.body);return;}
         if (event.code === 'Space') {
@@ -310,3 +321,4 @@ export function bindEvents(ctx: AppContext) {
     });
     bindTimelineInput(ctx);
 }
+import { identifyImportedDocument } from '../versions/identity.ts';

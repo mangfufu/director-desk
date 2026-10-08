@@ -1,0 +1,6 @@
+.physics-panel { display:grid; gap:7px; min-width:0; }
+.physics-panel .field { margin:0; }
+.physics-panel .check { margin:3px 0; }
+.physics-panel .parameter-divider { margin:2px 0 0; padding-top:7px; }
+.physics-panel .field-pair { align-items:center; }
+.physics-panel button { min-height:32px; }

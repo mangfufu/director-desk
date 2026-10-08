@@ -4,6 +4,7 @@ import { createScene, SCENE_TEMPLATES, type SceneTemplate } from '../scenes.ts';
 import { $, button, escape, options } from './common.ts';
 import './scene-sequence-panel.css';
 import { continueScene, continuitySummary } from '../scenes/continue-scene.ts';
+import { continuityText } from './continuity-text.ts';
 
 export function renderSceneSwitcher(ctx: AppContext) {
     const select = $<HTMLSelectElement>('#scene-switch');
@@ -25,7 +26,7 @@ export function createSceneSequencePanel(ctx: AppContext) {
     }
     async function showOrigin() {
         const data = await continuitySummary(ctx.scenes.document());
-        ctx.showModal('接拍前情与站位', `<textarea readonly rows="14" aria-label="接拍来源记录">${escape(JSON.stringify(data, null, 2))}</textarea>`);
+        ctx.showModal('接拍前情与站位', `<textarea readonly rows="14" aria-label="接拍来源记录">${escape(continuityText(data))}</textarea>`, '', true);
         $('.modal').classList.add('origin-modal');
     }
     const apply = (label: string, operation: (document: SceneDocument) => SceneDocument) => {
@@ -61,7 +62,7 @@ export function createSceneSequencePanel(ctx: AppContext) {
         const id = ctx.scenes.context.sceneId;
         if (action === 'sequence-delete') {
             const name = ctx.scenes.list().find(s => s.id === id)!.name;
-            ctx.showModal('删除戏段', `<p class="modal-copy">删除「${escape(name)}」的全部调度和备注？可以撤销恢复。</p>`, button('sequence-confirm-delete', '删除本场', '', 'primary'));
+            ctx.showModal('删除戏段', `<p class="modal-copy">删除「${escape(name)}」的全部调度和备注？可以撤销恢复。</p>`, button('sequence-confirm-delete', '删除本场', '', 'primary'), true);
             return true;
         }
         let changed = false;

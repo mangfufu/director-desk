@@ -1,4 +1,7 @@
+import { createPhysicsPanel } from './physics-panel.ts';
+import { canUsePhysics } from '../physics/model.ts';
 import { createSceneProperties } from './scene-properties.ts';
+import { renderGroupInspector } from './group-panel.ts';
 import { bindActionPicker } from './action-picker.ts';
 import { createColorPalette } from './color-palette.ts';
 import {SURFACE_VISUALS} from '../visuals/model.ts';
@@ -33,6 +36,7 @@ import { createTimelineCurves } from './timeline-curves.ts';
 import { createAIEditLocations } from './ai-edit-locations.ts';
 export function createInspector(ctx: AppContext) {
     const sceneProperties = createSceneProperties(ctx);
+    const physicsEditor=createPhysicsPanel(ctx);
     let selectionTab = 'base';
     $('#inspector-scope').addEventListener('click', event => {
         const scope = (event.target as HTMLElement).closest<HTMLElement>('[data-inspector-scope]')?.dataset.inspectorScope;
@@ -97,10 +101,11 @@ export function createInspector(ctx: AppContext) {
         if (ctx.inspectorTab === 'environment') {
             $('#inspector-header').innerHTML = '<div class="inspect-title"><h2>灯光与场景</h2></div>';
             $('#inspector-tabs').innerHTML = '';
-            $('#inspector-content').innerHTML = sceneProperties.render() + lightingEditor.render(); lightingEditor.bind();
+            $('#inspector-content').innerHTML = sceneProperties.render() + physicsEditor.world() + lightingEditor.render(); lightingEditor.bind();
             $('#inspector-footer').innerHTML = `<div class="inspector-tool-actions">${lightingEditor.footer()}</div>`;
             return;
         }
+        if (renderGroupInspector(ctx)) return;
         if (!e) {
             $('#inspector-header').innerHTML = '<div class="inspect-title">场景设置</div>';
             $('#inspector-tabs').innerHTML = '';
@@ -119,10 +124,11 @@ export function createInspector(ctx: AppContext) {
         const initialStatus = e.initialPose?.layout !== poseLayout(e) ? '模型已调整，继承姿态不再应用' : inheritedPoseAt(e, ctx.time) ? '当前保持接拍姿态' : '新动作接管，保留开头姿态';
         if (e.initialPose) $('#inspector-header .inspect-subtitle').innerHTML = `<button class="initial-pose-link" data-inspector-origin title="${initialStatus}">接拍姿态 · 查看详情</button>`;
         if (e.locked) $('#inspector-header .inspect-title').insertAdjacentHTML('beforeend', button('unlock-selected', '解锁', '', 'inspector-unlock subtle', 'title="当前对象已锁定，仅可查看；点击解锁"'));
-        const tabs = external ? [['base', '基础'], ['structure', '模型'], ...(hasBones ? [['rig', '骨架']] : []), ...(hasAnimations ? [['actions', '动画']] : []), ['path', '路径']] : e.kind === 'camera' ? [['base', '基础'], ['camera', '摄影机'], ['path', '路径']] : e.kind === 'prop' ? [['base', '基础'], ...(parameterDefaults[e.asset] || definition?.parameters ? [['structure','结构']] : []), ['path', '路径']] : [['base', '基础'], ...(definition?.parameters ? [['structure', '外形']] : []), ['actions', '动作'], ['path', '路径'], ['pose', '姿态']];
+        const tabs = external ? [['base', '基础'], ['structure', '模型'], ...(hasBones ? [['rig', '骨架']] : []), ...(hasAnimations || external.rig&&e.kind==='actor' ? [['actions', '动画']] : []), ['path', '路径']] : e.kind === 'camera' ? [['base', '基础'], ['camera', '摄影机'], ['path', '路径']] : e.kind === 'prop' ? [['base', '基础'], ...(parameterDefaults[e.asset] || definition?.parameters ? [['structure','结构']] : []), ['path', '路径']] : [['base', '基础'], ...(definition?.parameters ? [['structure', '外形']] : []), ['actions', '动作'], ['path', '路径'], ['pose', '姿态']];
         if (!animal && ((external && e.kind === 'actor' && hasBones) || (!external && ['actor', 'crowd'].includes(e.kind)))) tabs.splice(tabs.findIndex(([key]) => key === 'path'), 0, ['retarget', '素材']);
         if (e.kind === 'prop' && !e.light && !e.visual && !e.field && !e.warp) tabs.splice(tabs.findIndex(([key]) => key === 'path'), 0, ['hand', '手持'], ['contacts', '接触']);
         if (e.light) tabs.splice(0, tabs.length, ['light', '灯光'], ['base', '变换'], ['path', '路径']);
+        if(canUsePhysics(e))tabs.push(['physics','物理']);
         if (e.camera) tabs.splice(2, 0, ['effects', '运镜效果']);
         if(e.asset==='light-spot')tabs.push(['surface','投影']);
         if(e.kind!=='camera'&&!e.light&&!e.field&&!e.warp&&(!e.visual||SURFACE_VISUALS.has(e.visual.preset)))tabs.push(['surface','材质'],['deform','形变']);
@@ -149,6 +155,7 @@ export function createInspector(ctx: AppContext) {
             if (e.initialPose) sections.push({ id: 'initial', label: '接拍', html: `<p class="panel-help">${initialStatus}。</p>` + button('initial-pose-clear', '清除本场继承姿态', '', 'wide subtle', e.locked ? 'disabled' : '') });
             html = navigation.render(`${e.id}:base`, sections);
         }
+        else if(part==='physics')html=physicsEditor.render(e);
         else if (part === 'retarget') html = retargetEditor.render(e);
         else if (part === 'contacts') html = contactEditor.render(e);
         else if (part === 'hand') html = handEditor.render(e);
@@ -163,7 +170,7 @@ export function createInspector(ctx: AppContext) {
             if (structurePorts(e).length) html += `<div class="button-row">${button('adjoin-prop','接一段','plus','subtle')}${button('link-open',e.structureLink ? '编辑模块连接' : '连接其他模块','','subtle')}</div>`;
         }
         else if (part === 'path') html = pathEditor.render(e, !animal && !external && ['actor', 'crowd'].includes(e.kind));
-        else if (part === 'actions') html = external ? nativeEditor.render(e) : actionEditor.render(e, supportedActions, animal);
+        else if (part === 'actions') html = external ? (external.rig&&e.kind==='actor'?actionEditor.render(e,Object.entries(ACTIONS),false):'')+(hasAnimations?nativeEditor.render(e):'') : actionEditor.render(e, supportedActions, animal);
         else if (part === 'pose') html = poseEditor.render(e) + button('pose-key', '记录当前姿态', 'plus', 'wide subtle');
         else if (part === 'camera') html = cameraInspector(ctx, e, navigation);
         else if (part === 'light') html = lightingEditor.render(e);
@@ -190,7 +197,7 @@ export function createInspector(ctx: AppContext) {
         if (e.locked) {
             document.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('#inspector-content input,#inspector-content select,#inspector-content button,#inspector-footer button').forEach(el => {
                 const act = el.dataset.act;
-                el.disabled = !el.dataset.lightTab && !el.dataset.cinemaTab && !el.dataset.inspectorSection && el.dataset.stepPoint === undefined && !['curve-channel', 'curve-segment', 'lighting-channel', 'lighting-key', 'cinema-channel', 'cinema-key', 'legacy-parameter-choice', 'path-section-choice', 'pose-group', 'pose-key-choice', 'path-point-choice', 'basic-clip-choice', 'hand-target', 'hand-parameter', 'contact-choice', 'contact-parameter', 'asset-parameter-key', 'external-parameter-key', 'rig-view', 'rig-part', 'native-source', 'native-clip', 'native-parameter', 'retarget-source', 'retarget-clip', 'retarget-parameter'].includes(el.id) && !el.dataset.rigReadonly && el.dataset.rigAction !== 'focus' && el.dataset.field !== 'locked' && !['nodes-open','unlock-selected','focus','duplicate','preview-selected','cut-selected','select-point','seek-key'].includes(act ?? '');
+                el.disabled = !el.dataset.lightTab && !el.dataset.cinemaTab && !el.dataset.inspectorSection && el.dataset.stepPoint === undefined && !['pose-joint-choice','pose-nodes-visible','curve-channel', 'curve-segment', 'lighting-channel', 'lighting-key', 'cinema-channel', 'cinema-key', 'legacy-parameter-choice', 'path-section-choice', 'pose-group', 'pose-key-choice', 'path-point-choice', 'basic-clip-choice', 'hand-target', 'hand-parameter', 'contact-choice', 'contact-parameter', 'asset-parameter-key', 'external-parameter-key', 'rig-view', 'rig-part', 'native-source', 'native-clip', 'native-parameter', 'retarget-source', 'retarget-clip', 'retarget-parameter'].includes(el.id) && !el.dataset.rigReadonly && el.dataset.rigAction !== 'focus' && el.dataset.field !== 'locked' && !['nodes-open','unlock-selected','focus','duplicate','preview-selected','cut-selected','select-point','seek-key'].includes(act ?? '');
             });
         }
     }

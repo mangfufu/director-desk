@@ -1,4 +1,11 @@
 import { createSceneSequencePanel } from './scene-sequence-panel.ts';
+import { createGroupCommands } from './group-panel.ts';
+import { selectedEntities } from '../editor/timeline-selection.ts';
+import { createArrangementPanel } from './arrangement-panel.ts';
+import { createStagingLibrary } from './staging-library.ts';
+import { createVersionsPanel } from './versions-panel.ts';
+import { createPluginsPanel } from './plugins-panel.ts';
+import { createNavigationPanel } from './navigation-panel.ts';
 import { mirrorPose } from '../assets/joint-schema.ts';
 import { createModelNodesPanel } from './model-nodes-panel.ts';
 import { createResourcePanel } from './resource-panel.ts';
@@ -30,6 +37,10 @@ import { $, button } from './common.ts';
 import type { AppContext } from '../app-context.ts';
 export function createCommands(ctx: AppContext, inspectorTools: { handle(action: string): boolean }) {
     const sceneSequence = createSceneSequencePanel(ctx);
+    const groupCommands = createGroupCommands(ctx);
+    const arrangement = createArrangementPanel(ctx);
+    const stagingLibrary = createStagingLibrary(ctx);
+    const versionsPanel = createVersionsPanel(ctx), pluginsPanel = createPluginsPanel(ctx), navigationPanel = createNavigationPanel(ctx);
     const modelNodes = createModelNodesPanel(ctx);
     const resources = createResourcePanel(ctx), replacements = createReplacePropPanel(ctx);
     const resourceStatistics = createResourceStatisticsPanel(ctx);
@@ -44,11 +55,16 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
     const productionPanel = createProductionPanel(ctx);
     async function act(action: string, el: HTMLElement) {
         const e = ctx.current();
-        if (ctx.busy && !['cancel-export', 'range-cancel', 'production-cancel', 'model-cancel', 'scene-reuse-cancel'].includes(action))
-            return;
+        if (ctx.busy && !['navigate-cancel', 'cancel-export', 'range-cancel', 'production-cancel', 'model-cancel', 'scene-reuse-cancel'].includes(action)) {
+            ctx.toast('请先完成或取消当前操作'); return;
+        }
         if (ctx.history.pending && !ctx.draft && action !== 'cancel-export') { ctx.toast('请先结束当前拖动操作'); return; }
         if (ctx.draft && !['finish-path', 'cancel-path', 'undo', 'save', 'home', 'top', 'grid', 'focus', 'help', 'close-modal'].includes(action)) { ctx.toast('请先完成路线，或按 Esc 取消'); return; }
         if (sceneSequence.handle(action)) return;
+        if (groupCommands.handle(action, el)) return;
+        if (arrangement.handle(action)) return;
+        if (stagingLibrary.handle(action, el)) return;
+        if (versionsPanel.handle(action, el) || pluginsPanel.handle(action, el) || navigationPanel.handle(action)) return;
         if (modelImport.handle(action)) return;
         if (userMotion.handle(action)) return;
         if (modelNodes.handle(action)) return;
@@ -91,7 +107,7 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
             case 'translate':
             case 'rotate':
             case 'scale':
-                if (e?.camera && action === 'rotate') {
+                if (e?.camera && action === 'rotate' && selectedEntities().length < 2) {
                     ctx.change(() => { if (e.camera!.mode !== 'free') freezeCamera(ctx.engine, e); const r = ctx.engine.cameras.get(e.id)!.rotation; e.rotation = [r.x, r.y, r.z]; e.camera!.mode = 'free'; e.camera!.aim = 'manual'; }, false);
                     ctx.toast('已切换手动机位朝向，可用旋转工具调整');
                 }
@@ -137,6 +153,9 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
                 break;
             case 'save':
                 await ctx.saveProject();
+                break;
+            case 'save-as':
+                await ctx.saveProject(true);
                 break;
             case 'open':
                 if (ctx.dirty)
@@ -335,6 +354,7 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
                 ctx.change(() => { const item = ctx.project.entities.find(x => x.id === el.dataset.id)!; item.visible = !item.visible; }, false);
                 break;
             case 'duplicate':
+                if (selectedEntities().length > 1) { groupCommands.handle('group-copy', el); break; }
                 if (e)
                     ctx.change(() => { const copy = clone(e); copy.id = uid(); copy.locked = false; copy.name += ' 副本'; copy.clips.forEach(c => c.id = uid()); if(copy.structureLink)copy.structureLink=null; if (copy.handBinding) copy.handBinding.offset[0] += .1; else shiftPath(copy, new T.Vector3(.4, 0, .4)); ctx.project.entities.push(copy); ctx.selected = copy.id; });
                 break;

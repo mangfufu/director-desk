@@ -26,6 +26,10 @@ function publish() {
 export const editorPreferences = {
     get current(): Readonly<EditorPreferences> { return values; },
     set(key: PreferenceKey,value: unknown) { if(!Object.hasOwn(preferenceDefaults,key)||!valid(key,value))return false; Object.assign(values,{[key]:value});publish();return true; },
+    patch(patch: Record<string, unknown>) {
+        for (const [key, value] of Object.entries(patch)) if (!Object.hasOwn(preferenceDefaults,key) || !valid(key as PreferenceKey,value)) throw Error('编辑器设置无效：' + key);
+        Object.assign(values,patch); publish();
+    },
     reset() { Object.assign(values,preferenceDefaults);publish(); },
     subscribe(listener:()=>void) { listeners.add(listener);return ()=>listeners.delete(listener); },
 };

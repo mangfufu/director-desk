@@ -28,9 +28,9 @@ export function mountAIMcp(panel: HTMLElement, status: (message: string) => void
     client.onchange(new Event('change'));
     const check = <T>(result: DesktopResult<T>) => { if (!result.ok) throw Error(result.error || '操作失败'); return result.data!; };
     const safe = (task: () => Promise<unknown>) => { void task().catch(error => status(error.message)); };
-    const refresh = (state: { enabled: boolean; url?: string; lanEnabled?: boolean; lanUrl?: string }) => {
+    const refresh = (state: { enabled: boolean; url?: string; lanEnabled?: boolean; lanUrl?: string; error?: string }) => {
         enabled.checked = state.enabled;
-        panel.querySelector('#ai-mcp-status')!.textContent = state.url || '关闭';
+        panel.querySelector('#ai-mcp-status')!.textContent = state.url || state.error || '关闭';
         lanEnabled.disabled = !state.enabled;
         lanEnabled.checked = Boolean(state.enabled && state.lanEnabled);
         if (lanRow) lanRow.hidden = !lanEnabled.checked;

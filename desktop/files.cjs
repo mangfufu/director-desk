@@ -3,6 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { createFileHost } = require('./file-host.cjs');
 const { installFilePermissions } = require('./file-permissions.cjs');
+const { createAutomationFiles } = require('./automation-files.cjs');
 
 function attachFiles(window) {
     const session = window.webContents.session;
@@ -18,13 +19,23 @@ function attachFiles(window) {
         const result = await dialog.showSaveDialog(window, { title: '保存项目', defaultPath, filters: [{ name: '导演台工程', extensions: ['director'] }], properties: ['createDirectory', 'showOverwriteConfirmation'] });
         return result.canceled ? null : result.filePath;
     } });
+    const automation = createAutomationFiles({ ready: host.ready, locations: () => host.read() });
     let closeRequest = '', allowClose = false;
+    let closeBusy = false;
+    const closingState = (event, state) => { if (trusted(event)) closeBusy = state?.busy === true; event.returnValue = null; };
+    ipcMain.on('director-close-state', closingState);
     ipcMain.handle('director-files', async (event, input) => {
         if (!trusted(event)) return { ok: false, error: '拒绝未知页面' };
         try {
             await host.ready;
+            if (typeof input?.action === 'string' && input.action.startsWith('automation-')) return { ok: true, data: await automation.call(input.action, input.data) };
             if (input?.action === 'locations') return { ok: true, data: host.read() };
+            if (input?.action === 'set-locations') return { ok: true, data: await host.set(input.data) };
             if (input?.action === 'choose') return { ok: true, data: await host.choose(input.data) };
+            if (input?.action === 'choose-export-directory') {
+                const result = await dialog.showOpenDialog(window, { title: '保存位置', defaultPath: typeof input.data === 'string' && path.isAbsolute(input.data) ? input.data : host.read().exports, properties: ['openDirectory', 'createDirectory'] });
+                return { ok: true, data: { path: result.canceled ? undefined : result.filePaths[0] } };
+            }
             if (input?.action === 'save-project') return { ok: true, data: await host.saveProject(input.data) };
             if (input?.action === 'save-export') return { ok: true, data: await host.saveExport(input.data) };
             throw Error('未知文件操作');
@@ -41,16 +52,19 @@ function attachFiles(window) {
         item.setSaveDialogOptions({ title: '保存导演台文件', defaultPath: host.defaultPath(item.getFilename()) });
     };
     session.on('will-download', download);
-    window.webContents.on('did-start-loading', () => { closeRequest = ''; allowClose = false; });
+    window.webContents.on('did-start-navigation', details => { if (!details.isMainFrame || details.isSameDocument) return; closeRequest = ''; allowClose = false; void automation.close(); });
     window.on('closed', () => {
+        void automation.close();
         ipcMain.removeHandler('director-files'); ipcMain.removeListener('director-save-close-result', closeResult);
+        ipcMain.removeListener('director-close-state', closingState);
         session.removeListener('will-download', download);
     });
     return { ready: host.ready, preventUnload(event) {
         if (allowClose) { event.preventDefault(); return; }
         if (closeRequest) return;
+        if (closeBusy) { dialog.showMessageBoxSync(window, { type: 'info', title: '退出导演台', message: '请先完成或取消当前操作', buttons: ['返回编辑'] }); return; }
         const choice = dialog.showMessageBoxSync(window, { type: 'question', title: '退出导演台',
-            message: '是否保存当前工程后退出？', detail: '保存取消或失败时会留在编辑器。正在编辑或导出的任务需先完成或取消。',
+            message: '是否保存当前工程后退出？',
             buttons: ['保存并退出', '不保存退出', '取消'], defaultId: 0, cancelId: 2, noLink: true });
         if (choice === 1) { allowClose = true; event.preventDefault(); }
         if (choice === 0) { closeRequest = randomUUID(); window.webContents.send('director-save-before-close', { id: closeRequest }); }

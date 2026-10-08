@@ -25,3 +25,16 @@ test('feature scenes preserve editable lights, lens channels and timed movement 
     for(let t=0;t<10;t+=.25)assert.ok(entityPosition(actors[0],t).distanceTo(entityPosition(actors[1],t))>2,'pursuer stays behind');
     assert.equal(createScene('blank').entities.length,2,'blank remains just ground and camera');
 });
+
+test('physics showcase schedules separate demonstrations using editable shared parameters',()=>{
+    const p=createScene('physics-stage');assertProject(JSON.parse(JSON.stringify(p)));
+    assert.equal(p.duration,20);assert.equal(p.physics!.enabled,true);assert.equal(p.resources,undefined);
+    assert.deepEqual(p.cuts.map(c=>c.time),[0,4,8,12,18]);
+    const bodies=p.entities.filter(e=>e.physics?.enabled),inertia=bodies.filter(e=>e.physics!.start===4);
+    assert.equal(inertia.length,2);assert.deepEqual(inertia[0].physics!.impulses,inertia[1].physics!.impulses);
+    assert.notEqual(inertia[0].physics!.inertia,inertia[1].physics!.inertia);
+    const runner=bodies.find(e=>e.physics!.ragdoll)!;assert.equal(runner.physics!.start,13.5);
+    assert.ok(entityPosition(runner,13.5).distanceTo(entityPosition(runner,12))>3);
+    assert.ok(p.entities.some(e=>e.asset==='human-female'));assert.ok(p.entities.some(e=>e.asset==='human-dwarf'));
+    assert.equal(p.production!.notes.length,5);assert.match(p.production!.promptText!,/@视频1/);
+});

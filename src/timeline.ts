@@ -30,9 +30,10 @@ function sourcePathPosition(path:MotionPath|null,base:Vec3,time:number):Vector3 
     if (time >= points.at(-1)!.time)
         return new Vector3(...points.at(-1)!.position);
     if (path.interpolation === 'continuous') return continuousPathPosition(points, time);
-    let i = 0;
-    while (i < points.length - 2 && time >= points[i + 1].time)
-        i++;
+    // Validated key times are strictly increasing. Seek directly instead of scanning
+    // dense hand-drawn/recorded paths on every actor, aim and export sample.
+    let i = 0, hi = points.length - 1;
+    while (hi - i > 1) { const mid = (i + hi) >>> 1; if (time >= points[mid].time) i = mid; else hi = mid; }
     const t = eased((time - points[i].time) / (points[i + 1].time - points[i].time), points[i + 1].easing);
     const a = new Vector3(...points[i].position), b = new Vector3(...points[i + 1].position);
     if (!path.smooth || points.length === 2 || a.distanceToSquared(b) < 1e-12)
@@ -112,7 +113,10 @@ export function samplePose(e: Entity, time: number): Pose {
     const out: Pose = { ...e.pose };
     for (const key of new Set([...Object.keys(a.pose), ...Object.keys(b.pose)])) {
         const k = key as keyof Pose;
-        out[k] = MathUtils.lerp(a.pose[k] ?? 0, b.pose[k] ?? 0, u);
+        const av = a.pose[k], bv = b.pose[k];
+        out[k] = Array.isArray(av) || Array.isArray(bv)
+            ? jointAngles(av, k).map((value, i) => MathUtils.lerp(value, jointAngles(bv, k)[i], u)) as [number, number, number]
+            : MathUtils.lerp(av ?? 0, bv ?? 0, u);
     }
     return out;
 }
@@ -132,3 +136,4 @@ export function addCut(project: Project, time: number, cameraId: string) {
         project.cuts.push({ time: t, cameraId });
     project.cuts.sort((a, b) => a.time - b.time);
 }
+import { jointAngles } from './assets/joint-schema.ts';

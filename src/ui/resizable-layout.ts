@@ -2,6 +2,7 @@ type Boundary = 'sidebar' | 'inspector' | 'timeline' | 'split';
 type Layout = Record<Boundary, number>;
 const defaults: Layout = { sidebar: 228, inspector: 320, timeline: 210, split: 51.2 };
 const storageKey = 'director-layout-v1';
+export const layoutControls: { read?: () => Layout; set?: (patch: Partial<Layout>) => Layout; reset?: () => Layout } = {};
 
 export function bindResizableLayout() {
     const root = document.documentElement;
@@ -32,6 +33,12 @@ export function bindResizableLayout() {
         });
     };
     const save = () => { try { localStorage.setItem(storageKey, JSON.stringify(layout)); } catch { } };
+    layoutControls.read = () => ({ ...layout });
+    layoutControls.set = patch => {
+        for (const [key, value] of Object.entries(patch)) if (!Object.hasOwn(defaults, key) || typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw Error('布局尺寸无效：' + key);
+        Object.assign(layout, patch); apply(); save(); return { ...layout };
+    };
+    layoutControls.reset = () => { layout = { ...defaults }; apply(); save(); return { ...layout }; };
     const boundaries: [Boundary, string, string][] = [
         ['sidebar', '.sidebar', '左侧资源栏宽度'], ['inspector', '.inspector', '右侧属性栏宽度'],
         ['timeline', '.timeline', '时间轴高度'], ['split', '.stage-panel', '布景与拍摄画面比例']

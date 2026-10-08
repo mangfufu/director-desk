@@ -17,7 +17,11 @@ release/
 !/package-lock.json
 !/index.html
 !/tsconfig.json
+!/vite.config.mjs
 !/src/
+!/examples/
+/examples/*
+!/examples/plugins/
 !/desktop/
 !/public/
 !/tests/
@@ -28,6 +32,9 @@ release/
 /docs/*
 !/docs/images/
 !/docs/development.md
+!/docs/staging-workflow.md
+!/docs/physics.md
+!/docs/plugins.md
 /desktop/icon.ico
 /desktop/icon.icns
 # The generated offline helper is a required, directly usable skill runtime.
@@ -54,6 +61,8 @@ release/
 !/scripts/test-skills-desktop.mjs
 !/scripts/test-updates-desktop.mjs
 !/scripts/test-files-desktop.mjs
+!/scripts/test-interactions-desktop.mjs
+!/scripts/test-extensions-desktop.mjs
 !/scripts/test-continuous-shot.mjs
 !/scripts/verify-video-frames.mjs
 !/scripts/test-ai-conversation-restart.mjs
@@ -115,4 +124,16 @@ file-locations.json
 !/scripts/test-model-import-worker.mjs
 !/scripts/test-depth-particles.mjs
 !/scripts/test-assets.mjs
+!/scripts/verify-groups.mjs
+!/scripts/verify-staging-workflow.mjs
+!/scripts/test-groups-desktop.mjs
+!/scripts/verify-physics.mjs
+!/scripts/test-physics-desktop.mjs
+!/scripts/verify-physics-showcase.mjs
+!/scripts/verify-joint-editor.mjs
+!/scripts/verify-human-actions.mjs
+!/scripts/download-animation-fixtures.py
 !/scripts/test-asset-sources.json
+
+!/scripts/verify-human-motion-playback.mjs
+!/scripts/pack-plugin.mjs

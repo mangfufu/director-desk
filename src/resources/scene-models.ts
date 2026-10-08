@@ -148,6 +148,7 @@ export class SceneModels {
         if (entry) { entry.instance.dispose(); entry.root.removeFromParent(); entry.root.clear(); this.instances.delete(id); }
         return !!entry;
     }
+    physicsBones(actor: Entity) { return actor.external?.rig ? this.instances.get(actor.id)?.instance.humanoidNodes(actor.external.rig) : undefined; }
     clearInstances() { this.retargets.clear(); this.transitions.clear(); this.humanRigs.clear(); this.basics?.dispose(); this.basics = undefined; this.instances.forEach(({ instance, root }) => { instance.dispose(); root.removeFromParent(); root.clear(); }); this.instances.clear(); }
     create(entity: Entity): T.Group {
         const data = entity.external!, source = this.sources.get(data.resourceId); if (!source) throw Error('模型尚未加载');

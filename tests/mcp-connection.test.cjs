@@ -42,3 +42,39 @@ test('MCP does not leave a server running when secure persistence is unavailable
     try { await assert.rejects(host.change(true), /系统加密/); assert.deepEqual(await host.change(), { enabled: false, url: undefined }); assert.deepEqual(fs.readdirSync(directory), []); }
     finally { await host.close(); fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('MCP starts by default, keeps credentials across restarts and remembers explicit disable', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'director-mcp-default-'));
+    const make = () => createMcpHost({ directory, safeStorage, definitions: [], call: async () => ({ ok: true }), version: '1.0.0' });
+    let host = make();
+    try {
+        assert.equal((await host.initialize()).enabled, true);
+        const first = await host.connection();
+        assert.equal((await host.initialize()).enabled, true);
+        assert.equal((await host.change()).lanEnabled, undefined);
+        await host.close(); host = make();
+        assert.equal((await host.initialize()).enabled, true);
+        assert.deepEqual(await host.connection(), first);
+        await host.change(false); await host.close(); host = make();
+        assert.equal((await host.initialize()).enabled, false);
+        await host.change(true); assert.deepEqual(await host.connection(), first);
+        await host.close(); host = make(); assert.equal((await host.initialize()).enabled, true);
+        assert.deepEqual(await host.connection(), first);
+    } finally { await host.close(); fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('automatic MCP startup reports occupied port without silently replacing connection settings', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'director-mcp-start-error-'));
+    const make = () => createMcpHost({ directory, safeStorage, definitions: [], call: async () => ({}), version: '1.0.0' });
+    let host = make(); const blocker = http.createServer();
+    try {
+        const first = await host.initialize(); await host.close();
+        const saved = fs.readFileSync(path.join(directory, 'mcp-connection.json'), 'utf8');
+        await new Promise(r => blocker.listen(Number(new URL(first.url).port), '127.0.0.1', r));
+        host = make(); const failed = await host.initialize();
+        assert.equal(failed.enabled, false); assert.match(failed.error, /已被占用/);
+        assert.equal(fs.readFileSync(path.join(directory, 'mcp-connection.json'), 'utf8'), saved);
+        await new Promise(r => blocker.close(r));
+        const recovered = await host.change(true); assert.equal(recovered.url, first.url); assert.equal(recovered.error, undefined);
+    } finally { if (blocker.listening) await new Promise(r => blocker.close(r)); await host.close(); fs.rmSync(directory, { recursive: true, force: true }); }
+});

@@ -1,0 +1,11 @@
+.staging-library { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; gap:10px; }
+.staging-search,.staging-actions,.staging-pages { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.staging-search input { flex:1; min-width:100px; }
+.staging-list { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; gap:4px; }
+.staging-item { display:flex; min-width:0; justify-content:space-between; gap:12px; padding:8px 10px; text-align:left; }
+.staging-item span { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.staging-item small { white-space:nowrap; color:#aaa; }
+.staging-item.active { border-color:#eee; background:#333; }
+.staging-pages { justify-content:space-between; font-size:12px; }
+.staging-library .triple { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.staging-library input { min-width:0; max-width:100%; }

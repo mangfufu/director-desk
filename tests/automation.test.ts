@@ -11,10 +11,15 @@ test('short discovery preserves every validation rule and exposes full advanced 
     for (const tool of FULL_TOOL_DEFINITIONS) {
         const short = TOOL_DEFINITIONS.find(t => t.name === tool.name)!;
         assert.deepEqual(rules(short.inputSchema), rules(tool.inputSchema));
-        assert.deepEqual(toolHelp([tool.name]).tools[0], tool);
+        assert.deepEqual(toolHelp([tool.name], { full: true }).tools[0], tool);
     }
     assert.ok(JSON.stringify(TOOL_DEFINITIONS).length < JSON.stringify(FULL_TOOL_DEFINITIONS).length * .6);
     assert.equal(isDiscussionToolCall('director_help', { names: ['director_apply'] }), true);
+    assert.equal(isDiscussionToolCall('director_staging', { action: 'list', query: '街道' }), true);
+    assert.equal(isDiscussionToolCall('director_staging', { action: 'read', id: 'a' }), true);
+    assert.equal(isDiscussionToolCall('director_staging', { action: 'insert', id: 'a' }), false);
+    assert.equal(isDiscussionToolCall('director_staging', { action: 'save', entityIds: ['a'] }), false);
+    assert.equal(isDiscussionToolCall('director_arrange', { action: 'array' }), false);
     assert.throws(() => toolHelp(['unknown']), /未知/);
     assert.throws(() => validateToolInput('director_help', { names: [] }));
     assert.throws(() => validateToolInput('director_help', { names: ['a','b','c','d'] }));
@@ -80,9 +85,9 @@ test('camera patches preserve defaults and existing tracking while rejecting inv
 test('production notes give precise schema errors and roll back earlier edits; references can target same-batch actors', () => {
     const before = demoProject(), saved = JSON.stringify(before);
     const prefix = { operation: 'add', asset: 'woman', id: 'note-actor' };
-    assert.throws(() => applyOperations(before, [{ operation: 'notes', patch: { story: 'must not silently clear production' } }]), /operations\[0\].*fixedPrompt/);
+    assert.throws(() => applyOperations(before, [{ operation: 'notes', patch: { story: 'must not silently clear production' } }]), /operations\[0\].*production.*完整对象/);
     for (const value of [[], 'story', { notes: [] }]) {
-        assert.throws(() => applyOperations(before, [prefix, { operation: 'notes', value }]), /operations\[1\].*fixedPrompt/);
+        assert.throws(() => applyOperations(before, [prefix, { operation: 'notes', value }]), /operations\[1\].*production/);
         assert.equal(JSON.stringify(before), saved);
     }
     const value = { fixedPrompt: '', sceneReferenceIds: [], notes: [{ id: 'note-1', start: 0, end: 3, actorId: 'note-actor', story: 'plot', emotion: '', dialogue: '', action: '' }] };

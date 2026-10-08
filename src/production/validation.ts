@@ -5,18 +5,18 @@ export const productionValueGuide = 'notes replaces the complete production obje
 /** Shared structural validation for tools and project files; references are checked after the entire edit batch. */
 export function assertProductionShape(value: unknown): asserts value is ProductionData {
     const fail = (field: string, expected: string): never => { throw Error(`制作备注 ${field}：${expected}`); };
-    if (!value || typeof value !== 'object' || Array.isArray(value)) fail('production', productionValueGuide);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) fail('production', '需要完整对象；用 director_read sections:[production] 读取后修改');
     const data = value as Record<string, unknown>;
-    if (typeof data.fixedPrompt !== 'string' || data.fixedPrompt.length > 50000) fail('production.fixedPrompt', '需要字符串（可为 ""），最长 50000 字；' + productionValueGuide);
+    if (typeof data.fixedPrompt !== 'string' || data.fixedPrompt.length > 50000) fail('production.fixedPrompt', '需要字符串（可为 ""），最长 50000 字');
     for (const key of ['promptText', 'textOnlyPrompt'])
         if (data[key] !== undefined && (typeof data[key] !== 'string' || (data[key] as string).length > 100000)) fail(`production.${key}`, '需要完整提示词字符串（可为 ""），最长 100000 字');
     if (data.promptMode !== undefined && data.promptMode !== 'reference-video' && data.promptMode !== 'text-only') fail('production.promptMode', '需要 reference-video 或 text-only');
     if (!Array.isArray(data.sceneReferenceIds) || data.sceneReferenceIds.some(id => typeof id !== 'string')) fail('production.sceneReferenceIds', '需要已导入图片 ID 的数组；没有图片时为 []');
-    if (!Array.isArray(data.notes)) fail('production.notes', '需要备注数组；' + productionValueGuide);
+    if (!Array.isArray(data.notes)) fail('production.notes', '需要备注数组；没有备注时为 []');
     const ids = new Set<string>();
     for (const [index, item] of (data.notes as unknown[]).entries()) {
         const at = `production.notes[${index}]`;
-        if (!item || typeof item !== 'object' || Array.isArray(item)) fail(at, '需要对象；' + productionValueGuide);
+        if (!item || typeof item !== 'object' || Array.isArray(item)) fail(at, '需要对象，如 {id:"note-1",start:0,end:3,actorId:"",story:"",emotion:"",dialogue:"",action:""}');
         const note = item as Record<string, unknown>;
         if (typeof note.id !== 'string' || !/^[\p{L}\p{N}_:.-]{1,200}$/u.test(note.id) || ids.has(note.id)) fail(at + '.id', '需要唯一 ID，1—200 个字母、数字或 _:.-');
         if (typeof note.start !== 'number' || !Number.isFinite(note.start) || note.start < 0) fail(at + '.start', '需要非负有限秒数');

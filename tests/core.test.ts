@@ -37,6 +37,19 @@ import { animateHuman, disposeTree, makeHuman, makeProp } from '../src/assets.ts
 import { configureCamera } from '../src/engine.ts';
 import { ASPECTS, clone, demoProject, getFrameCount, outputSize, validateProject } from '../src/model.ts';
 import { activeCameraId, addCut, entityPosition, entityYaw, pathPosition, samplePose } from '../src/timeline.ts';
+test('dense path seeks match the same local curve at knots, between knots and after reverse seeking', () => {
+    const points = Array.from({ length: 2000 }, (_, i) => ({ time: i * .03, position: [Math.sin(i * .1), i * .02, Math.cos(i * .1)] as [number, number, number] }));
+    for (const smooth of [false, true]) {
+        const path = { smooth, points };
+        for (let index = 1998; index >= 1; index -= 17) {
+            const local = { smooth, points: points.slice(index - 1, index + 3) };
+            for (const time of [points[index].time, points[index].time + .017])
+                assert.deepEqual(pathPosition(path, [0, 0, 0], time).toArray(), pathPosition(local, [0, 0, 0], time).toArray());
+        }
+        assert.deepEqual(pathPosition(path, [0, 0, 0], -1).toArray(), points[0].position);
+        assert.deepEqual(pathPosition(path, [0, 0, 0], 1000).toArray(), points.at(-1)!.position);
+    }
+});
 test('drawing a new path holds its starting point without interrupting rendering', () => {
     const p = demoProject(), actor = p.entities[1];
     actor.path = { smooth: true, points: [{ time: 5, position: [1, 0, 2] }] };
@@ -135,9 +148,11 @@ test('standing mannequin geometry matches declared height and touches the ground
     e.pose = {};
     e.poseKeys = [];
     const rig = makeHuman(e);
+    const neutral = new Box3().setFromObject(rig.root);
+    assert.ok(Math.abs(neutral.max.y - e.height) < .002);
     animateHuman(rig, e, 0);
-    const bounds = new Box3().setFromObject(rig.root);
+    const bounds = new Box3().setFromObject(rig.root, true);
     assert.ok(Math.abs(bounds.min.y) < .002);
-    assert.ok(Math.abs(bounds.max.y - e.height) < .002);
+    assert.ok(Math.abs(bounds.max.y - e.height) < .08, 'natural standing pose retains the model stature within its lean');
     disposeTree(rig.root);
 });

@@ -12,10 +12,17 @@ import { replaceProp, type ReplacePropOptions } from '../resources/replace-prop.
 import { editResourceMetadata, removeUnusedResource } from '../resources/resource-usage.ts';
 import { parameterDefaults } from '../parametric-props.ts';
 import { assertProductionShape } from '../production/validation.ts';
+import { patchProduction } from '../production/patch.ts';
 import { applyCameraMotion, type CameraMotionOptions } from '../cinematography/motion-presets.ts';
 import { lightingPreset } from '../lighting/presets.ts';
+import { editGroup, duplicateEntities } from '../building/group-editing.ts';
+import { recordPositionKey } from '../editor/position-keys.ts';
+import { removeGroupMember } from '../building/entity-groups.ts';
+import { arrangeEntities, type Arrangement } from '../building/arrangement.ts';
+import { editTimeline } from './timeline-edit.ts';
+import { editRoute } from './route-edit.ts';
 export interface EditOperation { operation: string; id?: string; asset?: string; kind?: 'actor' | 'prop'; name?: string; position?: Vec3; time?: number; duration?: number; patch?: Record<string, unknown>; value?: unknown }
-const editable = new Set(['warp','visual','field','deform','surface', 'light', 'floorId', 'structureLink', 'handBinding', 'contactAnchors', 'external', 'name', 'color', 'position', 'rotation', 'scale', 'visible', 'height', 'build', 'gender', 'path', 'face', 'faceTarget', 'clips', 'pose', 'poseKeys', 'camera', 'count', 'spacing', 'seed', 'reference', 'parameters', 'assetParameters', 'actionBlend', 'footContact']);
+const editable = new Set(['memberPaths','physics','warp','visual','field','deform','surface', 'light', 'floorId', 'structureLink', 'handBinding', 'contactAnchors', 'external', 'name', 'color', 'position', 'rotation', 'scale', 'visible', 'height', 'build', 'gender', 'path', 'face', 'faceTarget', 'clips', 'pose', 'poseKeys', 'camera', 'count', 'spacing', 'seed', 'reference', 'parameters', 'assetParameters', 'actionBlend', 'footContact']);
 function patch(target: object, value: Record<string, unknown> | undefined, allowed: Set<string>) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('patch 必须是对象');
     for (const key of Object.keys(value)) { if (!allowed.has(key)) throw new Error('不允许修改字段：' + key); Object.assign(target, { [key]: clone(value[key]) }); }
@@ -39,7 +46,7 @@ function patchEntity(target: Entity, value: Record<string, unknown> | undefined)
 }
 export function applyOperations(original: Project, operations: EditOperation[], userMotions: ReadonlyMap<string, UserMotionAsset> = new Map()): Project {
     if (!Array.isArray(operations) || !operations.length || operations.length > 100) throw new Error('每批需要 1—100 个操作');
-    const project = clone(original);
+    let project = clone(original);
     for (const [index, op] of operations.entries()) {
         try {
         if (!op || typeof op !== 'object') throw new Error('操作格式错误');
@@ -56,6 +63,18 @@ export function applyOperations(original: Project, operations: EditOperation[], 
         } else if (op.operation === 'update') {
             const e = project.entities.find(e => e.id === op.id); if (!e) throw new Error('对象不存在');
             if (e.locked) throw new Error('对象已锁定'); patchEntity(e, op.patch);
+        } else if (op.operation === 'lock') {
+            const e = project.entities.find(e => e.id === op.id); if (!e) throw Error('对象不存在');
+            if (typeof op.value !== 'boolean') throw Error('锁定 value 必须为 true 或 false');
+            e.locked = op.value;
+        } else if (op.operation === 'duplicate') {
+            const ids = op.value === undefined ? [op.id!] : op.value;
+            if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string')) throw Error('复制对象 ID 无效');
+            duplicateEntities(project, ids, op.position);
+        } else if (op.operation === 'position-key') {
+            const e = project.entities.find(e => e.id === op.id); if (!e) throw Error('对象不存在');
+            if (!op.position || op.time === undefined) throw Error('位置关键帧需要 position 和 time');
+            recordPositionKey(e, op.time, op.position, project.fps); project.duration = Math.max(project.duration, Math.round(op.time * project.fps) / project.fps);
         } else if (op.operation === 'clear-inherited-pose') {
             const e = project.entities.find(e => e.id === op.id); if (!e) throw Error('对象不存在');
             if (e.locked) throw Error('对象已锁定'); delete e.initialPose;
@@ -64,10 +83,15 @@ export function applyOperations(original: Project, operations: EditOperation[], 
             if (e.locked) throw new Error('对象已锁定');
             if (project.cuts.some(c => c.cameraId === e.id) || project.entities.some(x => x.id !== e.id && (x.faceTarget === e.id || x.camera?.targetId === e.id || x.handBinding?.actorId === e.id || x.structureLink?.parentId === e.id))) throw new Error('对象被切镜、跟随或模块连接引用，请先在同批前序操作中解除引用');
             project.entities = project.entities.filter(x => x.id !== e.id);
+            removeGroupMember(project, e.id);
             removeCameraVisibilityReference(project, e.id);
             if (project.editorView) project.editorView.hiddenEntityIds = project.editorView.hiddenEntityIds.filter(id => id !== e.id);
             project.production?.notes.forEach(n => { if (n.actorId === e.id) n.actorId = ''; });
-        } else if (op.operation === 'replace-prop') replaceProp(project, op.id ?? '', op.asset ?? '', op.patch as ReplacePropOptions | undefined);
+        } else if (op.operation === 'group') editGroup(project, op.id ?? '', op.name, op.patch);
+        else if (op.operation === 'arrange') project = arrangeEntities(project, op.patch as unknown as Arrangement);
+        else if (op.operation === 'timeline') editTimeline(project, op.patch);
+        else if (op.operation === 'draw-path' || op.operation === 'record-motion') editRoute(project, op.id ?? '', op.operation, op.patch);
+        else if (op.operation === 'replace-prop') replaceProp(project, op.id ?? '', op.asset ?? '', op.patch as ReplacePropOptions | undefined);
         else if (op.operation === 'resource') editResourceMetadata(project, op.id ?? '', op.patch);
         else if (op.operation === 'resource-remove') removeUnusedResource(project, op.id ?? '');
         else if (op.operation === 'motion') {
@@ -78,9 +102,10 @@ export function applyOperations(original: Project, operations: EditOperation[], 
         }
         else if (op.operation === 'camera-motion') applyCameraMotion(project, op.id ?? '', op.asset ?? '', op.time ?? 0, op.duration ?? 5, op.patch as CameraMotionOptions | undefined);
         else if (op.operation === 'lighting-preset') project.lighting = lightingPreset(op.asset ?? '');
-        else if (op.operation === 'project') patch(project, op.patch, new Set(['name', 'duration', 'fps', 'aspect', 'room', 'floors', 'zones', 'editorView', 'creationMode', 'referenceLabels', 'depthVideo', 'lighting', 'media']));
+        else if (op.operation === 'project') patch(project, op.patch, new Set(['name', 'duration', 'fps', 'aspect', 'room', 'floors', 'zones', 'editorView', 'creationMode', 'referenceLabels', 'depthVideo', 'physics', 'lighting', 'extensions', 'media']));
         else if (op.operation === 'cuts') project.cuts = clone(op.value) as Project['cuts'];
         else if (op.operation === 'notes') { assertProductionShape(op.value); project.production = clone(op.value); }
+        else if (op.operation === 'production') patchProduction(project, op.patch);
         else throw new Error('未知操作');
         } catch (error) { throw new Error(`operations[${index}]: ${error instanceof Error ? error.message : '操作失败'}`); }
     }
@@ -104,5 +129,5 @@ export function changeSummary(before: Project, after: Project) {
     return { hasChanges: !sameProjectData(before, after), added: after.entities.filter(e => !old.has(e.id)).map(e => ({ id: e.id, name: e.name })),
         updated: after.entities.filter(e => old.has(e.id) && JSON.stringify(old.get(e.id)) !== JSON.stringify(e)).map(e => ({ id: e.id, name: e.name })),
         removed: before.entities.filter(e => !fresh.has(e.id)).map((e: Entity) => ({ id: e.id, name: e.name })),
-        projectChanged: ['name', 'duration', 'fps', 'aspect', 'room', 'cuts', 'production', 'floors', 'zones', 'editorView', 'resources', 'creationMode', 'referenceLabels', 'depthVideo', 'lighting'].some(k => k === 'resources' ? !sameModelResources(before.resources ?? [],after.resources ?? []) : JSON.stringify(before[k as keyof Project]) !== JSON.stringify(after[k as keyof Project])) };
+        projectChanged: ['name', 'duration', 'fps', 'aspect', 'room', 'cuts', 'production', 'floors', 'zones', 'groups', 'editorView', 'resources', 'creationMode', 'referenceLabels', 'depthVideo', 'physics', 'lighting', 'extensions'].some(k => k === 'resources' ? !sameModelResources(before.resources ?? [],after.resources ?? []) : JSON.stringify(before[k as keyof Project]) !== JSON.stringify(after[k as keyof Project])) };
 }

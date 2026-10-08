@@ -1,4 +1,5 @@
 import { DEFAULT_DEPTH_VIDEO } from '../cinematography/depth-video.ts';
+import { memberPathSummary } from '../navigation/member-paths.ts';
 import { editorSelection } from '../editor/timeline-selection.ts';
 import type { AppContext } from '../app-context.ts';
 import { geometryCreationGuide } from '../assets/creation-mode.ts';
@@ -29,8 +30,6 @@ export function readScene(ctx: AppContext, revision: number, args: SceneReadOpti
         ...(project.creationMode === 'geometry' ? { geometry: geometryCreationGuide() } : {}),
         skill: { name: BUILTIN_SKILL.name, version: BUILTIN_SKILL.version },
         sections: [...sections], entityCount: project.entities.length,
-        omitted: '未请求的分区未返回，不代表内容为空；不要据此清空已有数据。',
-        coordinates: '米／秒；工程 rotation 为弧度，世界 +Y 向上，人物 +Z 为前；当前动画位置应查询 spatial。图片字节未发送。',
     };
     if (sections.has('selection')) result.selection = editorSelection(project, ctx.selected);
     if (sections.has('entities')) {
@@ -38,14 +37,14 @@ export function readScene(ctx: AppContext, revision: number, args: SceneReadOpti
         result.entities = entities.map(e => args.details ? {
             ...clone(e), ...(e.initialPose ? { initialPose: { active: inheritedPoseAt(e, ctx.time), nodeCount: e.initialPose.nodes.length,
                 description: '接拍姿态；原始节点数组保存在工程文件中，新动作开始后不再保持' } } : {}),
-        } : { id: e.id, name: e.name, asset: e.asset, kind: e.kind, color: e.color, reference: e.reference, locked: e.locked, visible: e.visible, position: e.position });
+        } : { id: e.id, name: e.name, asset: e.asset, kind: e.kind, color: e.color, reference: e.reference, locked: e.locked, visible: e.visible, position: e.position, ...(e.memberPaths ? {memberRoutes:memberPathSummary(e)} : {}) });
         if (args.ids) result.missingIds = args.ids.filter(id => !entities.some(e => e.id === id));
         if (args.details) result.structureModules = entities.filter(e => structurePorts(e).length).map(e => ({
             id: e.id, localPorts: structurePorts(e), worldPorts: !e.path && !e.handBinding && !e.clips.length ? worldStructurePorts(e) : [], link: e.structureLink ?? null,
         }));
     }
-    if (sections.has('scene')) Object.assign(result, { scenes: ctx.scenes?.list(), room: project.room, lighting: project.lighting, depthVideo: project.depthVideo ?? DEFAULT_DEPTH_VIDEO,
-        floors: project.floors ?? [], zones: project.zones ?? [], editorView: project.editorView });
+    if (sections.has('scene')) Object.assign(result, { scenes: ctx.scenes?.list(), room: project.room, extensions: project.extensions, physics:project.physics, lighting: project.lighting, depthVideo: project.depthVideo ?? DEFAULT_DEPTH_VIDEO,
+        floors: project.floors ?? [], zones: project.zones ?? [], groups: project.groups ?? [], editorView: project.editorView });
     if (sections.has('cuts')) result.cuts = project.cuts;
     // Production remains complete so the existing whole-value notes operation can safely round-trip it.
     if (sections.has('production')) result.production = clone(productionData(project));

@@ -23,18 +23,19 @@ type TargetRoot = Pick<Object3D, 'position' | 'rotation'>;
  * the carrier's route/yaw while retaining the current hand offset; this does not replay
  * historical hand articulation, grounding corrections or field deformation.
  */
-export function cameraAimResponseQuaternion(entity: Entity, project: Project, time: number, targetRoot?: TargetRoot): Quaternion | null {
+export function cameraAimResponseQuaternion(entity: Entity, project: Project, time: number, targetRoot?: TargetRoot, rootAt?: (at:number)=>TargetRoot|undefined): Quaternion | null {
     const c = entity.camera, duration = c?.aimResponse?.duration ?? 0;
     if (!c || duration <= 0 || c.mode === 'pov') return null;
     const target = project.entities.find(item => item.id === c.targetId);
     // Follow mode has always aimed at its bound target, even when an old manual flag remains.
     if (c.aim === 'manual' && !(c.mode === 'follow' && target)) return null;
-    const targetYaw = (at: number) => target && (target.kind === 'actor' || target.kind === 'crowd') ? entityYaw(target, at, project) : target?.rotation[1] ?? 0;
+    const targetYaw = (at: number) => rootAt?.(at)?.rotation.y ?? (target && (target.kind === 'actor' || target.kind === 'crowd') ? entityYaw(target, at, project) : target?.rotation[1] ?? 0);
     const carrier = target?.handBinding ? project.entities.find(item => item.id === target.handBinding!.actorId) : undefined;
     const carrierYaw = carrier ? entityYaw(carrier, time, project) : 0;
     const correction = target && targetRoot ? targetRoot.position.clone().sub(entityPosition(carrier ?? target, time)) : new Vector3();
     const yawCorrection = targetRoot ? targetRoot.rotation.y - targetYaw(time) : 0;
     const rootPosition = (at: number) => {
+        const physical=rootAt?.(at);if(physical)return physical.position.clone();
         if (!target) return new Vector3(...c.target);
         if (carrier && targetRoot)
             return entityPosition(carrier, at).add(correction.clone().applyAxisAngle(UP, entityYaw(carrier, at, project) - carrierYaw));
@@ -48,7 +49,7 @@ export function cameraAimResponseQuaternion(entity: Entity, project: Project, ti
             const lag = c.effects?.followLag ?? 0, lagTime = Math.max(0, at - lag);
             const offset = new Vector3(...c.offset);
             if (c.inheritRotation) {
-                const yaw = lag ? entityYaw(target, lagTime, project) : targetYaw(at) + yawCorrection
+                const yaw = lag ? targetYaw(lagTime) : targetYaw(at) + yawCorrection
                     + (carrier && targetRoot ? entityYaw(carrier, at, project) - carrierYaw : 0);
                 offset.applyAxisAngle(UP, yaw);
             }

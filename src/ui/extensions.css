@@ -1,0 +1,20 @@
+.extension-panel { display:grid; gap:12px; min-width:0; width:min(560px,100%); }
+.extension-panel p { margin:0; color:#bdbdbd; overflow-wrap:anywhere; }
+.extension-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.extension-list { display:grid; gap:5px; }
+.extension-list > button { display:flex; align-items:center; justify-content:space-between; gap:12px; text-align:left; width:100%; min-width:0; padding:10px 12px; }
+.extension-list > button span { overflow-wrap:anywhere; }
+.extension-list small { color:#aaa; flex-shrink:0; }
+.extension-list .active { border-color:#ddd; background:#353535; }
+.extension-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.extension-panel input:not([type=checkbox]),.extension-panel select,.extension-panel textarea { width:100%; min-width:0; box-sizing:border-box; }
+.extension-panel textarea { resize:vertical; }
+.plugin-enable-row { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.plugin-enable-control { display:flex; align-items:center; gap:12px; }
+.plugins-panel .plugin-enable-switch { position:relative; flex:none; width:42px; min-width:42px; height:24px; min-height:24px; padding:0; border:1px solid #686868; border-radius:999px; background:#343434; transition:background 160ms ease,border-color 160ms ease; }
+.plugin-enable-switch > span { position:absolute; left:3px; top:3px; width:16px; height:16px; border-radius:50%; background:#a8a8a8; transform:translateX(0); transition:transform 160ms ease,background 160ms ease; pointer-events:none; }
+.plugin-enable-switch[aria-checked=true] { background:#efefef; border-color:#efefef; }
+.plugin-enable-switch[aria-checked=true] > span { transform:translateX(18px); background:#171717; }
+.plugin-enable-switch:focus-visible { outline:2px solid #fff; outline-offset:3px; }
+@media(prefers-reduced-motion:reduce) { .plugin-enable-switch,.plugin-enable-switch > span {transition:none;} }
+@media(max-width:600px) { .extension-fields {grid-template-columns:1fr;} .extension-list > button {flex-wrap:wrap;} }

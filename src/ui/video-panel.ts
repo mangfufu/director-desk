@@ -8,11 +8,15 @@ import { runVideoExports } from '../exporting/batch.ts';
 import { videoDestination, type SaveMode } from '../exporting/delivery.ts';
 import { exportErrorMessage } from '../exporting/errors.ts';
 import type { AppContext } from '../app-context.ts';
+import { readExportPreferences, saveExportPreferences } from '../exporting/preferences.ts';
+import { ExportRetry } from '../exporting/retry.ts';
 
 export function createVideoPanel(ctx: AppContext) {
     let sceneInfo: ExportScene[] = [], picker: ReturnType<typeof createExportScenePicker>;
     let previewKey = '', previousScope = '',previewGeneration=0;
     let previewTask:Promise<void>=Promise.resolve();
+    const retry = new ExportRetry();
+    let outputDirectory = '';
     const value = (id: string) => $<HTMLInputElement>(`#export-${id}`).value;
     const batch = () => value('scope') === 'batch';
     async function snapshot() {
@@ -36,6 +40,8 @@ export function createVideoPanel(ctx: AppContext) {
         const current = sceneInfo.find(s => s.id === ctx.scenes.context.sceneId)!;
         previousScope = ''; previewKey = '';
         const depth = ctx.project.depthVideo ?? DEFAULT_DEPTH_VIDEO;
+        const prefs = readExportPreferences(), desktop = !!window.directorDesktop?.files;
+        outputDirectory = prefs.directory;
         ctx.showModal('导出参考视频', `<div class="export-layout"><div class="export-fields">
             <label class="field"><span>导出范围</span><select id="export-scope"><option value="single">当前戏段</option><option value="batch">批量戏段 · 独立视频</option></select></label>
             <div id="export-single">
@@ -52,7 +58,9 @@ export function createVideoPanel(ctx: AppContext) {
                 <label class="field"><span>画面类型</span><select id="export-color"><option value="color">角色区分色</option><option value="white">统一白模色</option><option value="depth" ${depth.enabled?'selected':''}>深度视频</option></select></label>
             </div>
 
-            <label class="field"><span>保存到</span><select id="export-save"></select></label>
+            <label class="field" ${desktop ? 'hidden' : ''}><span>保存到</span><select id="export-save"></select></label>
+            ${desktop ? '<label class="field"><span>保存位置</span><div class="export-destination"><input id="export-directory" readonly aria-label="保存位置"><button type="button" id="export-browse">浏览…</button></div></label>' : ''}
+            <div class="button-row">${button('production-prompt', '提示词 TXT', '', 'subtle')}${button('production-delivery', '素材包 ZIP', '', 'subtle')}</div>
         </div><div class="export-preview"><div class="section-label">当前戏段预览<span>${ctx.time.toFixed(2)} s</span></div>
             <img src="${ctx.engine.shotRenderer.domElement.toDataURL('image/png')}" alt="当前摄影机真实取景"/>
             <div id="export-summary" class="export-summary" aria-live="polite"></div>
@@ -61,6 +69,23 @@ export function createVideoPanel(ctx: AppContext) {
             <div id="export-progress" hidden><div class="progress-top"><strong id="progress-title">正在生成视频</strong><span id="progress-percent">0%</span></div><progress value="0" max="1"></progress><p id="progress-detail">准备导出</p></div>
         </div></div>`, button('close-modal', '取消', '', 'subtle') + button('export-start', '导出视频', 'download', 'primary'));
         $('.modal').classList.add('export-modal');
+        $('#export-size').value = prefs.size; $('#export-format').value = prefs.format; $('#export-fps').value = prefs.fps;
+        if (desktop) {
+            const field = $<HTMLInputElement>('#export-directory'); field.value = outputDirectory || '默认导出目录';
+            const browse = $<HTMLButtonElement>('#export-browse');
+            browse.onclick = async () => {
+                if (ctx.busy) return; browse.disabled = true;
+                try {
+                    const result = await window.directorDesktop!.files!('choose-export-directory', outputDirectory);
+                    if (!result.ok) throw Error(result.error);
+                    if (field.isConnected && result.data?.path) { outputDirectory = result.data.path; field.value = outputDirectory; updateExportSummary(); }
+                } catch (error) { ctx.toast((error as Error).message, true); }
+                finally { browse.disabled = false; }
+            };
+            if (!outputDirectory) void window.directorDesktop!.files!('locations').then(result => {
+                if (field.isConnected && !outputDirectory && result.ok && result.data?.exports) { outputDirectory = result.data.exports; field.value = outputDirectory; }
+            });
+        }
         $('#export-depth').addEventListener('click', async event => {
             const button = (event.target as HTMLElement).closest<HTMLElement>('[data-export-depth-fit]');
             if (!button || ctx.busy) return;
@@ -95,18 +120,24 @@ export function createVideoPanel(ctx: AppContext) {
             const save = $('#export-save'), old = save.value;
             const choices: [string, string][] = [];
             if (window.directorDesktop?.files) choices.push(['default', '默认目录']);
-            if (isBatch && 'showDirectoryPicker' in window) choices.push(['directory', '选择文件夹']);
-            if (!isBatch && 'showSaveFilePicker' in window) choices.push(['disk', '另存为']);
-            choices.push(['download', '下载']);
+            else {
+                if (isBatch && 'showDirectoryPicker' in window) choices.push(['directory', '选择文件夹']);
+                if (!isBatch && 'showSaveFilePicker' in window) choices.push(['disk', '另存为']);
+                choices.push(['download', '下载']);
+            }
             save.innerHTML = options(choices, choices.some(([id]) => id === old) ? old : choices[0][0]);
             previousScope = scope;
         }
         if (!isBatch) picker.rename(ctx.scenes.context.sceneId, value('name'));
+        saveExportPreferences({ size: value('size'), format: value('format'), fps: value('fps'), directory: outputDirectory });
         const start = $<HTMLButtonElement>('[data-act="export-start"]');
         let jobs: ExportJob[];
         try {
             jobs = exportPlan(); start.disabled = false;
             start.textContent = isBatch ? `导出 ${jobs.length} 场视频` : '导出视频';
+            retry.prepare(JSON.stringify([ctx.revision, value('save'), outputDirectory]));
+            const remaining = retry.remaining(jobs);
+            if (remaining.length < jobs.length && remaining.length) start.textContent = `继续导出 ${remaining.length} 场`;
             const duration = jobs.reduce((sum, job) => sum + job.options.end - job.options.start, 0);
             $('#export-summary').innerHTML = `<strong>${jobs.length} 个视频 · 共 ${duration.toFixed(2)} 秒</strong><span>${jobs.reduce((sum, job) => sum + jobFrames(job), 0)} 帧 · ${value('format').toUpperCase()}</span>`
                 + (isBatch ? '' : `<span>${jobs[0].options.width} × ${jobs[0].options.height} · ${jobs[0].options.fps} fps</span><span class="export-filename">${escape(jobs[0].filename)}</span>`);
@@ -137,9 +168,12 @@ export function createVideoPanel(ctx: AppContext) {
         try { jobs = exportPlan(); }
         catch (error) { ctx.toast((error as Error).message, true); return; }
         const mode = value('save') as SaveMode;
-        if (['default', 'download'].includes(mode)) {
+        retry.prepare(JSON.stringify([ctx.revision, mode, outputDirectory]));
+        jobs = retry.remaining(jobs);
+        if (!jobs.length) { ctx.toast('所选视频已导出'); return; }
+        if (mode === 'download') {
             const large = jobs.find(job => estimatedVideoBytes(job) > 250000000);
-            if (large) { ctx.toast(`“${large.sceneName}”预计超过 250 MB，请选择直接写入或降低规格`, true); return; }
+            if (large) { ctx.toast(`“${large.sceneName}”预计超过 250 MB，请选择${batch() ? '文件夹' : '另存为'}或降低规格`, true); return; }
         }
         ctx.busy = true; ctx.playing = false; ctx.updateTimeUI();
         ++previewGeneration;
@@ -147,12 +181,13 @@ export function createVideoPanel(ctx: AppContext) {
         let started = false, succeeded = false, count = 0;
         try {
             // Open the picker while the export click still has user activation.
-            const destination = await videoDestination(mode, jobs);
+            const destination = await videoDestination(mode, jobs, outputDirectory || undefined);
             await previewTask;
             started = true;
             $('#export-progress').hidden = false;
             document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('.export-fields input,.export-fields select,.export-fields button,#export-depth input,#export-depth button').forEach(el => el.disabled = true);
             $('.modal-footer').innerHTML = button('cancel-export', '取消导出', '', 'subtle');
+            $('.modal-header [data-act="close-modal"]').dataset.act = 'cancel-export';
             const { exportVideo } = await import('../export.ts');
             await runVideoExports(ctx.engine, jobs, id => ctx.scenes.projectFor(id), destination, ctx.aborter.signal,
                 (job, index, p) => {
@@ -160,8 +195,9 @@ export function createVideoPanel(ctx: AppContext) {
                     $('#progress-percent').textContent = Math.round(p * 100) + '%';
                     $('#progress-title').textContent = `正在导出 ${index + 1} / ${jobs.length} 场`;
                     $('#progress-detail').textContent = `${job.sceneName} → ${job.filename} · 已完成 ${count} 场`;
-                }, (_job, filename) => { count++; $('#progress-detail').textContent = `已完成 ${count} / ${jobs.length}：${filename}`; }, exportVideo);
-            ctx.toast(mode === 'download' ? `已生成 ${count} 个视频，请在下载列表查看` : `已导出 ${count} 个视频`);
+                }, (job, filename) => { retry.complete(job); count++; $('#progress-detail').textContent = `已完成 ${count} / ${jobs.length}：${filename}`; }, exportVideo);
+            ctx.toast(mode === 'download' ? `已生成 ${count} 个视频，请在下载列表查看` : `已导出 ${count} 个视频${outputDirectory ? ' · ' + outputDirectory : ''}`);
+            retry.clear();
             succeeded = true;
         } catch (error) {
             const canceled = (error as Error).name === 'AbortError';
@@ -169,12 +205,14 @@ export function createVideoPanel(ctx: AppContext) {
             else if (!canceled) ctx.toast(exportErrorMessage(error), true);
         } finally {
             ctx.busy = false; ctx.aborter = null;
+            const close = document.querySelector<HTMLElement>('.modal-header [data-act="cancel-export"]'); if (close) close.dataset.act = 'close-modal';
             if (succeeded) ctx.closeModal();
             else if (document.querySelector('.export-modal')) {
                 $('#export-progress').hidden = true;
                 document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('.export-fields input,.export-fields select,.export-fields button,#export-depth input,#export-depth button').forEach(el => el.disabled = false);
                 picker.refresh();
-                $('.modal-footer').innerHTML = button('close-modal', '返回', '', 'subtle') + button('export-start', count ? '重新导出所选戏段' : '重试导出', 'download', 'primary');
+                $('.modal-footer').innerHTML = button('close-modal', '返回', '', 'subtle') + button('export-start', count ? '继续未完成' : '重试导出', 'download', 'primary');
+                updateExportSummary();
             }
             ctx.renderPanels();
         }

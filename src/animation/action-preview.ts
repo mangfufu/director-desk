@@ -2,6 +2,7 @@ import * as T from 'three';
 import { entity, clip, type Action } from '../model.ts';
 import { makeActor, animateActor } from '../assets/actors.ts';
 import { disposeTree } from '../assets/dispose.ts';
+import { actionDuration } from './action-timing.ts';
 
 /** One mannequin and renderer per open picker, independent of the scene clock. */
 export class ActionPreview {
@@ -14,6 +15,7 @@ export class ActionPreview {
     private width = 0; private height = 0; private disposed = false;
     private lastFrame = 0;
     private start = performance.now();
+    private cycle = 4.35;
     constructor(private host: HTMLElement) {
         this.model.color = '#dddddd'; this.rig = makeActor(this.model);
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -29,11 +31,11 @@ export class ActionPreview {
             if (this.width !== w || this.height !== h) {
                 this.width = w; this.height = h; this.renderer.setSize(w,h,false); this.camera.aspect = w/h; this.camera.updateProjectionMatrix();
             }
-            animateActor(this.rig,this.model,(now-this.start)/1000 % 4);
+            animateActor(this.rig,this.model,(now-this.start)/1000 % this.cycle);
             this.renderer.render(this.scene,this.camera); this.frame = requestAnimationFrame(tick);
         };
         this.frame = requestAnimationFrame(tick);
     }
-    set(action: Action) { this.model.clips = [clip(action,0,4)]; this.start = performance.now(); }
+    set(action: Action) { const duration = actionDuration(action); this.model.clips = [clip(action,0,duration)]; this.cycle = duration + .35; this.start = performance.now(); }
     dispose() { if (this.disposed) return; this.disposed = true; cancelAnimationFrame(this.frame); disposeTree(this.rig.root); this.renderer.dispose(); this.renderer.forceContextLoss(); this.host.replaceChildren(); }
 }

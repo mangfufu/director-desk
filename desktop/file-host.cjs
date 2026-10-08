@@ -21,6 +21,15 @@ function createFileHost({ directory, defaults, chooseDirectory, chooseSave }) {
     const read = () => ({ ...locations });
     return {
         ready, read,
+        async set(patch) {
+            await ready;
+            if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(k => !['projects', 'exports'].includes(k))) throw Error('目录设置无效');
+            for (const value of Object.values(patch)) if (typeof value !== 'string' || !path.isAbsolute(value) || value.includes('\0')) throw Error('目录必须为绝对路径');
+            for (const value of Object.values(patch)) await fs.mkdir(value, { recursive: true });
+            const next = { ...locations, ...patch };
+            await fs.mkdir(directory, { recursive: true });
+            await atomicWrite(configFile, JSON.stringify(next, null, 2)); locations = next; return read();
+        },
         async choose(kind) {
             await ready;
             if (!['projects', 'exports'].includes(kind)) throw Error('未知目录类型');
@@ -55,7 +64,7 @@ function createFileHost({ directory, defaults, chooseDirectory, chooseSave }) {
                 catch (error) { await file.close().catch(() => {}); await fs.rm(destination, { force: true }).catch(() => {}); throw error; }
             }
         },
-        async saveProject({ name, content } = {}) {
+        async saveProject({ name, content, path: existingPath } = {}) {
             await ready;
             if (saving) throw Error('项目正在保存');
             if (typeof name !== 'string' || typeof content !== 'string') throw Error('项目保存参数无效');
@@ -63,13 +72,15 @@ function createFileHost({ directory, defaults, chooseDirectory, chooseSave }) {
             if (data?.format !== 'director-desk' || ![1,2,3].includes(data.version)) throw Error('项目文件格式无效');
             saving = true;
             try {
-                try { await fs.mkdir(locations.projects, { recursive: true }); }
-                catch { throw Error('默认工程目录不可用，请在“文件位置”中重新选择目录'); }
-                const filename = await chooseSave(this.defaultPath(name.replace(/\.director$/i, '') + '.director'));
+                if (!existingPath) {
+                    try { await fs.mkdir(locations.projects, { recursive: true }); }
+                    catch { throw Error('默认工程目录不可用，请在“文件位置”中重新选择目录'); }
+                }
+                const filename = existingPath || await chooseSave(this.defaultPath(name.replace(/\.director$/i, '') + '.director'));
                 if (!filename) return { saved: false };
                 if (!path.isAbsolute(filename) || path.extname(filename).toLowerCase() !== '.director') throw Error('请使用 .director 工程文件名');
                 await atomicWrite(filename, content);
-                return { saved: true };
+                return { saved: true, path: filename };
             } finally { saving = false; }
         },
     };

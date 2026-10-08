@@ -1,7 +1,7 @@
 import type { AppContext } from '../app-context.ts';
 import { download } from '../storage.ts';
 
-export async function saveProjectFile(ctx: AppContext): Promise<boolean> {
+export async function saveProjectFile(ctx: AppContext, saveAs = false): Promise<boolean> {
     if (ctx.busy || ctx.engine.exporting) { ctx.toast('请先完成或取消当前任务，再保存项目'); return false; }
     if (ctx.draft) ctx.finishPath();
     if (ctx.history.pending || ctx.draft) { ctx.toast('请先结束当前编辑，再保存项目'); return false; }
@@ -11,17 +11,21 @@ export async function saveProjectFile(ctx: AppContext): Promise<boolean> {
     try {
         const files = window.directorDesktop?.files;
         if (files) {
-            const result = await files('save-project', { name, content });
+            const result = await files('save-project', { name, content, ...(!saveAs && ctx.scenes.filePath ? { path: ctx.scenes.filePath } : {}) });
             if (!result.ok) throw Error(result.error || '保存失败');
             if (!result.data?.saved) return false;
+            ctx.scenes.markSaved(result.data.path);
         } else {
             download(new Blob([content], { type: 'application/json' }), name);
-            ctx.toast('已发起工程下载；浏览器无法确认保存结果，请确认文件后继续。');
-            return false;
+            ctx.toast('工程下载已开始');
+            // Initiated download is not confirmed persistence. Allow the requested
+            // open/new continuation; keep unsaved protection on this document.
+            return true;
         }
         ctx.dirty = false;
+        await ctx.flushRecovery?.().catch(() => ctx.toast('工程已保存，自动备份失败', true));
         documentStatus('项目已保存');
-        ctx.toast(`项目已保存，包含全部 ${document.scenes.length} 个独立戏段及共享模型资源`);
+        ctx.toast('项目已保存');
         return true;
     } catch (error) { ctx.toast((error as Error).message, true); return false; }
     finally { ctx.busy = false; ctx.updateTimeUI(); }

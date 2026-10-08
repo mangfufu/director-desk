@@ -29,7 +29,7 @@ const profiles: Array<{ id: string; name: string; height: number; gender?: 'male
     ...(['casual','dress','robe','armor','uniform','helmet','hat','backpack'] as const).map((outfit,i)=>({id:'human-outfit-'+outfit,name:['便装人物','长裙人物','长袍人物','盔甲人物','制服人物','头盔人物','宽檐帽人物','背包人物'][i],height:1.75,group:'服装轮廓',shape:{outfit},aliases:[outfit,'服装']})),
 ];
 export const HUMAN_PROPORTIONS: Readonly<Record<string, HumanProportions>> = Object.fromEntries(profiles.map(p => [p.id, { ...adult, ...p.shape }]));
-const actions = ['idle','walk','run','sit','standup','crouch','crawl','jump','lie','fall','wave','point','turn'] as const;
+const actions = ['idle','walk','run','sit','standup','crouch','crawl','jump','lie','fall','wave','point','turn','guard','punch','kick','roundhouse','flying-kick','dodge','throw','push','stumble','roll'] as const;
 export const HUMAN_ASSETS: readonly AssetDefinition[] = profiles.map(p => ({ id: p.id, name: p.name, kind: 'actor', group: p.group ?? (p.id.includes('giant') || p.id.includes('dwarf') || p.id.includes('longlimb') ? '特殊人形' : '人物'), icon: '♙',
     aliases: p.aliases, family: 'human-v2', defaults: { height: p.height, gender: p.gender ?? 'male' },
     parameters: humanParameterSchema(HUMAN_PROPORTIONS[p.id]),

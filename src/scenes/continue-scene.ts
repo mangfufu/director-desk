@@ -34,6 +34,8 @@ export async function continueScene(engine: Engine, document: SceneDocument, nam
             const root = engine.models.get(entity.id)!;
             entity.position = receivesRootField(entity,project,time)?entityPosition(entity,time).toArray():root.position.toArray(); entity.rotation = [root.rotation.x, root.rotation.y, root.rotation.z];
             entity.path = null; entity.face = 'fixed'; entity.faceTarget = ''; entity.clips = []; entity.pose = {}; entity.poseKeys = [];
+            delete entity.memberPaths;
+            if (entity.physics) entity.physics = { ...entity.physics, enabled:false, start:0, velocity:[0,0,0], angularVelocity:[0,0,0], impulses:[] };
             if (entity.kind === 'actor' || entity.kind === 'crowd' || entity.external) entity.initialPose = captureInitialPose(root, entity);
             if (entity.light) {
                 entity.color = '#' + lightColor(entity, time).getHexString();

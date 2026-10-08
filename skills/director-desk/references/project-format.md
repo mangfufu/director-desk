@@ -2,6 +2,8 @@
 
 工程是 UTF-8 JSON，桌面版和网页版共用格式。旧单段格式为 **1**；带外部资源的单段格式为 **2**；软件正常保存使用 **3**，在同一工程内承载多个独立戏段。三个版本都可导入。不要将软件版本号写成工程格式版本。资产目录与配套软件构建一致；新增资产需要对应的新版本或当前开发网页版，旧安装包不会自动获得新白模。
 
+戏段可含 `extensions:{"插件ID":JSON数据}`。离线工具保留并校验其可序列化性，不运行插件代码；不认识的数据原样保留，按插件自身契约编辑。实际效果需要桌面版启用对应插件，详见 [扩展能力](extensions.md)。
+
 有 Node.js 22 或更高版本时，从 skill 所在目录运行 `scripts/project-tool.mjs`。脚本自包含，不需要安装 npm 包、启动导演台、联网或填写 API key。
 
 ```sh
@@ -30,7 +32,9 @@ create/apply/scene 写文件均不覆盖已有输出文件；修改现有工程�
 ]
 ```
 
-可用操作为 add、update、remove、project、cuts、notes、motion、replace-prop、resource、resource-remove、clear-inherited-pose、camera-motion、lighting-preset。基本编辑见[编辑约定](editing.md)，镜头／灯光见[参数说明](camera.md)，实际校验复用在线工具契约。`motion` 操作可查询模块导出的 `motionPresets()` 获得真实预设 ID；涉及内置素材资源的操作使用异步 `applyOperationsWithResources`。嵌套对象／数组通常整体替换；patch.camera 按顶层字段合并，内部数组仍整体替换。新增摄影机使用 `asset:"camera"`，绑定和切镜引用实际 ID。用 inspect 获取初始机位 ID 后可修改或替换切镜。锁定对象仍受到保护。
+可用操作为 add、update、remove、project、cuts、notes、motion、replace-prop、resource、resource-remove、clear-inherited-pose、camera-motion、lighting-preset、group、arrange。基本编辑及编组／阵列见[编辑约定](editing.md)，镜头／灯光见[参数说明](camera.md)，实际校验复用在线工具契约。`motion` 操作可查询模块导出的 `motionPresets()` 获得真实预设 ID；涉及内置素材资源的操作使用异步 `applyOperationsWithResources`。嵌套对象／数组通常整体替换；patch.camera 按顶层字段合并，内部数组仍整体替换。新增摄影机使用 `asset:"camera"`，绑定和切镜引用实际 ID。用 inspect 获取初始机位 ID 后可修改或替换切镜。锁定对象仍受到保护。
+
+可选 `groups:[{id,name,entityIds}]` 按戏段保存平级编组，每个实体至多属于一组。成员仍是原实体，坐标使用世界坐标，解组不删除实体。局部布景用 `staging-save 输入.director 选择.json 输出.staging` 保存，用 `staging-insert 输入.director 布景.staging 输出.director [位置.json]` 插入；选择为 `{name,entityIds}`，位置为 `{position:[x,y,z]}`。必要的绑定目标及模型／媒体源随文件保存，插入时生成独立 ID，复用相同资源，保留当前切镜。离线不读写本机布景库数据库。
 
 需要程序化大量建模时，可以导入该模块的 `createScene`、`entity`、`clip`、`applyOperations`、`assertProject`、`ASSETS` 等命名导出，生成后先 assertProject，再写 `.director` 文件。不要让用户安装整个源码工程。
 
@@ -50,7 +54,7 @@ node scripts/project-tool.mjs validate revised.director
 
 其中 `copy.json` 为 `{"action":"copy","name":"第二场","newSceneId":"scene-b"}`，`list.json` 为 `{"action":"list"}`。复制使旧文件迁移为 v3 并选中新段；apply 仅修改当前段，保留其他段与前情快照。`scene` 查询 list/read 不带输出文件；写入支持 create/copy/switch/rename/reorder/remove，必须带新的输出文件名。create 可指定 template，默认 blank；switch/rename/remove 指定 sceneId；reorder 的 sceneIds 必须包含全部戏段 ID 各一次。离线不需要 revision/requestId。
 
-v3 外层为 `{format:"director-desk",version:3,name,activeSceneId,resources,media?,scenes}`；可选 media 是多戏段共享的图片／视频源数组。scenes 每项为 `{id,name,state,origin?}`。state 存放该段 duration/fps/aspect/room/entities/cuts/references，以及可选 creationMode/referenceLabels/production/zones/floors/editorView/lighting；不嵌套 format/version/name/resources 或另一整份工程。外部源文件由外层 resources 共享；人物和道具实例、路径、动作、切镜、参考图和备注分别属于各段。段内实体 ID 唯一，跨段沿用同一人物的 ID 以保持身份。
+v3 外层为 `{format:"director-desk",version:3,name,activeSceneId,resources,media?,scenes}`；可选 media 是多戏段共享的图片／视频源数组。scenes 每项为 `{id,name,state,origin?}`。state 存放该段 duration/fps/aspect/room/entities/cuts/references，以及可选 creationMode/referenceLabels/production/zones/groups/floors/editorView/lighting；不嵌套 format/version/name/resources 或另一整份工程。外部源文件由外层 resources 共享；人物和道具实例、路径、动作、切镜、参考图和备注分别属于各段。段内实体 ID 唯一，跨段沿用同一人物的 ID 以保持身份。
 
 优先用模块导出的 `readSceneDocument`、`projectForScene`、`updateDocumentScene` 和 `editIndependentScene` 完成转换和编辑；不要对 v3 外层调用只接收单段的 `assertProject`，命令行 validate 会验证整份文档及源段快照。
 
@@ -75,7 +79,7 @@ v3 外层为 `{format:"director-desk",version:3,name,activeSceneId,resources,med
 | entities / cuts / references | 对象数组、切镜数组、参考图数组；无参考图时 `[]` |
 | production（可选） | `{fixedPrompt,sceneReferenceIds,notes}`；每条备注 `{id,start,end,actorId,story,emotion,dialogue,action}`；未绑定演员用空 actorId |
 
-production 可附 `promptMode: "reference-video" | "text-only"`（省略按参考视频模式）。`promptText` 存参考视频成稿，`textOnlyPrompt` 存纯文本成稿，均为可省略、最长 100000 字的独立字符串。切换模式不复制或覆盖成稿；编辑 notes 时保留两份未改文稿和模式。按[配套提示词规则](prompt-writing.md)写作并另附对应 TXT。新接拍段保留风格头与模式，清空两份前段成稿。
+production 可附 `promptMode: "reference-video" | "text-only"`（省略按参考视频模式）。`promptText` 存参考视频成稿，`textOnlyPrompt` 存纯文本成稿，均为可省略、最长 100000 字的独立字符串。切换模式不复制或覆盖成稿；编辑 notes 时保留两份未改文稿和模式。默认按[配套提示词规则](prompt-writing.md)同时配齐两份独立成稿，并分别另附参考视频版与纯文字版 TXT；promptMode 只选择显示内容。新接拍段保留风格头与模式，清空两份前段成稿。
 
 `notes` 编辑操作的 `value` 是整个 production 对象（不是数组或 patch），其中各字段必须齐全；未填写的文字用 ""，没有图片用 sceneReferenceIds:[]。数组整体替换，保留不打算修改的旧备注与固定提示词。错误会指出具体 production 字段；无效输入不会静默清空已有备注。
 
@@ -101,7 +105,7 @@ kind 为 actor / prop / camera / crowd，必须与资产类型匹配。actor 包
 
 路径 `{smooth,points:[{time,position:[x,y,z]}]}` 至少一个点，时间严格递增；重复位置加不同时间形成停留。坐标为绝对世界坐标，Y 可以变化。路径开始前保持第一个点，结束后保持最后一个点。通常将动作、路径和剧情备注安排在项目时长内；不要依靠文件校验器推断用户期望的播放范围。
 
-rotation 用弧度；pose 和 poseKeys 中关节角度用 **度**，不是弧度。人形关节可选 head、headYaw、torso、leftArm、rightArm、leftElbow、rightElbow、leftHip、rightHip、leftKnee、rightKnee；动物按每资产 joints 选择，验证器拒绝不支持的关节。角度绝对值不超过 360。poseKeys 为 `[{time,pose}]`，不重复时间。face 为 path / fixed / target，fixed 使用对象朝向，target 需要有效 faceTarget。可选 actionBlend 为 0—2 秒，footContact 为布尔值。
+rotation 用弧度；pose 和 poseKeys 中关节角度用 **度**，不是弧度。人形关节可选 hips、head、headYaw、torso、leftArm、rightArm、leftElbow、rightElbow、leftHip、rightHip、leftKnee、rightKnee、leftAnkle、rightAnkle。数值沿用旧单轴规则（headYaw 是 Y，其他是 X），也支持 `[X,Y,Z]` 度数数组，例如 `"leftArm":[-20,15,10]`。姿态作为内置动作的局部旋转偏移；headYaw 的 Y 始终是绝对转头角度（标量或 XYZ 数组均相同），数组中的 X/Z 仍为叠加偏移。需要三个轴都叠加时使用 head；同时设置时先应用 headYaw，再叠加 head。动物按每资产 joints 选择且只用数值，验证器拒绝不支持的关节。每轴角度绝对值不超过 360。poseKeys 为 `[{time,pose}]`，不重复时间；混合单轴／三轴人形关键帧按各轴插值。face 为 path / fixed / target，fixed 使用对象朝向，target 需要有效 faceTarget。可选 actionBlend 为 0—2 秒，footContact 为布尔值。
 
 完整工程 JSON 中的摄影机实体使用 kind=camera、asset=camera；这不等于 add 操作的参数。使用在线／离线 apply 新增内置白模和摄影机时省略 kind，工厂会自动填入实体 kind。camera 字段必须为：
 
@@ -176,3 +180,11 @@ reference 字段引用 references 中的 ID。图片项为 `{id,name,data}`，da
 导入图片／视频或设置表面、粒子、影响区域、形变和扭曲时，读取[媒体与抽象元素](media.md)。其中包含离线 import-media 命令和共用字段；不包含声音。
 
 深度预览的可选戏段字段为 `depthVideo:{enabled:boolean,near:number,far:number,invert:boolean,curve?:number}`，`0 <= near < far <= 2000` 米，curve 为 0.25—4，省略或 1 为线性。完整规则与导出语义见 [摄影机说明](camera.md#深度画面与视频)。
+
+## 通用物理
+
+启用物理、受力事件、布娃娃与扩展人形动作时，按需查 [物理参数](physics.md)；在线使用 `director_skill({path:"references/physics.md"})`，离线使用相同工程字段。
+
+## 局部更新制作资料
+
+在线与离线 apply 共用 `{operation:"production",patch:{promptText:"参考视频成稿",textOnlyPrompt:"纯文字成稿"}}`。省略字段保留，notes／sceneReferenceIds 数组仍完整替换。旧 notes 操作继续完整替换 value。

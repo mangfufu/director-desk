@@ -1,4 +1,6 @@
 import {mediaFromBytes} from '../src/media/offline-source.ts';
+export {defaultPhysicsBody,defaultPhysicsWorld,canUsePhysics,canUseRagdoll} from '../src/physics/model.ts';
+import { createStagingAsset, insertStagingAsset, assertStagingAsset } from '../src/building/staging-asset.ts';
 import {defaultSurfaceLayer} from '../src/media/model.ts';
 export {mediaFromBytes} from '../src/media/offline-source.ts';
 export {defaultSurfaceLayer,assertMediaResources,assertSurface,mediaTime} from '../src/media/model.ts';
@@ -39,6 +41,8 @@ export { seatedPlacement } from '../src/editor/seat-placement.ts';
 export { motionPresets } from '../src/animation/motion-catalog.ts';
 export { GEOMETRY_ASSET_IDS, geometryCreationGuide } from '../src/assets/creation-mode.ts';
 export { pathDistance } from '../src/animation/path-distance.ts';
+export { planNavigation, findGroundRoute, routesConflict } from '../src/navigation/planner.ts';
+export { memberSample, crowdOffset } from '../src/navigation/member-paths.ts';
 export { motionTransitionAt } from '../src/animation/transition-plan.ts';
 export { ASSETS, ACTIONS, ASPECTS, FRAME_RATES, JOINTS, SCENE_TEMPLATES, createScene, entity, clip, assertProject, applyOperations, applyOperationsWithResources, parameterDefaults, queryAssetCatalog };
 
@@ -52,6 +56,20 @@ async function write(file: string, data: unknown) {
 }
 async function main(args: string[]) {
     const [command, file, ...rest] = args;
+    if (command === 'staging-save') {
+        if (!file || rest.length !== 2) throw Error('staging-save 需要 输入.director 选择.json 输出.staging');
+        const selection = await read(rest[0]), p = projectForScene(readSceneDocument(await read(file)));
+        const asset = createStagingAsset(p, selection.entityIds, selection.name);
+        if (path.extname(rest[1]).toLowerCase() !== '.staging') throw Error('输出文件需要 .staging 扩展名');
+        await fs.writeFile(rest[1], JSON.stringify(asset), { flag: 'wx' });
+        console.log(JSON.stringify({ ok: true, name: asset.name, entities: asset.entityIds.length })); return;
+    }
+    if (command === 'staging-insert') {
+        if (!file || rest.length < 2 || rest.length > 3) throw Error('staging-insert 需要 输入.director 布景.staging 输出.director [选项.json]');
+        const input = await read(file), doc = readSceneDocument(input), asset = await read(rest[0]); assertStagingAsset(asset);
+        const options = rest[2] ? await read(rest[2]) : {}, result = insertStagingAsset(projectForScene(doc), asset, options.position);
+        await write(rest[1], input.version === 3 ? updateDocumentScene(doc, doc.activeSceneId, result.project) : result.project); return;
+    }
     if(command==='import-media'){
         if(!file||rest.length<2||rest.length>3)throw Error('import-media 需要 输入.director 媒体文件 输出.director [承载对象ID]');
         const input=await read(file),doc=readSceneDocument(input),p=projectForScene(doc),source=rest[0];
@@ -90,7 +108,7 @@ async function main(args: string[]) {
         const summary = { ok: true, name: p.name, duration: p.duration, fps: p.fps, aspect: p.aspect, entities: p.entities.length, cameras: p.entities.filter(e => e.kind === 'camera').length,
             note: '已通过文件结构和引用校验；未执行画面、遮挡或碰撞检查。' };
         console.log(JSON.stringify(input.version === 3 ? { ...summary, scenes: listDocumentScenes(document), ...(command === 'inspect' ? readIndependentScene(document) : {}) }
-            : command === 'inspect' ? { ...summary, room: p.room, cuts: p.cuts, objects: p.entities, references: p.references.map(({ id, name }) => ({ id, name })), production: p.production } : summary, null, 2)); return;
+            : command === 'inspect' ? { ...summary, room: p.room, extensions: p.extensions, groups: p.groups ?? [], cuts: p.cuts, objects: p.entities, references: p.references.map(({ id, name }) => ({ id, name })), production: p.production } : summary, null, 2)); return;
     }
     if (command === 'apply') {
         if (!file || rest.length !== 2) throw new Error('apply 需要 输入.director 操作.json 输出.director');
@@ -114,7 +132,7 @@ async function main(args: string[]) {
         if (!file || rest.length > 1) throw Error('continuity 需要 工程.director [戏段ID]');
         console.log(JSON.stringify(await continuitySummary(readSceneDocument(await read(file)), rest[0]), null, 2)); return;
     }
-    throw new Error('用法：assets [查询.json] | catalog | create 输出.director [--template blank --duration 10 --fps 24 --aspect 16:9 --name 场次] | validate 工程.director | inspect 工程.director | apply 输入.director 操作.json 输出.director | scene 输入.director 戏段操作.json [输出.director] | continuity 工程.director [戏段ID]');
+    throw new Error('用法：assets [查询.json] | catalog | create 输出.director [--template blank --duration 10 --fps 24 --aspect 16:9 --name 场次] | validate 工程.director | inspect 工程.director | apply 输入.director 操作.json 输出.director | scene 输入.director 戏段操作.json [输出.director] | continuity 工程.director [戏段ID] | staging-save 输入.director 选择.json 输出.staging | staging-insert 输入.director 布景.staging 输出.director [选项.json]');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
     main(process.argv.slice(2)).catch((error: Error & { code?: string }) => { console.error(JSON.stringify({ ok: false, error: error.code === 'EEXIST' ? '输出文件已存在，请使用新文件名保留原稿' : error.message })); process.exitCode = 1; });

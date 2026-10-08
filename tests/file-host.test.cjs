@@ -38,8 +38,15 @@ test('separate default directories persist locally; saving confirms actual atomi
         assert.equal(seenDefault, path.join(defaults.projects, 'scene.director'));
         destination = path.join(defaults.projects, 'scene.director');
         await fs.writeFile(destination, 'old content');
-        assert.deepEqual(await host.saveProject({ name: 'scene', content }), { saved: true });
+        assert.deepEqual(await host.saveProject({ name: 'scene', content }), { saved: true, path: destination });
         assert.equal(await fs.readFile(destination, 'utf8'), content);
+        const boundPath = destination; destination = null;
+        const changedContent = JSON.stringify({ format: 'director-desk', version: 3, name: 'edited' });
+        assert.deepEqual(await host.saveProject({ name: 'renamed', content: changedContent, path: boundPath }), { saved: true, path: boundPath });
+        assert.equal(await fs.readFile(boundPath, 'utf8'), changedContent);
+        // Canceled Save As leaves the existing document intact.
+        assert.deepEqual(await host.saveProject({ name: 'another', content }), { saved: false });
+        destination = boundPath;
         assert.deepEqual(await fs.readdir(defaults.projects), ['scene.director']);
         const old = await fs.readFile(destination, 'utf8'); destination = defaults.projects + '.txt';
         await assert.rejects(host.saveProject({ name: 'scene', content }), /director/);

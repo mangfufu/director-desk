@@ -9,8 +9,10 @@ import { makeHuman, animateHuman, disposeTree } from '../src/assets.ts';
 import { entity, demoProject, assertProject, clip } from '../src/model.ts';
 import { applyOperations } from '../src/automation/edits.ts';
 import { geometrySignature } from './geometry-signature.ts';
+import { InitialPoseRuntime } from '../src/scenes/initial-pose-runtime.ts';
+import type { InitialPose } from '../src/scenes/initial-pose.ts';
 
-test('all existing human presets preserve captured geometry and explicit defaults match omitted parameters', async () => {
+test('approved rounded human silhouettes stay deterministic and explicit defaults match omitted parameters', async () => {
     const expected = JSON.parse(await fs.readFile(new URL('./fixtures/human-v2-default-geometry.json', import.meta.url), 'utf8'));
     for (const asset of HUMAN_ASSETS) {
         const e = entity('actor', asset.id, asset.name), before = makeHuman(e);
@@ -18,6 +20,14 @@ test('all existing human presets preserve captured geometry and explicit default
         e.assetParameters = assetParameters(e); const after = makeHuman(e);
         assert.equal(geometrySignature(after.root), expected[asset.id], asset.id + ' explicit defaults');
         disposeTree(before.root); disposeTree(after.root);
+    }
+});
+test('continuation poses captured before rounded surfaces keep their bone paths and full stature',async()=>{
+    const poses:Record<string,InitialPose>=JSON.parse(await fs.readFile(new URL('./fixtures/human-before-rounded-pose.json',import.meta.url),'utf8'));
+    for(const asset of ['person','human-adult']){const e=entity('actor',asset,'兼容性样例');e.initialPose=poses[asset];const rig=makeHuman(e),runtime=new InitialPoseRuntime();
+        runtime.register(e,rig.root);assert.equal(runtime.apply(e,0),true);rig.root.updateMatrixWorld(true);const captured=rig.hips.position.y;assert.ok(captured<.7&&captured>.4);
+        const box=new T.Box3().setFromObject(rig.root,true);assert.ok(box.getSize(new T.Vector3()).y>1,'old mesh transforms must not shrink updated surfaces');
+        const knee=rig.joints.leftKnee.rotation.x;assert.ok(knee>1.5);runtime.restore(e);runtime.apply(e,0);assert.equal(rig.joints.leftKnee.rotation.x,knee);disposeTree(rig.root);
     }
 });
 test('independent limb and body ratios keep real stature, floor contact and joints connected across every preset', () => {

@@ -1,0 +1,81 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { createServer } from 'vite';
+import { chromium } from 'playwright-core';
+await fs.mkdir('tmp/joint-editor', { recursive: true });
+const server = await createServer({ server: { host: '127.0.0.1', port: 0, watch: null } }); await server.listen();
+const browser = await chromium.launch({ channel: 'chrome', headless: true });
+try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 960 } }), errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`); await page.waitForFunction(() => window.__director);
+    await page.evaluate(async () => {
+        const { createScene } = await import('/src/scenes.ts'), { entity, clip } = await import('/src/model.ts');
+        const p = createScene('blank'); p.duration = 3; p.aspect = '16:9';
+        const actor = entity('actor', 'human-adult', '关节测试'); actor.id = 'joint-test'; actor.clips = [clip('punch', 0, 1)]; p.entities.push(actor);
+        window.__director.replaceProject(p); await window.__director.callTool('director_view', { entityId: actor.id, time: .3 });
+        const engine = window.__director.getEngine(); engine.focus(actor.id); engine.render();
+    });
+    const point = await page.evaluate(() => {
+        const engine = window.__director.getEngine(), marker = engine.jointNodes.root.children.find(n => n.userData.joint === 'rightElbow');
+        const p = marker.position.clone().project(engine.editorCamera), rect = engine.editorRenderer.domElement.getBoundingClientRect();
+        return { x: rect.x + (p.x + 1) * rect.width / 2, y: rect.y + (1 - p.y) * rect.height / 2 };
+    });
+    await page.mouse.click(point.x, point.y);
+    assert.equal(await page.evaluate(() => window.__director.getEngine().selectedJoint), 'rightElbow');
+    assert.equal(await page.locator('#pose-joint-choice').inputValue(), 'rightElbow');
+    const input = page.locator('[data-pose-joint="rightElbow"][data-pose-axis="2"]'); await input.fill('25');
+    assert.equal(await page.evaluate(() => window.__director.getProject().entities.find(e => e.id === 'joint-test').pose.rightElbow[1]), 25, 'input previews before blur');
+    await input.blur();
+    await page.evaluate(async () => { const api = window.__director, read = await api.callTool('director_read', { sections: [] }); const undone = await api.callTool('director_history', { action: 'undo', revision: read.data.revision }); if (!undone.ok) throw Error(undone.error); });
+    assert.equal(await page.evaluate(() => window.__director.getProject().entities.find(e => e.id === 'joint-test').pose.rightElbow), undefined);
+    await page.locator('[data-act="pose-key"]').click(); await page.evaluate(() => window.__director.setTime(1.1));
+    await page.locator('[data-pose-joint="rightElbow"][data-pose-axis="1"]').fill('-20'); await page.locator('[data-pose-joint="rightElbow"][data-pose-axis="1"]').blur();
+    const actor = await page.evaluate(() => window.__director.getProject().entities.find(e => e.id === 'joint-test'));
+    assert.ok(actor.poseKeys.some(k => k.time > 1 && k.pose.rightElbow[0] === -20));
+    const result = await page.evaluate(() => {
+        const api = window.__director, engine = api.getEngine(), actor = api.getProject().entities.find(e => e.id === 'joint-test');
+        const bone = engine.rigs.get(actor.id).joints.rightElbow, target = bone.rotation.clone(); target.x += .2; target.y += .15;
+        const expected = bone.quaternion.clone().setFromEuler(target).premultiply(bone.parent.getWorldQuaternion(bone.quaternion.clone()));
+        engine.gizmo.dispatchEvent({ type: 'mouseDown' }); engine.proxy.quaternion.copy(expected); engine.gizmo.dispatchEvent({ type: 'objectChange' }); engine.gizmo.dispatchEvent({ type: 'mouseUp' });
+        const actual = bone.getWorldQuaternion(bone.quaternion.clone()), after = api.getProject().entities.find(e => e.id === actor.id);
+        return { error: actual.angleTo(expected), position: after.position, beforePosition: actor.position, rotation: after.rotation, beforeRotation: actor.rotation };
+    });
+    assert.ok(result.error < 1e-6, `rotation gizmo mismatch: ${result.error}`); assert.deepEqual(result.position, result.beforePosition); assert.deepEqual(result.rotation, result.beforeRotation);
+    const output = await page.evaluate(() => window.__director.getEngine().renderOutput(1.1, 640, 360, 'program').toDataURL());
+    await page.locator('#pose-nodes-visible').uncheck();
+    const without = await page.evaluate(() => window.__director.getEngine().renderOutput(1.1, 640, 360, 'program').toDataURL()); assert.equal(without, output, 'joint helpers never enter the reference output');
+    await page.locator('#pose-nodes-visible').check(); await page.evaluate(() => window.__director.getEngine().render());
+    await page.locator('#pose-joint-choice').selectOption('rightElbow');
+    await page.screenshot({ path: 'tmp/joint-editor/editor.png' });
+    const physical = await page.evaluate(async () => {
+        const api = window.__director, engine = api.getEngine(), { defaultPhysicsBody } = await import('/src/physics/model.ts');
+        const p = engine.project, actor = p.entities.find(e => e.id === 'joint-test');
+        p.physics = { enabled: true, gravity: [0, -9.81, 0], ground: true };
+        actor.physics = { ...defaultPhysicsBody(), enabled: true, mode: 'dynamic', start: 1 };
+        engine.sample(.5); const before = !!engine.gizmo.object;
+        engine.sample(1.5); const during = !!engine.gizmo.object;
+        engine.sample(.5); const after = !!engine.gizmo.object;
+        delete actor.physics; delete p.physics; engine.sample(1.1);
+        return { before, during, after };
+    });
+    assert.deepEqual(physical, { before: true, during: false, after: true }, 'physics takeover releases and restores the joint gizmo');
+    const document = await page.evaluate(() => window.__director.getDocument()); await fs.writeFile('tmp/joint-editor/joints.director', JSON.stringify(document));
+    await page.evaluate(document => window.__director.replaceProject(document), document);
+    const bytes = await page.evaluate(() => window.__director.exportForTest({ width: 640, height: 360, fps: 24, cameraId: 'program', monochrome: false, start: 0, end: 2, format: 'mp4' }));
+    assert.ok(bytes.length > 10000); await fs.writeFile('tmp/joint-editor/output.mp4', Buffer.from(bytes));
+    await page.evaluate(async () => {
+        const { createScene } = await import('/src/scenes.ts'), { entity, clip } = await import('/src/model.ts');
+        const p = createScene('blank'), actor = entity('actor', 'human-adult', 'Legacy yaw');
+        actor.id = 'legacy-yaw'; actor.pose = { headYaw: 30 }; actor.clips = [clip('point', 0, 3)]; p.entities.push(actor);
+        window.__director.replaceProject(p); await window.__director.callTool('director_view', { entityId: actor.id, time: 1.5 });
+    });
+    await page.locator('[data-inspect="actions"]').click();
+    await page.locator('#pose-joint-choice').selectOption('headYaw');
+    const yawX = page.locator('[data-pose-joint="headYaw"][data-pose-axis="1"]'); await yawX.fill('10');
+    const yaw = await page.evaluate(() => window.__director.getEngine().rigs.get('legacy-yaw').head.rotation.y * 180 / Math.PI);
+    assert.ok(Math.abs(yaw - 30) < 1e-7, 'editing X must retain legacy absolute yaw'); await yawX.blur();
+    await page.evaluate(async () => { const api = window.__director, read = await api.callTool('director_read', { sections: [] }); const result = await api.callTool('director_history', { action: 'undo', revision: read.data.revision }); if (!result.ok) throw Error(result.error); });
+    assert.equal(await page.evaluate(() => window.__director.getProject().entities.find(e => e.id === 'legacy-yaw').pose.headYaw), 30);
+    assert.deepEqual(errors, []); console.log('Joint picking, XYZ live edit/undo/keying, legacy yaw edit/undo, rotation gizmo, helper exclusion, project roundtrip and MP4 passed.');
+} finally { await browser.close(); await server.close(); }

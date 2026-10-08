@@ -4,10 +4,26 @@ const { randomBytes } = require('node:crypto');
 const newToken = () => randomBytes(32).toString('hex');
 function createMcpConfig(directory, safeStorage) {
     const file = path.join(directory, 'mcp-connection.json');
+    const settingsFile = path.join(directory, 'mcp-settings.json');
     function encryption() {
         if (!safeStorage.isEncryptionAvailable()) throw Error('系统加密暂不可用，无法读取或保存 MCP 凭据');
     }
     return {
+        enabled() {
+            let raw;
+            try { raw = fs.readFileSync(settingsFile, 'utf8'); }
+            catch (e) { if (e.code === 'ENOENT') return true; throw Error('无法读取 MCP 开关设置'); }
+            try { const data = JSON.parse(raw); if (typeof data.enabled !== 'boolean') throw Error(); return data.enabled; }
+            catch { throw Error('MCP 开关设置损坏，请重新设置开关'); }
+        },
+        setEnabled(enabled) {
+            if (typeof enabled !== 'boolean') throw Error('MCP 开关设置无效');
+            try {
+                fs.mkdirSync(directory, { recursive: true });
+                fs.writeFileSync(settingsFile + '.tmp', JSON.stringify({ enabled }), { mode: 0o600 });
+                fs.renameSync(settingsFile + '.tmp', settingsFile);
+            } catch { throw Error('无法保存 MCP 开关设置'); }
+        },
         read() {
             let raw;
             try { raw = fs.readFileSync(file, 'utf8'); }

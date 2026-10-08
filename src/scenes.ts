@@ -1,21 +1,13 @@
 import {createAbstractShowcase} from './scenes/abstract-showcase.ts';
+import { createPhysicsShowcase } from './scenes/physics-showcase.ts';
 import { finishStarterScene, type StarterScene } from './scenes/starter-details.ts';
 import { demoProject, entity, type Project, type Vec3 } from './model.ts';
 import { createFeatureScene, FEATURE_SCENES, type FeatureScene } from './scenes/feature-showcases.ts';
-
-export const SCENE_TEMPLATES = [
-    ...FEATURE_SCENES,
-    {id:'abstract-stage',name:'流光空间',type:'抽象 · 10 秒',detail:'粒子与漩涡、薄膜、镜面、折射和关键帧形变'},
-    { id: 'bedroom', name: '卧室 · 四人调度', type: '室内', detail: '窗光与床头暖灯、家具配色、四人调度' },
-    { id: 'room', name: '空房间', type: '室内', detail: '8 × 6 米，窗光、墙裙和木地板，留空布置' },
-    { id: 'park', name: '林地空地', type: '室外', detail: '前后景树群、林间步道、长椅与双人调度' },
-    { id: 'street', name: '街道', type: '室外', detail: '黄昏商铺、雨棚与花盆、人行道和路灯' },
-    { id: 'courtyard', name: '庭院', type: '室外', detail: '入口门架、格栅凉棚、花坛与台阶平台' },
-    { id: 'blank', name: '空白场地', type: '自由搭建', detail: '仅地面和摄影机，所有内容由你摆放' },
-] as const;
-export type SceneTemplate = typeof SCENE_TEMPLATES[number]['id'];
+import { SCENE_TEMPLATES, type SceneTemplate } from './scenes/template-catalog.ts';
+export { SCENE_TEMPLATES, type SceneTemplate } from './scenes/template-catalog.ts';
 
 export function createScene(template: SceneTemplate): Project {
+    if (template === 'physics-stage') return createPhysicsShowcase();
     if(template==='abstract-stage')return createAbstractShowcase();
     if (FEATURE_SCENES.some(t => t.id === template)) return createFeatureScene(template as FeatureScene);
     if (template === 'bedroom') return finishStarterScene(demoProject(), 'bedroom');

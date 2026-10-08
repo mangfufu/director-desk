@@ -9,7 +9,7 @@ export function mountFileLocations(ctx: AppContext) {
         if (ctx.busy) return;
         const result = await bridge.files!('locations');
         if (!result.ok) { ctx.toast(result.error || '读取目录失败', true); return; }
-        ctx.showModal('默认文件位置', `<div class="native-editor" id="file-locations"><label>默认工程目录<input id="location-projects" readonly/></label><button data-location="projects">选择工程目录…</button><label>默认导出目录<input id="location-exports" readonly/></label><button data-location="exports">选择导出目录…</button></div>`, '<button data-act="close-modal">完成</button>');
+        ctx.showModal('默认文件位置', `<div class="native-editor" id="file-locations"><label>默认工程目录<input id="location-projects" readonly/></label><button data-location="projects">选择工程目录…</button><label>默认导出目录<input id="location-exports" readonly/></label><button data-location="exports">选择导出目录…</button></div>`, '<button data-act="close-modal">完成</button>', true);
         const root = document.querySelector<HTMLElement>('#file-locations')!;
         const render = (data: { projects?: string; exports?: string }) => {
             for (const key of ['projects','exports'] as const) root.querySelector<HTMLInputElement>('#location-' + key)!.value = data[key] ?? '';

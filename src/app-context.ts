@@ -50,8 +50,9 @@ export interface AppContext {
     renderCameras(): void;
     updateTimeUI(): void;
     seek(t: number, deferSample?: boolean): void;
-    saveProject(): Promise<boolean>;
-    showModal(title: string, body: string, footer?: string): void;
+    saveProject(saveAs?: boolean): Promise<boolean>;
+    flushRecovery?(): Promise<void>;
+    showModal(title: string, body: string, footer?: string, child?: boolean): void;
     closeModal(): void;
     projectDialog(): void;
     roomDialog(): void;

@@ -5,23 +5,23 @@ description: 使用导演台工具编辑白模预演，或生成可导入的 .di
 
 # 导演台
 
-默认编辑用户当前工程的当前戏段，沿用已有对象；只有用户要求新建、复制或接拍时另建。仅讨论时不修改工程。
+默认编辑当前工程、当前戏段；用户要求新建、复制或接拍时另建。
 
-## 选择入口
+- **已连接 MCP**：用 `director_skill` 读取当前核心说明；本对话已有同版本时复用。按任务读取附件。
+- **网页版或未连接 MCP**：读[离线工程](references/project-format.md)，用自包含 `scripts/project-tool.mjs` 制作 `.director`，需要 Node.js 22+。无脚本环境可参考[最小工程](assets/minimal.director)，交付时说明未自动校验。保留已有戏段、资源和未改字段。
+- **旧工具无技能入口**：读[核心操作](references/online-workflow.md)。
 
-- **已连接工具**：用 `director_skill` 读取软件当前的核心操作说明；当前对话已有同版本说明时复用，`knownVersion` 可确认是否变化。新对话重新读取，不依赖其他 Agent 的学习状态。按任务需要读它指向的附件，不先读完所有文档。
-- **网页版或未连接 MCP**：直接制作可导入的 `.director` 文件，先读[工程格式与离线工具](references/project-format.md)。自包含 `scripts/project-tool.mjs` 使用 Node.js 22+，无需安装源码、联网或 API key。无脚本环境可按[最小工程](assets/minimal.director)生成，说明未自动校验。
-- **旧版在线工具没有技能入口**：使用[核心操作说明](references/online-workflow.md)；不认识附件 path 时，直接读随包对应文件。
+完成戏段与分镜时，默认配齐参考视频、纯文字两份提示词，按[提示词写作](references/prompt-writing.md)分别保存。只改设置或用户不要时省略，明确只要一种时遵从。纯文本单条视频上限未确认时询问用户，已确认则沿用。
 
-## 按任务读取
+## 按需读取
 
-| 需要 | 说明 |
+| 任务 | 说明 |
 | --- | --- |
-| 对象、动作、选区、空间、接拍及交付 | [编辑约定](references/editing.md) |
-| 设计位置／视线运动、速度曲线、镜头效果和灯光 | [镜头与灯光](references/camera.md) |
-| 图片视频表面、粒子、形变等 | [媒体与抽象元素](references/media.md) |
-| 完成戏段后的配套生成提示词 | [提示词写作](references/prompt-writing.md) |
+| 对象、编组、排列、动作、选区与接拍 | [编辑](references/editing.md) |
+| 打开、导入导出、时间轴与本机设置 | [文件与控制](references/files.md) |
+| 运镜、镜头效果、灯光 | [镜头与灯光](references/camera.md) |
+| 媒体表面、粒子、形变 | [媒体与抽象元素](references/media.md) |
+| 重力、碰撞、惯性、布娃娃 | [物理](references/physics.md) |
+| 插件、命名版本、群演自动避障 | [扩展与版本](references/extensions.md) |
 
-每场戏及分镜完成后，按本段 `production.promptMode` 保存配套提示词：缺省／`reference-video` 使用 `promptText` 并引用 `@视频1`；`text-only` 使用 `textOnlyPrompt`，不依赖参考视频，独立写出镜头及起始画面。纯文本的单条时长上限未确认时先询问用户，不自行默认或推断；已确认则沿用，实际时长不凑满，cut 使用整数秒。两份文稿独立保留，不因切换模式自动改写。用户只改软件设置或明确不要提示词时不附加生成。格式在需要写作时读取，不先加载所有示例。
-
-离线编辑同样保留原有戏段、资源和未改字段。交付 `.director` 后说明在网页版「打开」导入；结构校验不能代替画面检查。连接凭据、API 密钥与本机私有目录不写入工程或提示词。
+交付离线工程后说明用「打开」导入。文件结构校验与实际画面检查分别说明；凭据和本机私有目录不写入工程或提示词。

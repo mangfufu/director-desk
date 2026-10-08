@@ -9,7 +9,7 @@ const { createConversation } = require('../desktop/ai-conversation.cjs');
 const { TOOL_DEFINITIONS, DISCUSSION_TOOLS, isDiscussionToolCall } = require('../src/automation/contract.ts');
 const policy = { definitions: TOOL_DEFINITIONS, discussionTools: DISCUSSION_TOOLS, isDiscussionToolCall };
 const localStorage = { isEncryptionAvailable: () => false };
-const call = id => ({ id, name: 'director_apply', args: { revision: 1, requestId: id, operations: [{ operation: 'add', asset: 'person', id }] } });
+const call = id => ({ id, name: 'director_apply', args: { revision: id === 'second' ? 2 : id === 'third' ? 3 : 1, requestId: id, operations: [{ operation: 'add', asset: 'person', id }] } });
 function reply(protocol, calls = [], text = '继续完成') {
     if (protocol === 'chat') return { choices: [{ finish_reason: calls.length ? 'tool_calls' : 'stop', message: { role: 'assistant', content: text,
         ...(calls.length ? { tool_calls: calls.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })) } : {}) } }] };
@@ -54,7 +54,7 @@ for (const protocol of ['chat', 'responses', 'anthropic']) for (const scenario o
             host = createAIHost(dependencies); recovering = true;
             assert.deepEqual(await host.conversation(), previous, 'restart restores transcript and same session');
             const second = await host.run({ profileId: profile.id, sessionId: first.sessionId, prompt: '继续', mode: 'execute' });
-            assert.equal(second.sessionId, first.sessionId); assert.equal(second.stopped, undefined); assert.deepEqual(writes, completedWrites, 'no tool is automatically replayed');
+            assert.equal(second.sessionId, first.sessionId); assert.equal(second.stopped, undefined, (await host.conversation()).transcript); assert.deepEqual(writes, completedWrites, 'no tool is automatically replayed');
             assert.match(JSON.stringify(requests.at(-1)), /主角始终穿蓝色/);
             const saved = outcomes(protocol, requests.at(-1)); assert.equal(saved[0].result.data.committed, true);
             if (scenario === 'stop') { assert.equal(saved[1].result.execution, 'not-started'); assert.equal(saved[2].result.execution, 'not-started'); }
@@ -85,7 +85,7 @@ test('switching providers preserves complete text and tool pairs in the target p
             assert.match(JSON.stringify(requests.at(-1)), /主角穿蓝衣/);
             assert.equal(outcomes(protocol, requests.at(-1))[0].id, 'original-call');
         }
-        const disk = JSON.parse(await fs.readFile(path.join(directory, 'ai-conversation.json'), 'utf8'));
+        const disk = await require('../desktop/conversation-store.cjs').conversationStore(directory, localStorage).load();
         assert.ok(disk.entries.some(e => e.protocol === 'chat' && e.assistant.tool_calls?.[0].id === 'original-call'));
         assert.equal(disk.entries.filter(e => e.type === 'user').length, 4);
     } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); await cleanup(directory); }

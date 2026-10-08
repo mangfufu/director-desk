@@ -51,7 +51,7 @@ export function createProductionPanel(ctx: AppContext) {
     }
     function openReferences() {
         const actors = ctx.project.entities.filter(e => e.kind === 'actor'), refs = ctx.project.references.map(r => [r.id, r.name] as [string, string]);
-        ctx.showModal('角色与参考图', `<div class="production-reference-controls"><label>角色<select id="production-actor">${options(actors.map(e => [e.id, e.name]), actors.some(e => e.id === ctx.selected) ? ctx.selected : actors[0]?.id ?? '')}</select></label><label>角色参考图<select id="production-reference">${options([['', '未关联'], ...refs], '')}</select></label></div><div id="production-reference-preview"></div><label>场景参考图<select id="production-scene-reference">${options([['', '选择场景参考图'], ...refs], '')}</select></label><div class="spatial-toolbar">${button('production-add-scene-reference', '加入场景参考', 'plus', 'subtle')}${button('production-remove-scene-reference', '移出场景参考', '', 'subtle')}</div><textarea id="production-scene-list" readonly aria-label="场景参考列表"></textarea>`, button('production-delivery', '素材包导出', 'download', 'subtle'));
+        ctx.showModal('角色与参考图', `<div class="production-reference-controls"><label>角色<select id="production-actor">${options(actors.map(e => [e.id, e.name]), actors.some(e => e.id === ctx.selected) ? ctx.selected : actors[0]?.id ?? '')}</select></label><label>角色参考图<select id="production-reference">${options([['', '未关联'], ...refs], '')}</select></label></div><div id="production-reference-preview"></div><label>场景参考图<select id="production-scene-reference">${options([['', '选择场景参考图'], ...refs], '')}</select></label><div class="spatial-toolbar">${button('production-add-scene-reference', '加入场景参考', 'plus', 'subtle')}${button('production-remove-scene-reference', '移出场景参考', '', 'subtle')}</div><textarea id="production-scene-list" readonly aria-label="场景参考列表"></textarea>`, button('production-delivery', '素材包导出', 'download', 'subtle'), true);
         $('.modal').classList.add('production-modal');
         const update = () => {
             const actor = ctx.project.entities.find(e => e.id === $('#production-actor').value), reference = ctx.project.references.find(r => r.id === actor?.reference);
@@ -64,8 +64,8 @@ export function createProductionPanel(ctx: AppContext) {
         update();
     }
     function openDelivery() {
-        ctx.showModal('导出制作素材包', `<label>固定提示词头<textarea id="production-fixed-prompt" maxlength="50000" placeholder="粘贴项目已确认的风格、声音与表演要求"></textarea></label><label class="range-occlusion"><input id="production-with-video" type="checkbox" checked/>包含按切镜输出的整场 MP4（无声参考）</label><label>视频分辨率<select id="production-video-size">${options([['1920', '1080p 级'], ['1280', '720p 级'], ['640', '360p 级']], '1920')}</select></label><p id="production-progress" role="status"></p>`,
-            button('production-export-bundle', '导出 ZIP', 'download', 'primary') + button('production-cancel', '取消导出', '', 'subtle', 'disabled') + button('production-prompt', '视频提示词', '', 'subtle'));
+        ctx.showModal('导出制作素材包', `<label>通用提示词<textarea id="production-fixed-prompt" maxlength="50000" placeholder="粘贴项目已确认的风格、声音与表演要求"></textarea></label><label class="range-occlusion"><input id="production-with-video" type="checkbox" checked/>包含按切镜输出的整场 MP4（无声参考）</label><label>视频分辨率<select id="production-video-size">${options([['1920', '1080p 级'], ['1280', '720p 级'], ['640', '360p 级']], '1920')}</select></label><p id="production-progress" role="status"></p>`,
+            button('production-export-bundle', '导出 ZIP', 'download', 'primary') + button('production-cancel', '取消导出', '', 'subtle', 'disabled') + button('production-prompt', '视频提示词', '', 'subtle'), true);
         $('.modal').classList.add('production-modal'); $('#production-fixed-prompt').value = productionData(ctx.project).fixedPrompt;
         $('#production-fixed-prompt').addEventListener('change', () => ctx.change(() => { ctx.project.production ??= productionData(ctx.project); ctx.project.production.fixedPrompt = $('#production-fixed-prompt').value; }, false));
     }
@@ -86,7 +86,7 @@ export function createProductionPanel(ctx: AppContext) {
         promptMode = selectedPromptMode(ctx.project.production);
         promptOriginal = productionData(ctx.project)[promptField(promptMode)] ?? '';
         ctx.showModal(`${escape(promptSceneName)} · 视频提示词`, `<div class="production-prompt-modes" role="group" aria-label="提示词模式">${promptModes.map(mode => `<button type="button" data-act="production-prompt-mode" data-mode="${mode}" aria-pressed="${mode === promptMode}">${promptModeLabel(mode)}</button>`).join('')}</div><label class="production-prompt-field">完整提示词<textarea id="production-prompt-text" maxlength="100000"></textarea></label>`,
-            button('production-download-prompt', '导出 TXT', 'download', 'primary') + button('production-copy-prompt', '复制全文', '', 'subtle') + button('production-delivery', '素材包导出', '', 'subtle'));
+            button('production-download-prompt', '导出 TXT', 'download', 'primary') + button('production-copy-prompt', '复制全文', '', 'subtle') + button('production-delivery', '素材包导出', '', 'subtle'), true);
         $('.modal').classList.add('production-modal'); fillPrompt();
         $('#production-prompt-text').focus();
         $('#production-prompt-text').addEventListener('change', savePrompt);

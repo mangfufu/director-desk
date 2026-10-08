@@ -1,7 +1,7 @@
 {
   "name": "director-desk",
-  "version": "0.4.10",
-  "shortVersion": "0.4.10",
+  "version": "0.4.11",
+  "shortVersion": "0.4.11",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -28,6 +28,7 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
+    "cannon-es": "0.20.0",
     "mediabunny": "1.55.7",
     "three": "0.185.1"
   },

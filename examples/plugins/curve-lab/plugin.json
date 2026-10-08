@@ -1,0 +1,10 @@
+{
+  "format":"director-plugin","apiVersion":2,"id":"curve-lab","name":"自由曲线实验室","version":"1.0.0",
+  "description":"画一条线，生成沿线起伏的球串，可调节起伏幅度和速度。",
+  "entry":"index.js","backend":"backend.cjs","permissions":["editor","native"],
+  "commands":[
+    {"id":"open","label":"打开曲线画布"},
+    {"id":"generate","label":"生成曲线装置","description":"生成球串，调整形状、起伏和速度。","inputSchema":{"type":"object","properties":{"points":{"type":"array"},"height":{"type":"number"},"speed":{"type":"number"},"color":{"type":"string"}}}},
+    {"id":"statistics","label":"曲线统计"}
+  ]
+}

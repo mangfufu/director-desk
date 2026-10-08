@@ -6,6 +6,7 @@ const categories: InspectorCategory[] = [
     {key:'actions',label:'动作',members:['actions','retarget','pose']},
     {key:'path',label:'走位',members:['path','effects']},
     {key:'surface',label:'外观',members:['surface','deform']},
+    {key:'physics',label:'物理',members:['physics']},
     {key:'hand',label:'绑定',members:['hand','contacts']},
 ];
 export function inspectorCategories(tabs: string[][]) {

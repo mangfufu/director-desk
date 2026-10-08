@@ -67,7 +67,7 @@ test('curated GLB contains only the declared motions, geometry, skin and numeric
 });
 
 
-test('coarse presets add no material payload, preserve free intervals and reject unsupported targets atomically', async () => {
+test('default body actions add no material payload, preserve free intervals and reject unsupported targets atomically', async () => {
     const original = createScene('blank'), before = clone(original);
     const project = await applyOperationsWithResources(original, [
         { operation: 'add', id: 'performer', asset: 'human-adult' },
@@ -75,7 +75,7 @@ test('coarse presets add no material payload, preserve free intervals and reject
     ]);
     assert.equal(project.version, 1); assert.equal(project.resources, undefined);
     const actor = project.entities.find(e => e.id === 'performer')!;
-    assert.deepEqual(actor.clips.map(c => [c.action, c.start, c.end]), [['crawl', 1, 4], ['lie', 4, 7], ['fall', 7, 10]]);
+    assert.deepEqual(actor.clips.map(c => [c.action, c.start, c.end]), [['crawl', 1, 5], ['lie', 5, 9], ['fall', 9, 9 + 58 / 24]]);
     assert.deepEqual(original, before); assertProject(JSON.parse(JSON.stringify(project)));
     await assert.rejects(applyOperationsWithResources(original, [{ operation: 'add', id: 'prop', asset: 'chair' }, { operation: 'motion', id: 'prop', asset: 'basic-crawl' }]), /人形骨架/);
     actor.locked = true;

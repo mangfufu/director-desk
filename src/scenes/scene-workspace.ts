@@ -1,3 +1,4 @@
+import type { SavedSceneReadOptions } from './scene-query.ts';
 import type { Project } from '../model.ts';
 import type { EditorHistory, ResourceOwner } from '../storage.ts';
 import { SceneSession, type SceneContext, type SceneTransaction, type SceneView } from './sequence-session.ts';
@@ -12,6 +13,11 @@ export class SceneWorkspace implements EditorHistory {
     restoredView: SceneView | undefined;
     constructor(project: Project, view: () => SceneView) { this.#session = new SceneSession(project); this.#view = view; }
     get context() { return this.#session.context; }
+    get projectId() { return this.#session.projectId; }
+    get filePath() { return this.#session.filePath; }
+    get dirty() { return this.#session.dirty; }
+    markSaved(path?: string) { this.#session.markSaved(path); }
+    setFile(path?: string, saved = false) { this.#session.setFile(path, saved); }
     get pending() { return this.#before; }
     get restoredSelection() { return this.restoredView?.selected; }
     get undoLabel() { return this.#session.undoLabel; }
@@ -24,6 +30,7 @@ export class SceneWorkspace implements EditorHistory {
     }
     list() { return this.#session.sceneList(); }
     resourceScenes(id: string) { return this.#session.resourceScenes(id); }
+    readScene(id?: string, options?: SavedSceneReadOptions) { return this.#session.readScene(id, options); }
     document() { return this.#session.exportDocument(); }
     project() { return this.#session.project(); }
     projectFor(id: string) { return this.#session.project(id); }

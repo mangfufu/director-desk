@@ -1,5 +1,5 @@
 import type { ProductionData, ProductionNote, Project } from '../model.ts';
-export function productionData(project: Project): ProductionData { return project.production ?? { fixedPrompt: '', sceneReferenceIds: [], notes: [] }; }
+export function productionData(project: Pick<Project, 'production'>): ProductionData { return project.production ?? { fixedPrompt: '', sceneReferenceIds: [], notes: [] }; }
 export function notesText(project: Project): string {
     const data = productionData(project);
     return [`${project.name} · 剧情与表演备注`, `${project.duration} 秒 · ${project.aspect} · ${project.fps} fps`, '',

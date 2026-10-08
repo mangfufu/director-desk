@@ -1,5 +1,8 @@
+import { extensionHost } from './plugins/extension-host.ts';
+import './plugins/extension-panels.css';
 import { renderDepthControls } from './ui/depth-controls.ts';
-import { setSelectedEntities } from './editor/timeline-selection.ts';
+import { setSelectedEntities, selectedEntities } from './editor/timeline-selection.ts';
+import { beginGroupDrag } from './editor/group-transform-drag.ts';
 import { mountApplicationMenu } from './ui/application-menu.ts';
 import { saveProjectFile } from './ui/project-save.ts';
 import { mountFileLocations } from './ui/file-locations.ts';
@@ -26,7 +29,7 @@ import { createEditingTools } from './editor/operations.ts';
 import { Engine } from './engine.ts';
 import type { Action, Entity, Project, Vec3 } from './model.ts';
 import { assertProject, clone } from './model.ts';
-import { autosave, recover } from './storage.ts';
+import { autosave, recoverSession } from './storage.ts';
 import { SceneWorkspace } from './scenes/scene-workspace.ts';
 import { RecoveryAutosave } from './editor/recovery-autosave.ts';
 import { readSceneDocument, projectForScene, type SceneDocument } from './scenes/sequence-project.ts';
@@ -60,20 +63,35 @@ let draft: {
 } | null = null;
 const history = new SceneWorkspace(project, () => ({ time, selected, preview }));
 const recoverySave = new RecoveryAutosave(force => autosave(() =>
-    history.pending || draft || engine.dragging || engine.exporting || busy && !force ? null : history.document()),
-    () => { $('#save-status').textContent = '自动恢复已保存'; },
+    history.pending || draft || engine.dragging || engine.exporting || busy && !force ? null : history.document(),
+    () => ({ path: history.filePath, dirty })),
+    () => { $('#save-status').textContent = dirty ? '自动备份已保存' : '项目已保存'; },
     () => { $('#save-status').textContent = '请手动保存项目'; toast('自动恢复保存失败，请导出项目文件备份', true); });
 let inspectorSeekTimer: ReturnType<typeof setTimeout> | undefined;
 let aborter: AbortController | null = null;
 let transformError: Error | undefined;
+let groupDrag: ReturnType<typeof beginGroupDrag> | undefined;
 mountLayout(project);
 const engine = new Engine(project, $('#stage-canvas'), $('#shot-canvas'), {
+    selection: selectedEntities,
     select: selectEntity, point: i => { engine.select(selected, i); inspectorTab = 'path'; renderInspector(); }, ground: addGroundPoint, stroke: points => editingTools.addFreehandStroke(points),
-    transformStart: () => { transformError=undefined; playing = false; history.begin(project); const e = current(); if (e?.camera && e.camera.mode !== 'free') freezeCamera(engine, e); },
+    joint: () => { inspectorTab='pose'; renderInspector(); },
+    transformStart: () => {
+        transformError=undefined; groupDrag=undefined; playing = false; history.begin(project);
+        if (engine.selectionIds.length > 1 && engine.selectedPoint < 0 && !engine.selectedJoint) {
+            try { groupDrag = beginGroupDrag(project, engine.selectionIds, engine.proxy.position.toArray()); } catch (error) { transformError = error as Error; }
+        } else { const e = current(); if (e?.camera && e.camera.mode !== 'free') freezeCamera(engine, e); }
+    },
     transform: (p, r, s) => {
         const e = current();
         if (!e || transformError)
             return;
+        if(engine.selectedJoint){const angles=engine.jointRotation(r);if(angles)setJointRotation(e,engine.selectedJoint,angles,time,project.fps);engine.sample(time);return;}
+        if (groupDrag) {
+            try { groupDrag.apply(engine.gizmo.getMode(), p, r); engine.sample(time); engine.refreshHelpers(); }
+            catch (error) { transformError = error as Error; }
+            return;
+        }
         const beforeTransform = captureStructureEdits(project);
         if (e.handBinding && engine.gizmo.getMode() !== 'scale') {
             editBoundTransform(e, engine.handFrame(e.handBinding), engine.gizmo.getMode() === 'translate' ? p : undefined, engine.gizmo.getMode() === 'rotate' ? r : undefined);
@@ -86,7 +104,9 @@ const engine = new Engine(project, $('#stage-canvas'), $('#shot-canvas'), {
             e.path.points[engine.selectedPoint].position = p;
         else if (engine.gizmo.getMode() === 'translate') {
             const snapped = engine.snapObjectPosition(e.id, p, engine.gizmo.axis ?? 'XYZ');
-            shiftPath(e, new T.Vector3(...snapped).sub(entityPosition(e, time)));
+            const physicalRoot = project.physics?.enabled && e.physics?.enabled ? engine.models.get(e.id) : undefined;
+            const origin = physicalRoot ? physicalRoot.getWorldPosition(new T.Vector3()) : entityPosition(e, time);
+            shiftPath(e, new T.Vector3(...snapped).sub(origin));
             engine.proxy.position.fromArray(snapped);
         }
         else if (engine.gizmo.getMode() === 'rotate')
@@ -107,12 +127,12 @@ const engine = new Engine(project, $('#stage-canvas'), $('#shot-canvas'), {
             engine.selected=selected;engine.rebuild(project);renderPanels();
             if(!cancel)toast((error as Error).message,true);
         }
-        transformError=undefined;
+        transformError=undefined; groupDrag=undefined;
     },
 });
 function current() { return project.entities.find(e => e.id === selected); }
 function toast(message: string, error = false) { const el = document.createElement('div'); el.className = 'toast' + (error ? ' error' : ''); el.textContent = message; $('#toasts').append(el); while ($('#toasts').children.length > 3) $('#toasts').firstElementChild!.remove(); setTimeout(() => el.remove(), 5000); }
-function changed(rebuild = true) { revision++; dirty = true; time = Math.max(0, time); if (!current()) selected = project.entities.find(e => e.kind === 'actor')?.id ?? project.entities[0].id; engine.selected = selected; $('#save-status').textContent = '正在保存恢复副本…'; if (rebuild)
+function changed(rebuild = true) { revision++; dirty = history.dirty; time = Math.max(0, time); if (!current()) selected = project.entities.find(e => e.kind === 'actor')?.id ?? project.entities[0].id; engine.selected = selected; $('#save-status').textContent = dirty ? '正在自动备份…' : '项目已保存'; if (rebuild)
     engine.rebuild(project);
 else {
     engine.project = project;
@@ -236,7 +256,7 @@ function seek(t: number, deferSample = false) { if (busy)
     inspectorSeekTimer = setTimeout(() => { if (!draft && !busy && !engine.dragging && !document.activeElement?.closest('#inspector-content input,#inspector-content select,#timeline-curves')) renderInspector(); }, 80);
 }
 function setView(value: string) { if (!['stage', 'split', 'shot'].includes(value)) return; mode = value; $('#viewports').className = 'viewports ' + value; document.querySelectorAll('.view-modes button[data-view]').forEach(el => el.classList.toggle('active', (el as HTMLElement).dataset.view === value)); engine.requestResize(); }
-async function saveProject() { return saveProjectFile(uiContext); }
+async function saveProject(saveAs = false) { return saveProjectFile(uiContext, saveAs); }
 function applyDocument(document: SceneDocument, context: SceneContext, label: string, resetViews = false) {
     if (draft || history.pending || engine.exporting) throw Error('请先完成当前编辑或导出');
     for (const scene of document.scenes) engine.externalModels.assertReady(projectForScene(document, scene.id));
@@ -259,6 +279,7 @@ function createNew(template: SceneTemplate = 'bedroom') {
     closeModal();
     try {
         applyDocument(readSceneDocument(createScene(template)), history.context, '新建工程', true);
+        history.setFile(); dirty = true;
         sidebarTab = 'scene'; query = ''; engine.viewHome(); setView('split'); renderPanels();
         toast('已新建' + project.name + '；可撤销返回上个项目');
     } catch (error) { toast((error as Error).message, true); }
@@ -277,6 +298,7 @@ function frame(now: number) { const delta = Math.min((now - previousFrame) / 100
         }
     }
     navigation.update(delta);
+    extensionHost(uiContext).poll();
     if (playing || time !== engine.time || history.pending || draft || engine.dragging) engine.sample(time);
     engine.render(false);
     if (now - lastUI > 50) {
@@ -296,7 +318,8 @@ const uiContext: AppContext = {
     get loop() { return loop; }, set loop(value) { loop = value; },
     get mode() { return mode; }, set mode(value) { mode = value; },
     get preview() { return preview; }, set preview(value) { preview = value; },
-    get dirty() { return dirty; }, set dirty(value) { dirty = value; },
+    get dirty() { return dirty; }, set dirty(value) { dirty = value; if (!value) history.markSaved(); recoverySave.request(); },
+    flushRecovery: () => recoverySave.flush(),
     get revision() { return revision; },
     get busy() { return busy; }, set busy(value) { busy = value; },
     get draft() { return draft; }, set draft(value) { draft = value; },
@@ -315,7 +338,6 @@ const dialogsUI = createDialogs(uiContext);
 const videopanelUI = createVideoPanel(uiContext);
 const commandsUI = createCommands(uiContext, inspectorUI);
 const toolService = createToolService(uiContext);
-window.directorDesktop?.onTool((name, args) => toolService.call(name, args));
 mountAI(uiContext);
 mountFileLocations(uiContext);
 mountSettings(uiContext);
@@ -329,16 +351,23 @@ mountApplicationMenu();
 renderPanels();
 engine.select(selected);
 requestAnimationFrame(frame);
-void recover().then(async p => { if (p && revision === 0) {
+void recoverSession().then(async restored => { const p = restored?.document; if (p && restored && revision === 0) {
     await prepareDocumentModels(engine.externalModels, p);
-    if (revision !== 0 || busy || history.pending || draft) { engine.externalModels.retain([project, ...history.undoStack, ...history.redoStack]); return; }
+    if (revision !== 0 || busy || history.pending || draft) {
+        // An overlapping import owns its prepared sources until its own commit/cleanup.
+        if (!busy && !history.pending && !draft) engine.externalModels.retain([project, ...history.undoStack, ...history.redoStack]);
+        return;
+    }
     selectClip(null);project = history.reset(p);
     selected = history.restoredSelection!; time = 0; preview = 'program';
     engine.selected = selected; engine.rebuild(project);
     renderPanels();
-    dirty = true; toast('已恢复上次工作');
-} }).catch(() => toast('未能读取自动恢复或模型资源，可以打开手动保存的项目文件'));
+    history.setFile(restored.file.path, !restored.file.dirty); dirty = history.dirty;
+    $('#save-status').textContent = dirty ? '自动备份已保存' : '项目已保存'; toast('已恢复上次工作');
+} }).catch(() => toast('未能读取自动恢复或模型资源，可以打开手动保存的项目文件'))
+    .finally(async () => { await extensionHost(uiContext).start().catch(error=>toast(error.message,true)); window.directorDesktop?.onTool((name, args) => toolService.call(name, args)); });
 window.addEventListener('beforeunload', event => { if (dirty || busy || history.pending || draft) {
+    window.directorDesktop?.closingState?.({ busy: !!(busy || history.pending || draft) });
     event.preventDefault();
     event.returnValue = '';
 } });
@@ -349,7 +378,7 @@ if (import.meta.env.DEV) {
 function renderSidebar() { sidebarUI.renderSidebar(); }
 function renderInspector() { clearTimeout(inspectorSeekTimer); const key = selected + ':' + inspectorTab; const scroll = key === inspectorRenderedFor ? $('#inspector-content').scrollTop : 0; inspectorUI.renderInspector(); inspectorRenderedFor = key; $('#inspector-content').scrollTop = scroll; }
 function renderTimeline() { timelineUI.renderTimeline(); }
-function showModal(title: string, body: string, footer = '') { dialogsUI.showModal(title, body, footer); }
+function showModal(title: string, body: string, footer = '', child = false) { dialogsUI.showModal(title, body, footer, child); }
 function closeModal() { dialogsUI.closeModal(); }
 function sceneDialog() { dialogsUI.sceneDialog(); }
 function projectDialog() { dialogsUI.projectDialog(); }
@@ -375,3 +404,4 @@ function deleteEntity(id: string, replacement?: string) { editingTools.deleteEnt
 function seatApply() { editingTools.seatApply(); }
 function applyMotion(name: string) { editingTools.applyMotion(name); }
 function applyFraming(name: string) { editingTools.applyFraming(name); }
+import { setJointRotation } from './editor/joint-editing.ts';

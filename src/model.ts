@@ -1,7 +1,8 @@
+import { assertExtensionData, type ExtensionData } from './plugins/project-data.ts';
 import { assertDepthVideo, type DepthVideo } from './cinematography/depth-video.ts';
 import { cloneProjectData } from './resources/model-data.ts';
-import { ASSETS, findAsset, isAnimalAsset, assetJoints } from './asset-catalog.ts';
-import { JOINT_LABELS, type JointName } from './assets/joint-schema.ts';
+import { findAsset, isAnimalAsset, assetJoints } from './asset-catalog.ts';
+import { JOINT_LABELS, type JointName, type JointRotation } from './assets/joint-schema.ts';
 import { validatePropParameters, type PropParameters } from './parametric-props.ts';
 import { validateAssetParameters } from './assets/parameters.ts';
 import { assertModelResources, assertExternalModel, type ModelResource, type ExternalModel } from './resources/project-resources.ts';
@@ -16,6 +17,7 @@ import { assertInitialPose, type InitialPose } from './scenes/initial-pose.ts';
 import { assertProductionShape } from './production/validation.ts';
 import { assertCameraLookPath, type CameraLookPath } from './animation/camera-look.ts';
 import { assertZones, type SceneZone } from './building/zones.ts';
+import { assertEntityGroups, type EntityGroup } from './building/entity-groups.ts';
 import { assertEasing, type Easing } from './animation/channels.ts';
 import { assertPathInterpolation } from './animation/continuous-path.ts';
 import { assertCameraEffects, type CameraEffects } from './cinematography/camera-effects.ts';
@@ -24,15 +26,17 @@ import { assertLightEntity, assertLighting, type LightConfig, type LightingConfi
 import {assertWarp,type WarpConfig} from './visuals/warps.ts';
 import { SURFACE_VISUALS,assertVisual,assertField,assertDeform,type VisualConfig,type FieldConfig,type DeformConfig } from './visuals/model.ts';
 import { assertMediaResources, assertSurface, type MediaResource, type SurfaceAppearance } from './media/model.ts';
+import { assertPhysics, type PhysicsBody, type PhysicsWorld } from './physics/model.ts';
+import { assertMemberPaths } from './navigation/member-paths.ts';
 export type Vec3 = [
     number,
     number,
     number
 ];
 export type Kind = 'actor' | 'prop' | 'camera' | 'crowd';
-export type Action = 'idle' | 'walk' | 'run' | 'sit' | 'standup' | 'crouch' | 'crawl' | 'jump' | 'lie' | 'fall' | 'wave' | 'point' | 'turn';
+export type Action = 'idle' | 'walk' | 'run' | 'sit' | 'standup' | 'crouch' | 'crawl' | 'jump' | 'lie' | 'fall' | 'wave' | 'point' | 'turn' | 'guard' | 'punch' | 'kick' | 'roundhouse' | 'flying-kick' | 'dodge' | 'throw' | 'push' | 'stumble' | 'roll';
 export type Joint = JointName;
-export type Pose = Partial<Record<Joint, number>>;
+export type Pose = Partial<Record<Joint, JointRotation>>;
 export interface Waypoint {
     /** Actor/crowd yaw offset from rotation[1], in radians; all points or none. */
     heading?: number;
@@ -81,6 +85,8 @@ export interface CameraConfig {
     hiddenEntityIds?: string[];
 }
 export interface Entity {
+    memberPaths?: MotionPath[] | null;
+    physics?: PhysicsBody | null;
     surface?: SurfaceAppearance | null;
     visual?: VisualConfig;
     warp?: WarpConfig;
@@ -135,6 +141,9 @@ export interface ProductionNote { id: string; start: number; end: number; actorI
 export type PromptMode = 'reference-video' | 'text-only';
 export interface ProductionData { fixedPrompt: string; sceneReferenceIds: string[]; notes: ProductionNote[]; promptText?: string; textOnlyPrompt?: string; promptMode?: PromptMode }
 export interface Project {
+    extensions?: ExtensionData;
+    physics?: PhysicsWorld;
+    groups?: EntityGroup[];
     media?: MediaResource[];
     lighting?: LightingConfig;
     creationMode?: 'full' | 'geometry';
@@ -163,7 +172,7 @@ export interface Project {
 }
 export const ASPECTS = ['9:16', '16:9', '21:9', '3:4', '4:3', '1:1'];
 export const FRAME_RATES = [24, 30, 50, 59, 60, 90, 120];
-export const ACTIONS: Record<Action, string> = { idle: '站立 / 待机', walk: '走路', run: '跑步', sit: '坐姿', standup: '起身', crouch: '蹲下', crawl: '爬行', jump: '跳跃', lie: '躺下', fall: '倒地', wave: '挥手', point: '指向', turn: '转身' };
+export const ACTIONS: Record<Action, string> = { idle: '站立 / 待机', walk: '走路', run: '跑步', sit: '坐姿', standup: '起身', crouch: '蹲下', crawl: '爬行', jump: '跳跃', lie: '躺下', fall: '倒地', wave: '挥手', point: '指向', turn: '转身', guard:'防御', punch:'出拳', kick:'踢腿', roundhouse:'回旋踢', 'flying-kick':'飞身踢', dodge:'闪避', throw:'抛掷', push:'推物', stumble:'踉跄', roll:'翻滚' };
 export const clipLabel = (c: Clip) => c.name ?? (c.action === 'retarget' ? builtinMotionName(c) ?? `适配动作 ${c.retarget!.index + 1}` : c.action === 'native' ? `原生动画 ${c.native!.index + 1}` : ACTIONS[c.action]);
 export const JOINTS = JOINT_LABELS;
 export const COLORS = ['#a7bdd7', '#b8c7b3', '#d1bfa0', '#c5b3c9', '#d0d2d0', '#bdaca4'];
@@ -233,6 +242,7 @@ export function outputSize(aspect: string, longEdge: number): [
 export function getFrameCount(start: number, end: number, fps: number) { return Math.max(0, Math.ceil((end - start) * fps - 1e-8)); }
 export function assertProject(input: unknown): asserts input is Project {
     const p = input as Project;
+    assertExtensionData(p?.extensions);
     const fail = (message: string): never => { throw new Error(`项目文件无效：${message}`); };
     if (p?.creationMode !== undefined && !['full', 'geometry'].includes(p.creationMode)) fail('创作模式无效');
     if (p?.depthVideo !== undefined) assertDepthVideo(p.depthVideo);
@@ -255,7 +265,7 @@ export function assertProject(input: unknown): asserts input is Project {
         if (!e || !safeId(e.id) || ids.has(e.id) || !['actor', 'prop', 'camera', 'crowd'].includes(e.kind))
             fail('对象标识或类型错误');
         ids.add(e.id);
-        if(e.kind==='camera' ? e.asset!=='camera' : e.asset !== 'external-model' && !ASSETS.some(a=>a.id===e.asset && a.kind===e.kind))fail('白模资产不存在或类型不匹配');
+        if(e.kind==='camera' ? e.asset!=='camera' : e.asset !== 'external-model' && findAsset(e.asset)?.kind !== e.kind)fail('白模资产不存在或类型不匹配');
         if(e.kind!=='camera' && e.camera!==null)fail('非摄影机对象不应包含摄影机配置');
         if(e.path!==null && (!e.path || typeof e.path!=='object' || Array.isArray(e.path)))fail('路径数据错误');
         if (typeof e.name !== 'string' || e.name.length > 200 || typeof e.asset !== 'string' || !/^#[0-9a-f]{6}$/i.test(e.color))
@@ -268,7 +278,9 @@ export function assertProject(input: unknown): asserts input is Project {
             fail('朝向或参考图错误');
         if (!Number.isInteger(e.count) || e.count < 1 || e.count > 1000 || !n(e.spacing) || e.spacing <= 0 || !n(e.seed))
             fail('群演参数错误');
-        const poseValid = (q: Pose) => q && typeof q === 'object' && !Array.isArray(q) && Object.entries(q).every(([k, v]) => Object.hasOwn(assetJoints(e.asset),k) && n(v) && Math.abs(v) <= 360);
+        assertMemberPaths(e);
+        const poseValid = (q: Pose) => q && typeof q === 'object' && !Array.isArray(q) && Object.entries(q).every(([k, v]) => Object.hasOwn(assetJoints(e.asset),k) &&
+            (Array.isArray(v) ? !isAnimalAsset(e.asset) && v.length === 3 && v.every(angle => n(angle) && Math.abs(angle) <= 360) : n(v) && Math.abs(v) <= 360));
         if (!poseValid(e.pose) || !Array.isArray(e.poseKeys) || e.poseKeys.some(k => !k || !n(k.time) || k.time < 0 || !poseValid(k.pose)))
             fail('姿态数据错误');
         if(new Set(e.poseKeys.map(k=>k.time)).size!==e.poseKeys.length)fail('姿态关键帧时间重复');
@@ -325,9 +337,11 @@ export function assertProject(input: unknown): asserts input is Project {
     }
     assertFloors(p);
     assertZones(p);
+    assertEntityGroups(p);
     assertStructureLinks(p);
     const cameras = p.entities.filter(e => e.kind === 'camera');
     for (const e of p.entities) assertExternalModel(e, p);
+    assertPhysics(p);
     if (!cameras.length)
         fail('至少需要一台摄影机');
     for (const e of p.entities) {
@@ -348,7 +362,8 @@ export function assertProject(input: unknown): asserts input is Project {
         fail('切镜时间或机位错误'); });
     const referenceIds=new Set<string>();
     if(p.entities.filter(e=>e.warp&&e.visible).length>8||p.entities.filter(e=>e.field&&e.visible).length>8)fail('同时启用的空间扭曲或影响区域各最多 8 个；可隐藏暂不用的区域');
-    for(const e of p.entities){assertWarp(e.warp);assertVisual(e.visual);assertField(e.field,p.entities.filter(x=>x.id!==e.id&&x.kind!=='camera'&&!x.field&&!x.warp).map(x=>x.id));assertDeform(e.deform);if(e.asset.startsWith('visual-')&&!e.visual||e.asset.startsWith('field-')&&!e.field||e.asset.startsWith('warp-')&&!e.warp)fail('此资产缺少对应的视觉配置');if(e.warp&&e.asset!=='warp-'+e.warp.type)fail('空间扭曲与资产不匹配');if(e.visual?.cameraId&&!p.entities.some(x=>x.id===e.visual!.cameraId&&x.kind==='camera'))fail('传送门摄影机不存在');if(e.visual && e.asset!=='visual-'+e.visual.preset)fail('视觉元素类型与资产不匹配');if(e.field && e.asset!=='field-'+e.field.type)fail('影响区域与资产不匹配');if(e.deform&&(e.kind==='camera'||e.field||e.warp||e.light))fail('此对象不支持形变');}
+    const fieldTargetIds = p.entities.filter(e => e.kind !== 'camera' && !e.field && !e.warp).map(e => e.id);
+    for(const e of p.entities){assertWarp(e.warp);assertVisual(e.visual);assertField(e.field,fieldTargetIds);assertDeform(e.deform);if(e.asset.startsWith('visual-')&&!e.visual||e.asset.startsWith('field-')&&!e.field||e.asset.startsWith('warp-')&&!e.warp)fail('此资产缺少对应的视觉配置');if(e.warp&&e.asset!=='warp-'+e.warp.type)fail('空间扭曲与资产不匹配');if(e.visual?.cameraId&&!p.entities.some(x=>x.id===e.visual!.cameraId&&x.kind==='camera'))fail('传送门摄影机不存在');if(e.visual && e.asset!=='visual-'+e.visual.preset)fail('视觉元素类型与资产不匹配');if(e.field && e.asset!=='field-'+e.field.type)fail('影响区域与资产不匹配');if(e.deform&&(e.kind==='camera'||e.field||e.warp||e.light))fail('此对象不支持形变');}
     assertMediaResources(p.media);
     for (const e of p.entities) { assertSurface(e.surface,p.media); if(e.surface&&e.visual&&!SURFACE_VISUALS.has(e.visual.preset))fail('此视觉元素不使用网格表面贴图');if(e.deform&&e.visual&&!SURFACE_VISUALS.has(e.visual.preset))fail('此视觉元素不支持网格形变');if(e.surface&&e.light&&(e.asset!=='light-spot'||e.surface.layers.length>1))fail('投影使用聚光灯，每灯一个媒体层');if(e.surface && e.kind==='camera')fail('摄影机不能承载表面贴图'); }
     for (const r of p.references) {

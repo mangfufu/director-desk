@@ -2,9 +2,10 @@ import * as T from 'three';
 import type { Entity } from '../model.ts';
 import { humanShape } from './human-parameters.ts';
 import { makeHuman as makeLegacyHuman, type Rig } from './human-legacy.ts';
-import { material, sphere, cylinder, box } from './geometry.ts';
+import { material, sphere, cylinder } from './geometry.ts';
 import { addHumanDetails } from './human-details.ts';
 import { addHumanCostume } from './human-costume.ts';
+import { humanSurfaces,rebaseHumanSurface,humanSurfaceSlot } from './human-surfaces.ts';
 
 export function makeHuman(e: Entity): Rig {
     const shape = humanShape(e);
@@ -12,38 +13,39 @@ export function makeHuman(e: Entity): Rig {
     const p = shape.proportions;
     const root = new T.Group(), hips = new T.Group(); root.add(hips);
     const skin = material(e.color), jointSkin = material(new T.Color(e.color).multiplyScalar(.91));
+    const surfaces=humanSurfaces(),girth=Math.sqrt(p.girth);
     const joints: Record<string, T.Group> = {};
     function joint(name: string, parent: T.Object3D, x: number, y: number, z = 0) {
         const g = new T.Group(); g.position.set(x, y, z); parent.add(g); joints[name] = g; return g;
     }
     const restHipHeight = p.thigh + p.shin + .037;
     hips.position.y = restHipHeight;
-    sphere(hips, skin, 0, .02, 0, p.pelvis * 1.6, .12, .105 * p.girth);
+    rebaseHumanSurface(surfaces.pelvis(hips,skin,p.pelvis*1.65,.108*p.girth),new T.Vector3(0,.02,0),new T.Vector3(p.pelvis*1.6,.12,.105*p.girth));
     const torso = joint('torso', hips, 0, .08);
     if(p.form!=='skeleton'){
-        sphere(torso, skin, 0, p.torso * .27, 0, p.shoulder * .70, p.torso * .38, .10 * p.girth);
-        sphere(torso, skin, 0, p.torso * .65, 0, p.shoulder * .86, p.torso * .35, .11 * p.girth);
+        rebaseHumanSurface(surfaces.torso(torso,skin,p.torso,p.shoulder*.86,p.shoulder*.65*girth,.11*p.girth),new T.Vector3(0,p.torso*.27,0),new T.Vector3(p.shoulder*.70,p.torso*.38,.10*p.girth));
+        humanSurfaceSlot(torso,new T.Vector3(0,p.torso*.65,0),new T.Vector3(p.shoulder*.86,p.torso*.35,.11*p.girth));
     }
     cylinder(torso, skin, .045, .055, .09, 0, p.torso + .02);
     const head = joint('head', torso, 0, p.torso + .055);
-    sphere(head, skin, 0, p.head, 0, p.head * .64, p.head, p.head * .66);
+    rebaseHumanSurface(surfaces.head(head,skin,p.head),new T.Vector3(0,p.head,0),new T.Vector3(p.head*.64,p.head,p.head*.66));
     sphere(head, skin, 0, p.head * .76, p.head * .67, .018, .025, .026);
     for (const side of ['left', 'right']) {
         const sign = side === 'left' ? -1 : 1;
         const arm = joint(`${side}Arm`, torso, sign * p.shoulder, p.torso * .78);
-        sphere(arm, jointSkin, 0, 0, 0, .05 * Math.sqrt(p.girth));
-        cylinder(arm, skin, .054 * Math.sqrt(p.girth), .037 * Math.sqrt(p.girth), p.upperArm, 0, -p.upperArm / 2);
+        surfaces.joint(arm,skin,.049*girth);
+        surfaces.limb(arm,skin,p.upperArm,.054*girth,.037*girth,.95);
         const elbow = joint(`${side}Elbow`, arm, 0, -p.upperArm);
-        sphere(elbow, jointSkin, 0, 0, 0, .036 * Math.sqrt(p.girth));
-        cylinder(elbow, skin, .039 * Math.sqrt(p.girth), .026, p.forearm, 0, -p.forearm / 2);
-        sphere(elbow, skin, 0, -p.forearm - .045, .012, .033, .057, .025);
+        surfaces.joint(elbow,skin,.034*girth);
+        surfaces.limb(elbow,skin,p.forearm,.042*girth,.026,.93);
+        rebaseHumanSurface(surfaces.hand(elbow,skin,p.forearm),new T.Vector3(0,-p.forearm-.045,.012),new T.Vector3(.033,.057,.025));
         const hip = joint(`${side}Hip`, hips, sign * p.pelvis, 0);
-        cylinder(hip, skin, .081 * Math.sqrt(p.girth), .051, p.thigh, 0, -p.thigh / 2);
+        surfaces.limb(hip,skin,p.thigh,.084*girth,.052,.96);
         const knee = joint(`${side}Knee`, hip, 0, -p.thigh);
-        sphere(knee, jointSkin, 0, 0, 0, .05);
-        cylinder(knee, skin, .052, .029, p.shin, 0, -p.shin / 2);
+        surfaces.joint(knee,skin,.048);
+        surfaces.limb(knee,skin,p.shin,.054,.029,1.03);
         const ankle = joint(`${side}Ankle`, knee, 0, -p.shin);
-        box(ankle, skin, .095, .074, .22, 0, 0, .045, .025);
+        surfaces.foot(ankle,skin);
     }
     root.updateMatrixWorld(true);
     const referenceHeight = new T.Box3().setFromObject(root, true).max.y;

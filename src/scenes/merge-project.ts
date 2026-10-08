@@ -26,6 +26,7 @@ export interface MergeSceneResult {
 /** Pure, atomic merge used by UI and offline/agent workflows. Loading GPU resources belongs to the caller. */
 export function mergeScene(destination: Project, source: Project, options: MergeSceneOptions): MergeSceneResult {
     assertProject(destination); assertProject(source);
+    if(source.extensions&&Object.keys(source.extensions).length)throw Error('含插件数据的戏段请整体打开，或使用对应插件合并');
     if (!options || !Array.isArray(options.offset) || options.offset.length !== 3 || !options.offset.every(Number.isFinite)
         || !Number.isFinite(options.timeOffset) || options.timeOffset < 0 || !['keep', 'reset'].includes(options.scheduling)
         || !['keep', 'insert'].includes(options.cuts) || options.scheduling === 'reset' && options.cuts === 'insert')
@@ -34,10 +35,12 @@ export function mergeScene(destination: Project, source: Project, options: Merge
     const initial = scheduling === 'reset' ? new Map(incoming.entities.map(e => [e.id, { position: entityPosition(e, 0).toArray(), yaw: entityYaw(e, 0, incoming) }])) : null;
     const warnings: string[] = [];
     if (source.lighting) warnings.push('已保留目标场景的全局环境照明；源场景中的独立灯具随对象导入。');
+    if (source.physics) warnings.push('物理对象随场景导入，重力与地面沿用目标场景设置。');
     const reserved = new Set<string>();
     for (const data of [destination, incoming]) {
         data.entities.forEach(e => { reserved.add(e.id); e.clips.forEach(c => reserved.add(c.id)); });
         data.floors?.forEach(f => reserved.add(f.id)); data.zones?.forEach(z => reserved.add(z.id)); data.references.forEach(r => reserved.add(r.id));
+        data.groups?.forEach(g => reserved.add(g.id));
         data.production?.notes.forEach(n => reserved.add(n.id));
     }
     const fresh = () => { let id: string; do { id = crypto.randomUUID(); } while (reserved.has(id)); reserved.add(id); return id; };
@@ -65,6 +68,8 @@ export function mergeScene(destination: Project, source: Project, options: Merge
     if (incoming.zones?.length) p.zones = [...(p.zones ?? []), ...incoming.zones.map(z => ({ ...z, id: zoneMap.get(z.id)!, min: move(z.min), max: move(z.max),
         ...(z.connectsTo ? { connectsTo: z.connectsTo.map(id => zoneMap.get(id)!) } : {}) }))];
     for (const e of incoming.entities) {
+        if (e.physics) { if (scheduling === 'reset') Object.assign(e.physics,{enabled:false,start:0,impulses:[],velocity:[0,0,0],angularVelocity:[0,0,0]});
+            else { e.physics.start += timeOffset; e.physics.impulses.forEach(i => i.time += timeOffset); } }
         const originalId = e.id;
         if(e.visual?.cameraId)e.visual.cameraId=entityMap.get(e.visual.cameraId)!;
         if(e.field)e.field.targets=e.field.targets.map(id=>entityMap.get(id)!);
@@ -123,6 +128,7 @@ export function mergeScene(destination: Project, source: Project, options: Merge
         p.entities.push(e);
     }
     if (incoming.floors?.length) p.floors = [...(p.floors ?? []), ...incoming.floors.map(f => ({ ...f, id: floorMap.get(f.id)!, elevation: f.elevation + offset[1] }))];
+    if (incoming.groups?.length) p.groups = [...(p.groups ?? []), ...incoming.groups.map(g => ({ ...g, id: fresh(), entityIds: g.entityIds.map(id => entityMap.get(id)!) }))];
     if (incoming.editorView) {
         p.editorView ??= emptyEditorView();
         p.editorView.hiddenEntityIds.push(...incoming.editorView.hiddenEntityIds.map(id => entityMap.get(id)!));

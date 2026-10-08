@@ -143,7 +143,7 @@ test('revision conflict reaches the model for correction without replaying a suc
             } });
         const [p] = await host.configure({ baseUrl: `http://127.0.0.1:${server.address().port}/v1`, protocol: 'chat', model: 'mock', stream: false, maxTokens: 1000 });
         const result = await host.run({ profileId: p.id, prompt: '修改当前人物走位' });
-        assert.equal(result.stopped, undefined); assert.equal(requests, 4);
+        assert.equal(result.stopped, undefined, (await host.conversation()).transcript); assert.equal(requests, 4);
         assert.deepEqual(calls.map(c => c.requestId || c.name), ['director_read', 'first', 'stale', 'director_read', 'corrected']);
         assert.match((await host.conversation()).transcript, /REVISION_CONFLICT/);
     } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); await cleanup(directory); }
@@ -234,10 +234,12 @@ test('Discussion can query scene history but rejects forged scene mutations befo
         for (const action of ['list', 'read', 'switch', 'create', 'copy', 'continue', 'rename', 'reorder', 'remove']) {
             await host.newConversation();
             requested = { action, sceneId: 'scene-a' }; calls.length = 0; events.length = 0;
+            if (action === 'read') requested = { ...requested, sections: ['production'], ids: ['actor-a'], details: true };
             const result = await host.run({ profileId: p.id, prompt: '查询前情', mode: 'discuss' });
             const allowed = ['list', 'read'].includes(action);
             assert.equal(Boolean(result.stopped), !allowed);
             assert.deepEqual(calls.map(c => c.name), allowed ? ['director_read', 'director_scene'] : ['director_read']);
+            if (allowed) assert.deepEqual(calls.at(-1).args, requested);
             if (!allowed) assert.match(events.find(e => e.type === 'error').text, /不允许/);
         }
         for (const args of [null, [], {}, { action: 'list', revision: 1 }, { action: 'remove' }]) assert.equal(isDiscussionToolCall('director_scene', args), false);

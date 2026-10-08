@@ -3,12 +3,8 @@ import { templateBuilder } from './template-builder.ts';
 import { defaultLighting } from '../lighting/model.ts';
 import { applyCameraMotion } from '../cinematography/motion-presets.ts';
 
-export const FEATURE_SCENES = [
-    { id: 'light-stage', name: '光影舞台', type: '特色 · 12 秒', detail: '冷暖三点布光、灯光渐变、环绕与光学变焦' },
-    { id: 'dolly-hall', name: '悬疑长廊', type: '特色 · 10 秒', detail: '希区柯克变焦：主体大小稳定，背景空间拉伸' },
-    { id: 'neon-chase', name: '夜街追逐', type: '特色 · 10 秒', detail: '双人奔跑、冷暖街灯、手持晃动与广角畸变' },
-] as const;
-export type FeatureScene = typeof FEATURE_SCENES[number]['id'];
+import { FEATURE_SCENES, type FeatureScene } from './template-catalog.ts';
+export { FEATURE_SCENES, type FeatureScene } from './template-catalog.ts';
 
 /** Ordinary editable projects: examples use the same paths, lights and lens channels as tools. */
 export function createFeatureScene(template: FeatureScene): Project {
