@@ -86,6 +86,7 @@ const extraFiles = ['desktop/main.cjs', 'desktop/preload.cjs', 'desktop/integrat
 extraFiles.push('desktop/automation-files.cjs', 'desktop/model-files.ts', 'desktop/file-host.cjs', 'desktop/files.cjs', 'desktop/update-config.cjs', 'desktop/update-host.cjs', 'desktop/updates.cjs');
 extraFiles.push('desktop/extensions.cjs','desktop/extensions/host.cjs','desktop/extensions/store.cjs','desktop/extensions/worker.cjs');
 extraFiles.push('desktop/mcp-connection.cjs', 'desktop/mcp-stdio.cjs');
+extraFiles.push('desktop/language.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/mcp-stdio.cjs','.audit/desktop-app/desktop/extensions.cjs','.audit/desktop-app/desktop/extension-worker.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/files.cjs', '.audit/desktop-app/desktop/integration.cjs', '.audit/desktop-app/desktop/tools-contract.cjs', '.audit/desktop-app/desktop/updates.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push(...publicSkillFiles.map(file => '.audit/desktop-app/skills/director-desk/' + file));

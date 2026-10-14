@@ -54,6 +54,7 @@ export async function saveUserMotion(motion: UserMotion, resource: ModelResource
     await transaction<void>(['motions', 'resources'], 'readwrite', tx => {
         tx.objectStore('resources').put(resource); tx.objectStore('motions').put(motion);
     });
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('director-motion-library-changed'));
 }
 export async function removeUserMotion(id: string) {
     await transaction<void>(['motions', 'resources'], 'readwrite', tx => {
@@ -65,4 +66,5 @@ export async function removeUserMotion(id: string) {
             count.onsuccess = () => { if (!count.result) tx.objectStore('resources').delete(motion.data.resourceId); };
         };
     });
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('director-motion-library-changed'));
 }

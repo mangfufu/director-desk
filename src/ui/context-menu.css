@@ -1,0 +1,15 @@
+.editor-context-menu {
+    position: fixed; inset: auto; margin: 0; padding: 5px;
+    min-width: 176px; max-width: calc(100vw - 12px);
+    background: #202020; color: #eee; border: 1px solid #494949;
+    border-radius: 7px; box-shadow: 0 10px 32px #0008; outline: none;
+}
+.editor-context-menu > button {
+    display: block; width: 100%; min-height: 30px; padding: 6px 11px;
+    border: 0; border-radius: 4px; background: transparent; color: inherit;
+    font: inherit; font-size: 12px; text-align: left; white-space: nowrap;
+}
+.editor-context-menu > button:hover:not(:disabled),
+.editor-context-menu > button:focus-visible { background: #3b3b3b; outline: none; }
+.editor-context-menu > button:disabled { opacity: .38; cursor: default; }
+.editor-context-menu > [role=separator] { height: 1px; background: #424242; margin: 4px 6px; }

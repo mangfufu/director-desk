@@ -3,6 +3,7 @@ import { isGeometryAsset } from '../assets/creation-mode.ts';
 import { libraryPreferences } from '../assets/library-preferences.ts';
 import type { AppContext } from '../app-context.ts';
 import { escape, options } from './common.ts';
+import { englishText } from '../i18n/locale.ts';
 
 export function createAssetBrowser(ctx: AppContext) {
     let view = localStorage.getItem('director-asset-view') === 'list' ? 'list' : 'grid';
@@ -57,6 +58,10 @@ export function createAssetBrowser(ctx: AppContext) {
         content.querySelectorAll<HTMLElement>('[data-library-view]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.libraryView===view)));
         const favorites = new Set(libraryPreferences.favorites), recent = libraryPreferences.recent;
         let list = searchAssets(ctx.query, ctx.assetFilter);
+        if (ctx.query.trim()) {
+            const ids = new Set(list.map(a => a.id)), words = ctx.query.toLowerCase().trim().split(/\s+/);
+            list = searchAssets('', ctx.assetFilter).filter(a => ids.has(a.id) || words.every(word => `${englishText(a.name)} ${englishText(a.group)}`.toLowerCase().includes(word)));
+        }
         if (ctx.project.creationMode === 'geometry') list = list.filter(a => isGeometryAsset(a.id));
         if (scope === 'favorites') list = list.filter(a => favorites.has(a.id));
         if (scope === 'recent') list = list.filter(a => recent.includes(a.id)).sort((a, b) => recent.indexOf(a.id) - recent.indexOf(b.id));

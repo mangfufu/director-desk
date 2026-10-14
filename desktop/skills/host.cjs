@@ -1,3 +1,4 @@
+const { text } = require('../language.cjs');
 const { dialog, shell } = require('electron');
 const { localPackage } = require('./package.cjs');
 const { githubPackage } = require('./github.cjs');
@@ -22,7 +23,7 @@ function createSkillHost({ store, window, isRunning }) {
                     await store.install(await localPackage(data.path), '本地导入', id);
                     return { skills: await store.list() };
                 }
-                const chosen = await dialog.showOpenDialog(window, { title: data.kind === 'folder' ? '选择包含 SKILL.md 的技能目录' : '选择技能说明',
+                const chosen = await dialog.showOpenDialog(window, { title: data.kind === 'folder' ? text(window, '选择包含 SKILL.md 的技能目录') : text(window, '选择技能说明'),
                     properties: [data.kind === 'folder' ? 'openDirectory' : 'openFile'], ...(data.kind === 'folder' ? {} : { filters: [{ name: '技能说明', extensions: ['md'] }] }) });
                 if (!chosen.canceled && chosen.filePaths[0]) await store.install(await localPackage(chosen.filePaths[0]), '本地导入', id);
             } else if (action === 'github') {

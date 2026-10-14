@@ -14,6 +14,8 @@ try {
     for (const relative of ['src/animation/library/humanoid-v1.json', 'src/animation/library/humanoid-v1-manifest.json',
         'desktop/main.cjs', 'desktop/preload.cjs', 'desktop/integration.cjs', 'desktop/media-import.cjs', 'desktop/file-host.cjs', 'desktop/files.cjs', 'desktop/ai-host.cjs', 'desktop/ai-conversation.cjs', 'desktop/providers.cjs', 'desktop/update-config.cjs', 'desktop/update-host.cjs', 'desktop/updates.cjs',
         'desktop/model-limits.cjs', 'desktop/director-prompt.cjs', 'desktop/mcp-server.cjs', 'desktop/mcp-config.cjs', 'desktop/mcp-host.cjs', 'desktop/mcp-connection.cjs', 'desktop/mcp-stdio.cjs',
+        'desktop/language.cjs', 'desktop/conversation-store.cjs', 'desktop/ai-call-batches.cjs', 'desktop/automation-files.cjs', 'desktop/model-files.ts',
+        'desktop/extensions.cjs', 'desktop/extensions/host.cjs', 'desktop/extensions/store.cjs', 'desktop/extensions/worker.cjs',
         ...publicSkillFiles.map(file => 'skills/director-desk/' + file)]) {
         const destination = path.join(fixture, relative); await fs.mkdir(path.dirname(destination), { recursive: true });
         await fs.copyFile(relative, destination);
@@ -44,7 +46,7 @@ try {
         await fs.copyFile(path.join(fixture, 'skills/director-desk', file), destination);
     }
     await fs.mkdir(path.join(stagedRoot, 'desktop'), { recursive: true });
-    for (const file of ['mcp-stdio.cjs', 'files.cjs', 'integration.cjs', 'tools-contract.cjs', 'updates.cjs'])
+    for (const file of ['mcp-stdio.cjs', 'files.cjs', 'integration.cjs', 'tools-contract.cjs', 'updates.cjs', 'extensions.cjs', 'extension-worker.cjs'])
         await fs.writeFile(path.join(stagedRoot, 'desktop', file), 'module.exports = {};');
     assert.equal(run('--desktop').status, 0);
     for (const file of referenceFiles) {

@@ -1,3 +1,4 @@
+const { text } = require('../language.cjs');
 const {ipcMain,dialog,app,utilityProcess}=require('electron');
 const path=require('node:path');
 const {randomUUID}=require('node:crypto');
@@ -33,7 +34,7 @@ function attachExtensions(window){
         if(args.action==='list')return store.list();
         if(args.action==='read')return store.info(args.id);
         if(args.action==='choose'){
-            const result=await dialog.showOpenDialog(window,{title:'导入插件',properties:[args.directory?'openDirectory':'openFile'],filters:[{name:'导演台插件',extensions:['ddplugin']}]});
+            const result=await dialog.showOpenDialog(window,{title:text(window, '导入插件'),properties:[args.directory?'openDirectory':'openFile'],filters:[{name:text(window, '导演台插件'),extensions:['ddplugin']}]});
             return result.canceled?null:{path:result.filePaths[0]};
         }
         if(args.action==='import')return store.install(args.path);

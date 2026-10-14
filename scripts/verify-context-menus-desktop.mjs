@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {_electron as electron} from 'playwright-core';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+const output=path.resolve('output/playwright/context-menus');await fs.mkdir(output,{recursive:true});
+const profile=await fs.mkdtemp(path.join(output,'desktop-')),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
+const app=await electron.launch({executablePath:createRequire(import.meta.url)('electron'),args:[path.resolve(process.env.DIRECTOR_APP_PATH||'.audit/desktop-app'),`--director-test-profile=${profile}`],env});
+const client=new Client({name:'context-menu-test',version:'1'});
+try{
+    const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',()=>{});
+    await page.locator('#timeline-content .track-lane').first().waitFor();
+    const started=await page.evaluate(()=>window.directorDesktop.mcp(true));assert.equal(started.ok,true);
+    const connection=JSON.parse(await fs.readFile(path.join(profile,'mcp-connection.json'),'utf8'));
+    const token=await app.evaluate(({safeStorage},secret)=>safeStorage.decryptString(Buffer.from(secret,'base64')),connection.secret);
+    await client.connect(new StreamableHTTPClientTransport(new URL(started.data.url),{requestInit:{headers:{Authorization:`Bearer ${token}`}}}));
+    const call=async(name,args)=>{const raw=await client.callTool({name,arguments:args}),r=JSON.parse(raw.content.find(c=>c.type==='text').text);assert.equal(r.ok,true,r.error);return r.data;};
+    const state=await call('director_read',{sections:[]});
+    await call('director_apply',{revision:state.revision,requestId:'context-fixture',operations:[{operation:'add',asset:'human-adult',id:'context-desktop',name:'右键测试',patch:{clips:[{id:'context-action',action:'walk',start:0,end:4,speed:1}]}}]});
+    const read=async()=>{const r=await call('director_read',{ids:['context-desktop'],sections:['entities'],details:true});return r.entities[0];};
+    const entry=id=>page.locator(`[data-context-command="${id}"]`),bar=page.locator('[data-clip-id="context-action"]');
+    await bar.scrollIntoViewIfNeeded();
+    const ruler=await page.locator('.ruler').boundingBox();
+    await page.mouse.click(ruler.x+60,ruler.y+10);
+    await bar.scrollIntoViewIfNeeded();
+    await bar.click({button:'right',position:{x:150,y:12}});await entry('split').click();
+    assert.deepEqual((await read()).clips.map(c=>[c.start,c.end]),[[0,1],[1,4]]);
+    await page.keyboard.press('Control+z');assert.equal((await read()).clips.length,1);
+    await bar.click({button:'right',position:{x:90,y:12}});await entry('delete-clips').click();assert.equal((await read()).clips.length,0);
+    await page.keyboard.press('Control+z');assert.equal((await read()).clips.length,1);
+    const label=page.locator('[data-track-key="entity:context-desktop"] [data-select="context-desktop"]');
+    await label.click({button:'right'});await entry('visibility').click();assert.equal((await read()).visible,false);
+    await page.keyboard.press('Control+z');assert.equal((await read()).visible,true);
+    await page.locator('#shot-canvas canvas').click({button:'right',position:{x:90,y:90}});
+    assert.equal(await entry('camera-properties').count(),1);await page.screenshot({path:path.join(output,'desktop.png')});
+    await entry('export').click();await page.locator('#export-format').waitFor();
+    assert.equal(await page.locator('#export-format').inputValue(),'mp4');await page.locator('[data-act="close-modal"]').first().click();
+    assert.deepEqual(errors,[]);console.log('PASS: isolated desktop context-menu split/delete/hide, undo, MCP readback, shot menu and export dialog');
+}finally{await client.close().catch(()=>{});await app.evaluate(({app})=>app.exit(0)).catch(()=>{});await app.close().catch(()=>{});}

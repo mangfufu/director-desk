@@ -6,6 +6,7 @@ const { attachIntegration } = require('./integration.cjs');
 const { attachUpdates } = require('./updates.cjs');
 const { attachFiles } = require('./files.cjs');
 const { attachExtensions } = require('./extensions.cjs');
+const { attachLanguage, text } = require('./language.cjs');
 
 const origin = 'director://app';
 protocol.registerSchemesAsPrivileged([{ scheme: 'director', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
@@ -22,10 +23,12 @@ async function createWindow() {
     window = new BrowserWindow({ width: 1600, height: 1000, minWidth: 1000, minHeight: 720, show: false,
         title: windowTitle, backgroundColor: '#101214', icon: path.join(__dirname, 'icon.ico'),
         webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck: false } });
+    attachLanguage(window);
     window.on('page-title-updated', (event, title) => {
         event.preventDefault();
         const name = title || '导演台';
-        window.setTitle(!app.isPackaged && !name.endsWith(' · 开发测试版') ? name + ' · 开发测试版' : name);
+        const suffix = ' · ' + text(window, '开发测试版');
+        window.setTitle(!app.isPackaged && !name.endsWith(suffix) ? name + suffix : name);
     });
     const integration = attachIntegration(window), updates = attachUpdates(window, integration);
     const files = attachFiles(window);

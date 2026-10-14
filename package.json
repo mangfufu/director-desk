@@ -1,7 +1,7 @@
 {
   "name": "director-desk",
-  "version": "0.4.11",
-  "shortVersion": "0.4.11",
+  "version": "0.5.0",
+  "shortVersion": "0.5.0",
   "private": true,
   "license": "MIT",
   "type": "module",

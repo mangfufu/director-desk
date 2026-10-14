@@ -12,6 +12,7 @@ release/
 /*
 !/.gitignore
 !/README.md
+!/README.en.md
 !/LICENSE
 !/package.json
 !/package-lock.json
@@ -54,6 +55,9 @@ release/
 !/scripts/verify-render-reuse.mjs
 !/scripts/verify-cinematography.mjs
 !/scripts/verify-timeline.mjs
+!/scripts/verify-motion-library.mjs
+!/scripts/clean-motion-cache.ps1
+!/scripts/clean-motion-cache.cmd
 !/scripts/verify-building.mjs
 !/scripts/verify-model-control.mjs
 !/scripts/verify-creation-mode.mjs
@@ -137,3 +141,9 @@ file-locations.json
 
 !/scripts/verify-human-motion-playback.mjs
 !/scripts/pack-plugin.mjs
+!/scripts/verify-timeline-insertion.mjs
+!/scripts/verify-timeline-insertion-desktop.mjs
+!/scripts/verify-language.mjs
+!/scripts/verify-language-desktop.mjs
+!/scripts/verify-context-menus.mjs
+!/scripts/verify-context-menus-desktop.mjs

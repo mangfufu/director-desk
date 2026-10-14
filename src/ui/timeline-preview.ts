@@ -29,7 +29,7 @@ export function createTimelineDragPreview(ctx:AppContext,initial:TimelineSelecti
         });
     } else {
         const bar=selectedBar;
-        if(bar){set(bar,range.start,range.end);bar.classList.add('clip-selected');if(selection.kind==='path')bar.querySelector('span')!.textContent=`${ctx.project.entities.find(e=>e.id===selection.entityId)?.camera?'运镜':'路径'} ${selection.index+1} · ${(range.end-range.start).toFixed(2)}s`;}
+        if(bar){set(bar,range.start,range.end);if(manageHighlight)bar.classList.add('clip-selected');if(selection.kind==='path')bar.querySelector('span')!.textContent=`${ctx.project.entities.find(e=>e.id===selection.entityId)?.camera?'运镜':'路径'} ${selection.index+1} · ${(range.end-range.start).toFixed(2)}s`;}
     }
     if(duration!==ctx.project.duration){
         duration=ctx.project.duration;

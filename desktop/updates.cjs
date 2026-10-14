@@ -1,3 +1,4 @@
+const { text } = require('./language.cjs');
 const { app, ipcMain, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -17,8 +18,8 @@ function attachUpdates(window, integration) {
         send: state => { if (!window.isDestroyed()) window.webContents.send('director-update-state', state); },
         confirmInstall: async () => {
             if (integration.isBusy()) throw Error('请等待 AI 或工具任务完成后再更新');
-            const choice = dialog.showMessageBoxSync(window, { type: 'question', title: '重启安装更新', message: '现在关闭导演台并安装新版本？',
-                detail: '当前工程的自动恢复副本已保存。对话和渠道配置保留在本机。', buttons: ['稍后', '重启安装'], defaultId: 0, cancelId: 0, noLink: true });
+            const choice = dialog.showMessageBoxSync(window, { type: 'question', title: text(window, '重启安装更新'), message: text(window, '现在关闭导演台并安装新版本？'),
+                detail: text(window, '当前工程的自动恢复副本已保存。对话和渠道配置保留在本机。'), buttons: [text(window, '稍后'), text(window, '重启安装')], defaultId: 0, cancelId: 0, noLink: true });
             return choice === 1;
         },
         install: updater => { quitting = true; updater.once('error', () => { quitting = false; }); updater.quitAndInstall(false, true); },

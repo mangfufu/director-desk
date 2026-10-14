@@ -744,6 +744,22 @@ export class Engine {
         const out = new T.Vector3();
         return ray.ray.intersectPlane(new T.Plane(new T.Vector3(0,1,0), -workingElevation(this.project)), out) ? out.toArray() as Vec3 : null;
     }
+    private entityFromRay(ray: T.Raycaster): string | undefined {
+        const hit = ray.intersectObjects([...this.models.values()], true).find(x => {
+            let node: T.Object3D | null = x.object;
+            while (node) { if (!node.visible) return false; node = node.parent; }
+            return true;
+        });
+        return hit?.object.userData.entityId;
+    }
+    entityAt(clientX: number, clientY: number): string | undefined {
+        const rect = this.editorRenderer.domElement.getBoundingClientRect();
+        if (!rect.width || !rect.height || !this.pickingEnabled) return;
+        const ray = new T.Raycaster(); ray.layers.enable(1);
+        ray.setFromCamera(new T.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), this.editorCamera);
+        this.prepareView(true);
+        try { return this.entityFromRay(ray); } finally { this.prepareView(false); }
+    }
     pick(e: PointerEvent) {
         if (this.drawingPath && this.pathDrawMode === 'freehand') return;
         if (!this.pickingEnabled || e.button !== 0 || this.dragging || this.gizmo.axis || Math.hypot(e.clientX - this.pointerDown[0], e.clientY - this.pointerDown[1]) > 5)
@@ -765,13 +781,8 @@ export class Engine {
             this.cb.point(points.object.userData.pointIndex);
             return;
         }
-        const hit = ray.intersectObjects([...this.models.values()], true).find(x => { let o: T.Object3D | null = x.object; while (o) {
-            if (!o.visible)
-                return false;
-            o = o.parent;
-        } return true; });
-        if (hit)
-            this.cb.select(hit.object.userData.entityId);
+        const id = this.entityFromRay(ray);
+        if (id) this.cb.select(id);
         } finally { this.prepareView(false); }
     }
     getProjectedLabels() {

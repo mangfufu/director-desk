@@ -207,7 +207,7 @@ summary{cursor:pointer;padding:6px 0}
 .resize-handle:hover{background:#eeeeee70}
 .timeline-content .playhead-line{left:calc(var(--timeline-pps,60px) * var(--timeline-playhead,0))}
 .resize-handle::after{content:'';position:absolute;top:25%;bottom:25%;left:50%;border-left:1px solid #eee;pointer-events:none}
-html[data-timeline-drag="move"],html[data-timeline-drag="move"] *{cursor:grabbing!important}
+html[data-timeline-drag="move"],html[data-timeline-drag="move"] *,html[data-timeline-drag="insert"],html[data-timeline-drag="insert"] *{cursor:grabbing!important}
 html[data-timeline-drag="resize"],html[data-timeline-drag="resize"] *{cursor:ew-resize!important}
 html[data-timeline-drag="seek"],html[data-timeline-drag="seek"] *{cursor:crosshair!important}
 .playhead-line{position:absolute;top:0;bottom:0;width:1px;background:#e7e7e7;pointer-events:none;z-index:5}

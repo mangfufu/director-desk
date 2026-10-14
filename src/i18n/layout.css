@@ -1,0 +1,17 @@
+html[lang=en] .topbar{gap:8px}
+html[lang=en] .brand strong{font-size:14px}
+html[lang=en] .application-menu>button{padding-inline:7px}
+html[lang=en] .scene-switcher{min-width:130px}
+html[lang=en] .side-tabs{flex-wrap:wrap;height:auto;min-height:38px}
+html[lang=en] .side-tabs>#creation-mode{margin-left:auto}
+html[lang=en] .view-toolbar{gap:5px}
+html[lang=en] .view-navigation,html[lang=en] .view-editing{flex-wrap:wrap;gap:6px}
+html[lang=en] .transport{flex-wrap:wrap;row-gap:6px}
+html[lang=en] .transport-playback,html[lang=en] .transport-editing{flex-wrap:wrap;gap:6px}
+html[lang=en] .settings-navigation{flex-wrap:wrap}
+html[lang=en] .settings-categories{flex-wrap:wrap}
+html[lang=en] .button-row,html[lang=en] .inspector-tool-actions{flex-wrap:wrap}
+html[lang=en] .native-row,html[lang=en] .field{min-width:0}
+html[lang=en] .field>span{overflow-wrap:anywhere}
+html[lang=en] .key-tools{flex-wrap:wrap}
+html[lang=en] #position-edit-mode{width:155px;min-width:155px}

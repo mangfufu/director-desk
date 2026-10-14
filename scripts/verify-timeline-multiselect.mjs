@@ -26,8 +26,8 @@ try {
     const a = await bar(0).boundingBox();
     await page.mouse.move(a.x + 20, a.y + 12); await page.mouse.down();
     await page.mouse.move(a.x + 140, a.y + 12);
-    assert.deepEqual(await timings(), [[[4, 6], [10, 12]], [[5, 7], [10, 12]]]);
-    await page.mouse.up(); assert.equal(await page.locator('.clip-selected').count(), 2);
+    assert.deepEqual(await timings(), [[[2, 4], [10, 12]], [[3, 5], [10, 12]]]);
+    await page.mouse.up();assert.deepEqual(await timings(), [[[4, 6], [10, 12]], [[5, 7], [10, 12]]]); assert.equal(await page.locator('.clip-selected').count(), 2);
     assert.equal(await page.evaluate(() => !!document.documentElement.dataset.timelineDrag), false);
     await page.keyboard.press('Control+z'); assert.deepEqual(await timings(), [[[2, 4], [10, 12]], [[3, 5], [10, 12]]]);
     await bar(0).click({ modifiers: ['Control'] }); await bar(1).click({ modifiers: ['Control'] });

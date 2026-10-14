@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const invoke = (action, data) => ipcRenderer.invoke('director-host', { action, data });
 contextBridge.exposeInMainWorld('directorDesktop', {
+    setLanguage: language => ipcRenderer.send('director-language', language),
     extensions: data => ipcRenderer.invoke('director-extensions', data),
     onExtensionRequest: callback => {const listener=async(_event,request)=>{try{ipcRenderer.send('director-extension-reply',{id:request.id,result:await callback(request)});}catch(error){ipcRenderer.send('director-extension-reply',{id:request.id,error:error.message});}};ipcRenderer.on('director-extension-request',listener);return()=>ipcRenderer.removeListener('director-extension-request',listener);},
     skills: data => invoke('skills', data),

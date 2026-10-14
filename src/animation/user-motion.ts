@@ -1,3 +1,4 @@
+import { motionPlacement } from './motion-placement.ts';
 import { clone, uid, type Project } from '../model.ts';
 import { sameModelPackage } from '../resources/package-validation.ts';
 import { assertResourceHeader, type ModelResource } from '../resources/project-resources.ts';
@@ -44,12 +45,7 @@ export function insertUserMotion(project: Project, entityId: string, motion: Use
     if (!canRetarget(target)) throw Error('请选择内置人物、群演或已映射的导入人物');
     if (!rigStatus(motion.data.rig).complete) throw Error('请先补齐来源动作的人形骨架映射');
     if (!Number.isFinite(at) || at < 0 || (requestedDuration !== undefined && (!Number.isFinite(requestedDuration) || requestedDuration <= 0))) throw Error('动作时间或时长无效');
-    const duration = Math.max(1, Math.ceil((requestedDuration ?? motion.duration) * project.fps)) / project.fps;
-    let start = Math.round(at * project.fps) / project.fps;
-    for (const clip of [...target.clips].sort((a, b) => a.start - b.start)) {
-        if (start + duration <= clip.start) break;
-        if (start < clip.end) start = Math.ceil(clip.end * project.fps) / project.fps;
-    }
-    target.clips.push({ id: uid(), name: motion.name, action: 'retarget', start, end: start + duration, speed: 1, retarget: clone(motion.data) });
-    target.clips.sort((a, b) => a.start - b.start); project.duration = Math.max(project.duration, start + duration);
+    const { start, end } = motionPlacement(target.clips, at, requestedDuration ?? motion.duration, project.fps);
+    target.clips.push({ id: uid(), name: motion.name, action: 'retarget', start, end, speed: 1, retarget: clone(motion.data) });
+    target.clips.sort((a, b) => a.start - b.start); project.duration = Math.max(project.duration, end);
 }

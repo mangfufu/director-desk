@@ -1,4 +1,5 @@
 import { installDepthControls } from './depth-controls.ts';
+import { bindEditorContextMenus } from './editor-context-menus.ts';
 import { setSelectedEntities, selectedEntities } from '../editor/timeline-selection.ts';
 import { prepareDocumentModels } from '../scenes/document-models.ts';
 import { bindTimelineInput } from './timeline-input.ts';
@@ -32,7 +33,7 @@ export function bindEvents(ctx: AppContext) {
             ctx.sidebarTab = side.dataset.side!;
             ctx.query = '';
             $<HTMLInputElement>('#search').value = '';
-            $<HTMLInputElement>('#search').placeholder = ctx.sidebarTab === 'assets' ? '搜索白模资产' : '搜索场景对象';
+            $<HTMLInputElement>('#search').placeholder = ctx.sidebarTab === 'assets' ? '搜索白模资产' : ctx.sidebarTab === 'motions' ? '搜索动作' : '搜索场景对象';
             ctx.renderSidebar();
             return;
         }
@@ -320,5 +321,6 @@ export function bindEvents(ctx: AppContext) {
             ctx.addAsset(id, point.toArray() as Vec3);
     });
     bindTimelineInput(ctx);
+    bindEditorContextMenus(ctx);
 }
 import { identifyImportedDocument } from '../versions/identity.ts';

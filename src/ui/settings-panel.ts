@@ -3,6 +3,7 @@ import type { AppContext } from '../app-context.ts';
 import { icon } from './common.ts';
 import { editorPreferences, preferenceRanges, type PreferenceKey } from '../editor/preferences.ts';
 import './settings-panel.css';
+import { getLanguage, setLanguage } from '../i18n/locale.ts';
 
 export function mountSettings(ctx:AppContext) {
     const trigger=document.createElement('button');trigger.id='settings-toggle';trigger.className='icon-button subtle';trigger.title='设置';trigger.setAttribute('aria-label','设置');trigger.innerHTML=icon('settings');
@@ -26,6 +27,7 @@ export function mountSettings(ctx:AppContext) {
     trigger.onclick=()=>{
         if(ctx.busy || ctx.history.pending || ctx.draft)return;
         ctx.showModal('设置',`<div class="settings-list">
+            ${row('语言',`<select id="ui-language" aria-label="Language"><option value="zh-CN" ${getLanguage()==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${getLanguage()==='en'?'selected':''}>English</option></select>`)}
             <div class="settings-navigation"><div class="settings-categories" role="group" aria-label="设置分类"><button data-settings-category="navigation" aria-pressed="true">操作与视角</button><button data-settings-category="editing">编辑辅助</button><button data-settings-category="files">保存与软件</button></div><button data-setting="help">操作与快捷键</button></div><section data-settings-panel="navigation">
             ${row('键盘移动速度 / 米每秒',input('navigationSpeed'))}
             ${row('加速倍率 / Shift',input('navigationBoost'))}
@@ -44,6 +46,7 @@ export function mountSettings(ctx:AppContext) {
         </div>`, '<button data-setting="reset" class="subtle">恢复操作偏好默认值</button><button data-act="close-modal">完成</button>');
         document.querySelector('.modal')!.classList.add('preferences-modal');
         const list=document.querySelector('.settings-list')!;
+        list.querySelector<HTMLSelectElement>('#ui-language')!.addEventListener('change',event=>{event.stopPropagation();setLanguage((event.target as HTMLSelectElement).value);});
         list.addEventListener('input',event=>{
             const input=event.target as HTMLInputElement,key=input.dataset.preference as PreferenceKey;
             if(!key)return;event.stopPropagation();

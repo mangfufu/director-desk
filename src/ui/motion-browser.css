@@ -1,0 +1,22 @@
+.motion-browser{display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;flex:1;min-height:0;gap:8px;padding:6px 10px 8px}
+.motion-library-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.motion-library-tools .library-category{flex:1;min-width:110px}
+.motion-library-tools button{font-size:11px;min-height:30px;padding:4px 7px}
+.motion-library-list{min-height:0;display:flex;flex-direction:column}
+.motion-library-item{display:flex;align-items:center;justify-content:flex-start;gap:8px;flex:0 0 54px;width:100%;min-width:0;text-align:left;border:0;border-bottom:1px solid #333;border-radius:3px;padding:6px;background:transparent;cursor:grab}
+.motion-library-item:hover,.motion-library-item[aria-pressed=true]{background:#303030;border-bottom-color:#666}
+.motion-library-item[draggable=false]{cursor:default;opacity:.6}
+.motion-library-item>span:last-child{min-width:0;display:grid;gap:3px}
+.motion-library-item strong{font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.motion-library-item small{font-size:10px;color:#aaa}
+.motion-library-grip{color:#888;font-size:17px}
+.motion-library-page{font:11px Consolas,monospace;color:#aaa}
+.motion-library-add{min-height:30px;font-size:12px}
+.motion-drop-target{outline:1px solid #ddd;outline-offset:-1px;background:#ffffff09}
+.motion-drop-ghost{position:absolute;left:0;top:3px;bottom:3px;min-width:3px;border:1px dashed #eee;border-radius:3px;background:#ffffff30;color:#fff;z-index:12;pointer-events:none;font-size:11px;display:flex;align-items:center;padding:0 6px;white-space:nowrap}
+.motion-drop-status{position:fixed;left:0;top:0;pointer-events:none;z-index:10000;background:#202020;border:1px solid #777;border-radius:5px;color:#eee;padding:6px 9px;font-size:12px;max-width:280px}
+.timeline-drag-floating{position:fixed;left:0;top:0;z-index:10001;pointer-events:none;display:flex;align-items:center;padding:0 8px;min-width:32px;max-width:360px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;background:#454545;border:1px solid #fff;border-radius:3px;box-shadow:0 5px 15px #000b;color:#fff;font-size:11px;will-change:transform}
+.timeline-clip.timeline-drag-origin{opacity:.22}
+.timeline-insert-marker{position:absolute;left:0;top:0;bottom:0;width:2px;background:#fff;z-index:14;pointer-events:none}
+.timeline-insert-marker:before{content:'';position:absolute;left:-4px;top:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:5px solid #fff}
+@container (max-width:320px){.sidebar .side-tabs{flex-wrap:wrap;height:auto;min-height:38px}.sidebar .side-tabs>#creation-mode{margin-left:0}}

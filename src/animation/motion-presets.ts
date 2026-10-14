@@ -1,3 +1,4 @@
+import { motionPlacement } from './motion-placement.ts';
 import { clone, uid, type Project } from '../model.ts';
 import { modelResourceId, type ModelResource } from '../resources/project-resources.ts';
 import { canRetarget } from '../resources/retarget-animation.ts';
@@ -20,15 +21,10 @@ export function insertBuiltinMotion(project: Project, entityId: string, presetId
     if (!Number.isFinite(at) || at < 0) throw Error('动作开始时间必须为非负秒数');
     if (!preset.basicAction && !project.resources?.some(r => r.id === BUILTIN_MOTION_RESOURCE_ID)) throw Error('请通过异步工程操作准备内置动作资源');
     if (requestedDuration !== undefined && (!Number.isFinite(requestedDuration) || requestedDuration <= 0)) throw Error('动作 duration 必须是正秒数');
-    const duration = Math.max(1, Math.ceil((requestedDuration ?? preset.defaultDuration) * project.fps)) / project.fps;
-    let start = Math.round(at * project.fps) / project.fps;
-    for (const clip of [...entity.clips].sort((a, b) => a.start - b.start)) {
-        if (start + duration <= clip.start) break;
-        if (start < clip.end) start = Math.ceil(clip.end * project.fps) / project.fps;
-    }
+    const { start, end } = motionPlacement(entity.clips, at, requestedDuration ?? preset.defaultDuration, project.fps);
     const rig = builtinMotionRig();
-    entity.clips.push(preset.basicAction ? { id: uid(), action: preset.basicAction, start, end: start + duration, speed: 1 } : { id: uid(), action: 'retarget', start, end: start + duration, speed: 1,
+    entity.clips.push(preset.basicAction ? { id: uid(), action: preset.basicAction, start, end, speed: 1 } : { id: uid(), action: 'retarget', start, end, speed: 1,
         retarget: { resourceId: BUILTIN_MOTION_RESOURCE_ID, index: preset.index!, loop: preset.loop, rig, unitScale: 1, orientation: [0, 0, 0], blend: .2,
             ...(preset.group === '移动' ? { motion: { mode: 'inPlace', node: rig.bones.hips! } as const } : {}) } });
-    entity.clips.sort((a, b) => a.start - b.start); project.duration = Math.max(project.duration, start + duration);
+    entity.clips.sort((a, b) => a.start - b.start); project.duration = Math.max(project.duration, end);
 }

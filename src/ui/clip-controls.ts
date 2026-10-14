@@ -40,13 +40,15 @@ export function bindClipControls(ctx:AppContext) {
             if(ctx.change(()=>{setClipRange(ctx.project,s,frame(Number(a.value)),frame(Number(b.value)));},false))ctx.closeModal();
         };
     });
+    const remove=()=>run(()=>{const group=ordered();if(group.length && ctx.change(()=>group.forEach(s=>deleteClip(ctx.project,s)),false)){selectClip(null);ctx.renderTimeline();}});
     document.addEventListener('click',ev=>{ const el=(ev.target as HTMLElement).closest<HTMLElement>('[data-edit-path-section]'); if(el){selectClip({kind:'path',entityId:el.dataset.owner!,index:Number(el.dataset.editPathSection)});trim();} });
     $('#timeline-content').addEventListener('edit-selected-clip',trim);
+    $('#timeline-content').addEventListener('delete-selected-clips',remove);
     $('#timeline-split').addEventListener('click',split);
     $('#timeline-trim').addEventListener('click',trim);
     document.addEventListener('keydown',ev=>{
         if(['INPUT','TEXTAREA','SELECT'].includes((ev.target as HTMLElement).tagName) || $('#modal-root').children.length) return;
         if((ev.ctrlKey||ev.metaKey) && ev.code==='KeyB') {ev.preventDefault();ev.stopImmediatePropagation();split();}
-        if(ev.key==='Delete' && $('#timeline-content').contains(document.activeElement) && currentClipSelection()) {ev.preventDefault();ev.stopImmediatePropagation();run(()=>{const group=ordered();if(ctx.change(()=>group.forEach(s=>deleteClip(ctx.project,s)),false)){selectClip(null);ctx.renderTimeline();}});}
+        if(ev.key==='Delete' && $('#timeline-content').contains(document.activeElement) && currentClipSelection()) {ev.preventDefault();ev.stopImmediatePropagation();remove();}
     },true);
 }

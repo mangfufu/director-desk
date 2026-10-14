@@ -77,7 +77,7 @@ export function createUserMotionPanel(ctx: AppContext) {
     function renderList() {
         const filtered = entries.filter(m => `${m.name} ${m.id}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
         page = Math.max(0, Math.min(page, Math.ceil(filtered.length / 5) - 1));
-        $('#user-motion-list').innerHTML = filtered.slice(page * 5, page * 5 + 5).map(m => `<button data-user-motion-id="${escape(m.id)}" class="${motion?.id === m.id ? 'active' : ''}" title="${escape(m.name)}"><span>${escape(m.name)}</span><small>${m.duration.toFixed(2)} 秒${rigStatus(m.data.rig).complete ? '' : ' · 待映射'}</small></button>`).join('') || '<p class="panel-help">没有匹配的收藏动作</p>';
+        $('#user-motion-list').innerHTML = filtered.slice(page * 5, page * 5 + 5).map(m => `<button data-user-motion-id="${escape(m.id)}" class="${motion?.id === m.id ? 'active' : ''}" title="${escape(m.name)}"><span data-i18n-ignore>${escape(m.name)}</span><small>${m.duration.toFixed(2)} 秒${rigStatus(m.data.rig).complete ? '' : ' · 待映射'}</small></button>`).join('') || '<p class="panel-help">没有匹配的收藏动作</p>';
         $('#user-motion-pages').innerHTML = `<button data-user-motion-page="-1" ${page ? '' : 'disabled'}>上一页</button><span>${page + 1} / ${Math.max(1, Math.ceil(filtered.length / 5))}</span><button data-user-motion-page="1" ${(page + 1) * 5 < filtered.length ? '' : 'disabled'}>下一页</button>`;
     }
     async function select(id: string) {

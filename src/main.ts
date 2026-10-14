@@ -1,4 +1,6 @@
 import { extensionHost } from './plugins/extension-host.ts';
+import { mountLocalization } from './i18n/dom.ts';
+import { t, onLanguageChange } from './i18n/locale.ts';
 import './plugins/extension-panels.css';
 import { renderDepthControls } from './ui/depth-controls.ts';
 import { setSelectedEntities, selectedEntities } from './editor/timeline-selection.ts';
@@ -170,9 +172,10 @@ else if (e.kind === 'camera')
     inspectorTab = 'camera';
 else if (!['base', 'path', 'actions', 'pose', 'structure'].includes(inspectorTab) || e.kind === 'prop' && ['actions', 'pose'].includes(inspectorTab))
     inspectorTab = 'base'; engine.select(id); renderPanels(); }
+function updateWindowTitle() { document.title = `${project.name} · ${t('导演台')}${import.meta.env.DEV ? ' · ' + t('开发测试版') : ''}`; }
 function renderPanels() {
     renderDepthControls(project);
-    document.title = `${project.name} · 导演台${import.meta.env.DEV ? ' · 开发测试版' : ''}`;
+    updateWindowTitle();
     renderSceneSwitcher(uiContext);
     $('#aspect').value = project.aspect;
     document.querySelectorAll<HTMLElement>('[data-creation-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.creationMode === (project.creationMode ?? 'full'))));
@@ -204,7 +207,7 @@ function updateTimeUI() {
     $('#shot-time').textContent = timeCode(time);
     $('#timeline-content').style.setProperty('--timeline-playhead', String(time));
     const play = $<HTMLButtonElement>('[data-act="play"]');
-    const label = playing ? '暂停' : '播放';
+    const label = t(playing ? '暂停' : '播放');
     // Preserve the pointer target between press and release, including a slow click.
     if (play.getAttribute('aria-label') !== label) {
         play.innerHTML = icon(playing ? 'pause' : 'play');
@@ -217,7 +220,7 @@ function frameText(id: string, value: string) { const node=frameFields.get(id)!;
 engine.onFrame = () => {
     frameText('object-snap-status', engine.objectSnapEnabled && engine.objectSnapTarget ? `已吸附：${engine.objectSnapTarget}` : '');
     const camera = engine.cameraEntity();
-    frameText('shot-name', camera.name + (preview === 'program' ? ' · 成片' : ''));
+    frameText('shot-name', camera.name + (preview === 'program' ? ' · ' + t('成片') : ''));
     frameText('shot-lens', `${camera.camera!.focal} mm · ${project.aspect}`);
     const p = engine.getShotCamera().position, r = project.room;
     const outside = r.enabled && (Math.abs(p.x) > r.width / 2 || Math.abs(p.z) > r.depth / 2 || p.y > r.height || p.y < 0);
@@ -299,7 +302,7 @@ function frame(now: number) { const delta = Math.min((now - previousFrame) / 100
     }
     navigation.update(delta);
     extensionHost(uiContext).poll();
-    if (playing || time !== engine.time || history.pending || draft || engine.dragging) engine.sample(time);
+    if (playing || time !== engine.time || (history.pending && document.documentElement.dataset.timelineDrag !== 'insert') || draft || engine.dragging) engine.sample(time);
     engine.render(false);
     if (now - lastUI > 50) {
         updateTimeUI();
@@ -349,6 +352,8 @@ mountUpdates(async run => {
 });
 mountApplicationMenu();
 renderPanels();
+mountLocalization();
+onLanguageChange(updateWindowTitle); updateWindowTitle();
 engine.select(selected);
 requestAnimationFrame(frame);
 void recoverSession().then(async restored => { const p = restored?.document; if (p && restored && revision === 0) {
@@ -372,7 +377,7 @@ window.addEventListener('beforeunload', event => { if (dirty || busy || history.
     event.returnValue = '';
 } });
 if (import.meta.env.DEV) {
-    if (!document.title.endsWith(' · 开发测试版')) document.title += ' · 开发测试版';
+    updateWindowTitle();
     Object.assign(window, { __director: { callTool: (name: string, args: Record<string, unknown> = {}) => toolService.call(name, args), getProject: () => clone(project), getDocument: () => history.document(), getEngine: () => engine, setTime: (t: number) => { playing = false; seek(t); }, setPreview: (id: string) => { preview = id; renderCameras(); }, replaceProject: (p: Project | SceneDocument) => { selectClip(null);project = history.reset(p); revision++; selected = project.entities[0].id; time = 0; engine.rebuild(project); renderPanels(); }, signature: () => engine.projectionSignature(), exportForTest: async (opts: Parameters<typeof import('./export.ts')['exportVideo']>[1]) => { const { exportVideo } = await import('./export.ts'); const blob = await exportVideo(engine, opts, new AbortController().signal, () => { }); return blob ? Array.from(new Uint8Array(await blob.arrayBuffer())) : []; } } });
 }
 function renderSidebar() { sidebarUI.renderSidebar(); }

@@ -48,6 +48,7 @@ try {
     await fs.writeFile('desktop/icon.icns', Buffer.concat([icnsHeader, icons]));
 } finally { await browser.close(); }
 await fs.copyFile('desktop/main.cjs', path.join(desktopRoot, 'desktop/main.cjs'));
+await fs.copyFile('desktop/language.cjs', path.join(desktopRoot, 'desktop/language.cjs'));
 await fs.copyFile('desktop/preload.cjs', path.join(desktopRoot, 'desktop/preload.cjs'));
 await build({entryPoints:['desktop/extensions.cjs'],outfile:path.join(desktopRoot,'desktop/extensions.cjs'),bundle:true,platform:'node',format:'cjs',external:['electron'],sourcemap:false,minify:true});
 await build({entryPoints:['desktop/extensions/worker.cjs'],outfile:path.join(desktopRoot,'desktop/extension-worker.cjs'),bundle:true,platform:'node',format:'cjs',sourcemap:false,minify:true});
