@@ -1,9 +1,10 @@
 const { parseReleaseVersion } = require('./release-version.cjs');
+const { updateTarget } = require('./update-platform.cjs');
 const GITHUB_REPOSITORY = 'mangfufu/director-desk';
 const GITHUB_RELEASE_PAGE = `https://github.com/${GITHUB_REPOSITORY}/releases/latest`;
 
 /** Detect releases even when older uploads have no electron-updater metadata. */
-async function githubRelease(fetcher = fetch) {
+async function githubRelease(fetcher = fetch, platform = process.platform, arch = process.arch) {
     const response = await fetcher(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`, {
         signal: AbortSignal.timeout(10000), redirect: 'error', headers: { Accept: 'application/vnd.github+json' },
     });
@@ -15,7 +16,8 @@ async function githubRelease(fetcher = fetch) {
     if (!version || release.draft || release.prerelease) throw Error('Invalid stable release');
     const tag = encodeURIComponent(release.tag_name), page = `https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}`;
     const names = new Set((release.assets || []).filter(asset => asset.state === 'uploaded').map(asset => asset.name));
-    const canDownload = names.has('latest.yml') && names.has(`DirectorDesk-Setup-${version}.exe`);
+    const target = updateTarget(platform, arch);
+    const canDownload = target && names.has(target.metadata) && names.has(target.artifact(version));
     return { version, notes: typeof release.body === 'string' ? release.body : '', page,
         feed: canDownload ? { provider: 'generic', url: `https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/` } : null };
 }

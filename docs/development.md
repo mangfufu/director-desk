@@ -18,7 +18,7 @@ npm run dev
 npm run desktop:dev
 ```
 
-这个命令复用 `desktop:prepare`，先构建网页与独立桌面运行目录，再启动 Electron，无需制作安装包。Windows 和 macOS 使用同一命令。首次使用需安装本机 Chrome，或通过 `CHROME_PATH` 指定 Chrome 路径。
+这个命令复用 `desktop:prepare`，先构建网页与独立桌面运行目录，再启动 Electron，无需制作安装包。Windows、macOS 和 Linux 使用同一命令。首次使用需安装本机 Chrome/Chromium，或通过 `CHROME_PATH` 指定浏览器可执行文件路径。
 
 开发版默认将配置、会话和自动恢复数据保存在 `.local/desktop-dev-profile/`，与安装版分开，重启后保留。源码修改后重新运行 `desktop:dev`；此入口不提供热更新。如果没有改代码，只想再次打开已经准备好的版本，可以运行：
 
@@ -53,6 +53,24 @@ npm run desktop:pack:mac
 网页产物位于 `dist/`，桌面交付文件位于 `release/`（Windows 为 `DirectorDesk-Setup-<版本>.exe`，macOS 为 `DirectorDesk-<版本>-arm64.dmg`）。桌面构建使用本机 Chrome，可通过 `CHROME_PATH` 指定浏览器。macOS 包未做签名和公证，首次打开如被 Gatekeeper 拦截，请右键点击应用选择“打开”；macOS 版暂不支持应用内自动更新，请从发布页下载新版本。
 
 发布 Windows GitHub Release 时，将构建生成的 `release/latest.yml` 与同版本安装包一起上传，保留文件名。更新客户端按清单校验下载包；缺少清单的历史 Release 仍可检测版本并打开下载页。
+
+### Linux / WSL 验证
+
+在 Linux 文件系统中的独立目录执行 `npm ci`，不要与 Windows 共用 `node_modules`。运行 `npm run desktop:pack:linux` 生成 x64 AppImage、tar.gz 和 `latest-linux.yml`。AppImage 添加执行权限后直接启动，支持检查、下载及重启更新；请放在用户可写目录。tar.gz 解压后运行 `./DirectorDesk`，此格式仍需手动更新。
+
+Linux 与 Windows 共用更新界面和版本规则。官网 Linux 更新目录为 `https://bigthat.me/updates/linux-x64/`；GitHub Release 需同时上传 `DirectorDesk-<版本>-linux-x64.AppImage`、tar.gz、`latest-linux.yml` 及校验文件。缺少 Linux 更新资产时只提供下载页，不下载 Windows 安装包。旧 Linux 配置中的官方 Windows 地址会迁移，用户自定义地址保留。
+
+`node scripts/prepare-linux-update.mjs` 校验构建输出并暂存到 `output/linux-update`，不发布。正式发布时可用第二个位置参数指定官网的 `.local/update-server/public/linux-x64`（第一个位置参数为 `release`）；元数据最后切换。官网服务需包含 Linux 下载路由。不要以测试包覆盖已发布的同版本。
+
+WSL 2 验证使用 Ubuntu 24.04 和 WSLg。除 GTK、NSS 等 Electron 运行依赖外，AI 密钥与 MCP 凭据需要可用的桌面密钥环及 D-Bus 会话（如 GNOME Keyring）。无密钥环时不应以明文保存替代。若 NVIDIA 显卡在 WSL 中被误选为 llvmpipe 软件渲染，可在本次启动时设置 `GALLIUM_DRIVER=d3d12 MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`，不把此配置写成其他 Linux 机器的默认值。
+
+WSLg 手动拖动诊断记录到鼠标按下／松开使用 `pointerId=1`，中间移动却是 `pointerType=pen,pointerId=2`，造成时间轴只在松手更新。主进程仅在 WSL 桌面启用对应输入兼容；没有独立按下的主指针移动可继续当前鼠标拖动，真正另行按下的笔／触屏仍隔离，其他环境保持严格匹配。`node scripts/verify-timeline-insertion-desktop.mjs` 包含这一事件序列的回归检查，验证松手前时间码与 3D 重绘、无关触控事件隔离及松手／失焦清理；已在 Windows 和 WSL Electron 中验证，不代表所有 Linux 输入设备已实测。
+
+复用 `npm test`、`node scripts/verify-context-menus-desktop.mjs` 和 `node scripts/test-mcp-files-desktop.mjs`，分别检查共用逻辑、桌面交互及 MCP 文件和视频流程。打包后运行 `node scripts/verify-linux-package.mjs`，验证 Linux 可执行文件、WebGL、密钥环、MCP 和更新模式。WSL 验证不代表其他发行版、桌面环境和原生显卡驱动均已验收。
+
+2026-10-18 在上述 WSL 环境验证：561 项自动测试全部通过；桌面右键、分割、撤销、MCP、工程保存与打开、OBJ 与动作导入、普通 MP4 和批量深度视频导出通过。测试使用独立工程、D-Bus 会话及密钥环，不使用真实模型 API 或用户配置。
+
+同日在隔离目录中以两个 AppImage 测试版本完成 `0.5.0 → 0.5.0.1` 真实升级，覆盖界面下载、损坏包拒绝、网络错误重试、目录权限检查、取消、替换及重新启动。新进程 MCP 报告 `0.5.0.1`，工程文件、编辑设置、对话记录和 MCP 配置保留；这两个版本号仅用于测试，未发布。复现命令：`node scripts/test-linux-update.mjs <旧 AppImage 路径> <包含新 AppImage 与 latest-linux.yml 的目录>`，需 OpenSSL、可用桌面密钥环和 WSLg/Linux 桌面。测试仅为临时本机 HTTPS 服务信任其生成的证书，不改变产品证书验证。
 
 从 0.4.8 起支持四段修订号，例如 `0.4.8.1`。三段版本在 `package.json` 的 `version` 与 `shortVersion` 中填写相同值；四段版本使用 `version: "0.4.8+revision.1"`、`shortVersion: "0.4.8.1"`，以兼容 npm 和 Electron。界面、安装包文件名与 GitHub 标签使用四段版本；构建生成的更新清单保留原样即可。更新按四段数字比较，`0.4.8 < 0.4.8.1 < 0.4.9`；早于 0.4.8 的客户端需先升级到 0.4.8。
 

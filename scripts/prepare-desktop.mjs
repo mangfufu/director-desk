@@ -23,8 +23,12 @@ for (const { file } of manifest.files) {
     await fs.copyFile(path.join('dist', file), destination);
 }
 // Rasterize the existing public vector product mark, then wrap its PNG as Windows and macOS icons.
-const executablePath = process.env.CHROME_PATH || (process.platform === 'darwin'
-    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : path.join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe'));
+const candidates = process.platform === 'darwin' ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
+    : process.platform === 'win32' ? [path.join(process.env.ProgramFiles || 'C:/Program Files', 'Google/Chrome/Application/chrome.exe')]
+    : ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+const executablePath = process.env.CHROME_PATH || (await Promise.all(candidates.map(async candidate =>
+    await fs.access(candidate).then(() => candidate, () => null)))).find(Boolean);
+if (!executablePath) throw Error('Chrome/Chromium not found. Install it or set CHROME_PATH to its executable.');
 const browser = await chromium.launch({ executablePath, headless: true });
 try {
     const page = await browser.newPage();

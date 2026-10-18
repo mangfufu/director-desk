@@ -8,11 +8,11 @@ DirectorDesk is a 3D previsualization tool for AI video creators. Use simple mod
 
 Work directly in the editor, or connect an AI agent that can build and edit the scene for you.
 
-[Download for Windows](https://github.com/mangfufu/director-desk/releases/latest) · [Release notes](https://github.com/mangfufu/director-desk/releases) · [Report an issue](https://github.com/mangfufu/director-desk/issues) · [Agent skill](skills/director-desk/)
+[Download for Windows / Linux](https://github.com/mangfufu/director-desk/releases/latest) · [Release notes](https://github.com/mangfufu/director-desk/releases) · [Report an issue](https://github.com/mangfufu/director-desk/issues) · [Agent skill](skills/director-desk/)
 
 ![DirectorDesk: stage view on the left, camera view on the right, and the timeline below](docs/images/workspace-0.4.10.jpg)
 
-Latest release: **[0.5.0](https://github.com/mangfufu/director-desk/releases/tag/v0.5.0)** — English UI, drag-and-drop actions, context menus, and improved timeline insertion. Screenshots below are from 0.4.10 and show the Chinese interface.
+Latest release: **[0.5.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.1)** — Linux packages, in-app updates for AppImage, and fixes for timeline scrubbing in WSL and AI tool calls. Screenshots below are from 0.4.10 and show the Chinese interface.
 
 ## From an idea to a reference video
 
@@ -102,7 +102,9 @@ An abstract scene with particles, thin-film surfaces, mirrors, and deformation:
 
 Get the **Windows installer** or **portable ZIP** from [Releases](https://github.com/mangfufu/director-desk/releases/latest). For the portable edition, extract the entire ZIP before running `DirectorDesk.exe`. Both editions include the agent skill.
 
-Set your default project and export folders in Settings. Updates can be checked against the website and GitHub. The installed edition can download an update and restart to install it; portable users download the new ZIP.
+**Linux x64:** download the AppImage, make it executable, and run it. Alternatively, extract the tar.gz archive and run `DirectorDesk`. Both include the agent skill. Tested on Ubuntu 24.04 under WSL 2.
+
+Set your default project and export folders in Settings. Updates can be checked against the website and GitHub. The Windows installer edition and Linux AppImage support downloading an update and restarting to apply it. ZIP and tar.gz users replace the app manually. Keep the AppImage in a folder you can write to.
 
 Choose **English** or **简体中文** under **Edit → Settings → Language**. Your choice is remembered. Project names, dialogue, prompts, and AI conversations stay as you wrote them.
 

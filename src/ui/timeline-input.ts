@@ -95,14 +95,25 @@ export function bindTimelineInput(ctx: AppContext) {
         };
         // Follow the pointer immediately; coalesce destination planning once per frame.
         const follow=()=>{if(movePreview&&(moved||Math.hypot(x-startX,y-ev.clientY)>3)){moved=true;movePreview.follow(x,y);}};
-        const move=(e:PointerEvent)=>{if(e.pointerId===ev.pointerId){if(!(e.buttons&1)){cleanup?.();return;}x=e.clientX;y=e.clientY;follow();if(insertDrag){if(!planFrame)planFrame=requestAnimationFrame(()=>{planFrame=0;apply();});}else apply();}};
+        // WSLg can split one physical mouse drag into mouse press/up and pen
+        // motion. Accept that orphan primary stream only in WSL; a real second
+        // pointerdown excludes the pointer so pen/touch gestures remain separate.
+        const foreignPointers=new Set<number>();
+        const otherDown=(e:PointerEvent)=>{if(e.pointerId!==ev.pointerId)foreignPointers.add(e.pointerId);};
+        const matchesPointer=(e:PointerEvent)=>e.pointerId===ev.pointerId || (
+            !!window.directorDesktop?.wslPointerInput && ev.pointerType==='mouse' && e.isPrimary &&
+            (e.pointerType==='mouse'||e.pointerType==='pen') && !foreignPointers.has(e.pointerId)
+        );
+        const moveTo=(e:MouseEvent)=>{if(!(e.buttons&1)){cleanup?.();return;}if(x===e.clientX&&y===e.clientY)return;x=e.clientX;y=e.clientY;follow();if(insertDrag){if(!planFrame)planFrame=requestAnimationFrame(()=>{planFrame=0;apply();});}else apply();};
+        const move=(e:PointerEvent)=>{if(matchesPointer(e))moveTo(e);};
         const scroll=()=>{follow();apply();};
-        const up=(e:PointerEvent)=>{if(e.pointerId===ev.pointerId){if(e.type==='pointerup'){x=e.clientX;y=e.clientY;follow();apply();}cleanup?.(e.type==='pointercancel');}};
+        const up=(e:PointerEvent)=>{if(matchesPointer(e)){if(e.type==='pointerup'){x=e.clientX;y=e.clientY;follow();apply();}cleanup?.(e.type==='pointercancel');}};
         const lostCapture=(e:PointerEvent)=>{if(e.pointerId===ev.pointerId)cleanup?.();};
         const mouseUp=(e:MouseEvent)=>{if(e.button===0)cleanup?.();};
         cleanup=(cancel=false)=>{
             cleanup=undefined;
             cancelAnimationFrame(raf);cancelAnimationFrame(planFrame); document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);document.removeEventListener('pointercancel',up);
+            document.removeEventListener('pointerdown',otherDown,true);
             timeline.removeEventListener('scroll',scroll);
             timeline.removeEventListener('lostpointercapture',lostCapture);window.removeEventListener('mouseup',mouseUp,true);
             delete document.documentElement.dataset.timelineDrag;
@@ -126,6 +137,7 @@ export function bindTimelineInput(ctx: AppContext) {
             }catch(e){setSelectedClips(group);ctx.project=ctx.history.rollback()??before;ctx.engine.rebuild(ctx.project);ctx.renderPanels();if(!cancel)ctx.toast((e as Error).message,true);}
         };
         timeline.addEventListener('scroll',scroll);timeline.addEventListener('lostpointercapture',lostCapture);window.addEventListener('mouseup',mouseUp,true);document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);document.addEventListener('pointercancel',up);raf=requestAnimationFrame(tick);
+        document.addEventListener('pointerdown',otherDown,true);
     });
     window.addEventListener('blur',()=>cleanup?.(true));
     document.addEventListener('visibilitychange',()=>{if(document.hidden)cleanup?.(true);});

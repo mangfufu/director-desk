@@ -3,26 +3,33 @@ const { app, ipcMain, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { NsisUpdater } = require('electron-updater/out/NsisUpdater');
+const { AppImageUpdater } = require('electron-updater/out/AppImageUpdater');
+const { updateMode, assertAppImageWritable } = require('./update-platform.cjs');
 const { withRevisionVersions } = require('./revision-updater.cjs');
-const RevisionUpdater = withRevisionVersions(NsisUpdater);
+const RevisionUpdater = withRevisionVersions(process.platform === 'linux' ? AppImageUpdater : NsisUpdater);
 const { createUpdateConfig } = require('./update-config.cjs');
 const { createUpdateHost } = require('./update-host.cjs');
 const { githubRelease } = require('./github-release.cjs');
 function attachUpdates(window, integration) {
     let quitting = false;
-    // The updater chain (NsisUpdater + quitAndInstall) is Windows-specific; packaged mac builds only offer the release page.
-    const mode = !app.isPackaged ? 'development' : process.platform === 'darwin' ? 'unsupported'
-        : fs.existsSync(path.join(path.dirname(app.getPath('exe')), 'portable.json')) ? 'portable' : 'installed';
+    const mode = updateMode({ packaged: app.isPackaged,
+        portable: fs.existsSync(path.join(path.dirname(app.getPath('exe')), 'portable.json')) });
     const host = createUpdateHost({ version: app.getVersion(), mode, config: createUpdateConfig(app.getPath('userData')),
         makeUpdater: feed => new RevisionUpdater(feed), getGithubRelease: githubRelease,
         send: state => { if (!window.isDestroyed()) window.webContents.send('director-update-state', state); },
         confirmInstall: async () => {
             if (integration.isBusy()) throw Error('请等待 AI 或工具任务完成后再更新');
+            if (process.platform === 'linux') assertAppImageWritable(process.env.APPIMAGE);
             const choice = dialog.showMessageBoxSync(window, { type: 'question', title: text(window, '重启安装更新'), message: text(window, '现在关闭导演台并安装新版本？'),
                 detail: text(window, '当前工程的自动恢复副本已保存。对话和渠道配置保留在本机。'), buttons: [text(window, '稍后'), text(window, '重启安装')], defaultId: 0, cancelId: 0, noLink: true });
             return choice === 1;
         },
-        install: updater => { quitting = true; updater.once('error', () => { quitting = false; }); updater.quitAndInstall(false, true); },
+        install: updater => {
+            if (process.platform === 'linux') assertAppImageWritable(process.env.APPIMAGE);
+            quitting = true;
+            updater.once('error', () => { quitting = false; });
+            try { updater.quitAndInstall(false, true); } catch (error) { quitting = false; throw error; }
+        },
         openPage: url => shell.openExternal(url),
     });
     ipcMain.handle('director-updates', async (event, input) => {

@@ -22,7 +22,8 @@ async function createWindow() {
     const windowTitle = app.isPackaged ? '导演台' : '导演台 · 开发测试版';
     window = new BrowserWindow({ width: 1600, height: 1000, minWidth: 1000, minHeight: 720, show: false,
         title: windowTitle, backgroundColor: '#101214', icon: path.join(__dirname, 'icon.ico'),
-        webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck: false } });
+        webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck: false,
+            additionalArguments: process.platform==='linux' && process.env.WSL_DISTRO_NAME ? ['--director-wsl-pointer'] : [] } });
     attachLanguage(window);
     window.on('page-title-updated', (event, title) => {
         event.preventDefault();

@@ -21,7 +21,7 @@ try {
         $relative = $file.FullName.Substring($payloadRoot.Length + 1).Replace('\', '/')
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, "DirectorDesk-$version/$relative", [IO.Compression.CompressionLevel]::Optimal) | Out-Null
     }
-    $notes = Get-ChildItem -LiteralPath $releaseRoot -File | Where-Object { $_.Name -like "*-$version-*.txt" }
+    $notes = Get-Item -LiteralPath (Join-Path $releaseRoot "DirectorDesk-$version-README.txt")
     if (@($notes).Count -ne 1) { throw 'Expected one release notes file' }
     [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $notes.FullName, "DirectorDesk-$version/README.txt", [IO.Compression.CompressionLevel]::Optimal) | Out-Null
 } finally { $archive.Dispose() }

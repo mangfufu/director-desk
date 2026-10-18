@@ -77,17 +77,17 @@ test('GitHub discovery accepts stable releases with or without metadata and uses
         assert.equal(options.redirect, 'error'); assert.equal(options.headers.Authorization, undefined);
         return new Response(JSON.stringify(release));
     };
-    const manual = await githubRelease(fetcher); assert.equal(manual.version, '1.2.3'); assert.equal(manual.feed, null);
+    const manual = await githubRelease(fetcher, 'win32', 'x64'); assert.equal(manual.version, '1.2.3'); assert.equal(manual.feed, null);
     assert.equal(manual.page, 'https://github.com/mangfufu/director-desk/releases/tag/v1.2.3');
     release.assets = ['latest.yml', 'DirectorDesk-Setup-1.2.3.exe'].map(name => ({ name, state: 'uploaded' }));
-    assert.equal((await githubRelease(fetcher)).feed.url, 'https://github.com/mangfufu/director-desk/releases/download/v1.2.3/');
+    assert.equal((await githubRelease(fetcher, 'win32', 'x64')).feed.url, 'https://github.com/mangfufu/director-desk/releases/download/v1.2.3/');
     release.tag_name = 'v0.4.7.1';
     release.assets = ['latest.yml', 'DirectorDesk-Setup-0.4.7.1.exe'].map(name => ({ name, state: 'uploaded' }));
-    const revision = await githubRelease(fetcher);
+    const revision = await githubRelease(fetcher, 'win32', 'x64');
     assert.equal(revision.version, '0.4.7.1');
     assert.equal(revision.feed.url, 'https://github.com/mangfufu/director-desk/releases/download/v0.4.7.1/');
-    release.prerelease = true; await assert.rejects(githubRelease(fetcher)); release.prerelease = false;
-    for (const tag of ['no-version', 'v2.0.0-rc.1']) { release.tag_name = tag; await assert.rejects(githubRelease(fetcher)); }
+    release.prerelease = true; await assert.rejects(githubRelease(fetcher, 'win32', 'x64')); release.prerelease = false;
+    for (const tag of ['no-version', 'v2.0.0-rc.1']) { release.tag_name = tag; await assert.rejects(githubRelease(fetcher, 'win32', 'x64')); }
     await assert.rejects(githubRelease(async () => new Response('', { status: 403 })));
     assert.throws(() => validateConfig({ url: 'https://example.com/', automatic: true, source: 'untrusted' }));
 });

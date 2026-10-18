@@ -43,10 +43,58 @@ async function cleanup(directory) {
     await fs.rm(resolved, { recursive: true, force: true });
 }
 
+for (const duplicate of [true, false]) test(`Anthropic streamed reads ${duplicate ? 'reject duplicate IDs before dispatch and persistence' : 'retain distinct results through restart'}`, async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'director-rounds-'));
+    const bodies = [], reads = [], events = [];
+    const server = http.createServer(async (req, res) => {
+        req.setEncoding('utf8');
+        let text = ''; for await (const chunk of req) text += chunk;
+        bodies.push(JSON.parse(text));
+        const blocks = bodies.length === 1 ? [
+            { type: 'tool_use', id: 'read-entities', name: 'director_read', input: { sections: ['entities'] } },
+            { type: 'tool_use', id: duplicate ? 'read-entities' : 'read-selection', name: 'director_read', input: { sections: ['selection'] } },
+        ] : [{ type: 'text', text: '完成' }];
+        const stream = [{ type: 'message_start', message: { usage: { input_tokens: 10 } } },
+            ...blocks.map((content_block, index) => ({ type: 'content_block_start', index, content_block })),
+            { type: 'message_delta', delta: { stop_reason: bodies.length === 1 ? 'tool_use' : 'end_turn' }, usage: { output_tokens: 10 } }, { type: 'message_stop' }]
+            .map(e => 'data: ' + JSON.stringify(e) + '\n\n').join('');
+        res.setHeader('content-type', 'text/event-stream');
+        for (let i = 0; i < stream.length; i += 11) res.write(stream.slice(i, i + 11));
+        res.end();
+    });
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const deps = { directory, safeStorage: { isEncryptionAvailable: () => false }, ...toolPolicy, send: e => events.push(e),
+        callTool: async (name, args) => { reads.push({ name, args }); return { ok: true, data: { summary: args.sections[0] + '-result' } }; } };
+    try {
+        let host = createAIHost(deps);
+        const [p] = await host.configure({ baseUrl: `http://127.0.0.1:${server.address().port}/v1`, protocol: 'anthropic', model: 'mock', maxTokens: 1024, stream: true });
+        const result = await host.run({ profileId: p.id, prompt: '查询人物和选区' });
+        assert.equal(Boolean(result.stopped), duplicate);
+        assert.deepEqual(reads.map(c => c.args.sections[0]), duplicate ? ['entities'] : ['entities', 'entities', 'selection']); // first read is the host snapshot
+        assert.equal(bodies.length, duplicate ? 1 : 2);
+        if (duplicate) assert.match(events.at(-1).text, /重复.*本轮工具均未执行/);
+        const persisted = await require('../desktop/conversation-store.cjs').conversationStore(directory, deps.safeStorage).load();
+        assert.equal(persisted.entries.filter(e => e.type === 'turn').length, duplicate ? 0 : 2);
+        const session = result.sessionId;
+        host = createAIHost(deps);
+        const continued = await host.run({ profileId: p.id, prompt: '继续' });
+        assert.equal(continued.sessionId, session);
+        const messages = bodies.at(-1).messages;
+        const outcomes = messages.flatMap(m => Array.isArray(m.content) ? m.content.filter(c => c.type === 'tool_result') : []);
+        if (duplicate) assert.deepEqual(outcomes, []);
+        else {
+            assert.deepEqual(outcomes.map(c => c.tool_use_id), ['read-entities', 'read-selection']);
+            assert.deepEqual(outcomes.map(c => JSON.parse(c.content).data.summary), ['entities-result', 'selection-result']);
+            assert.deepEqual(bodies[1].messages.filter(m => Array.isArray(m.content)).at(-1).content, outcomes);
+        }
+    } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); await cleanup(directory); }
+});
+
 test('selected-range tasks read the live scope once and retain it with the task history', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'director-rounds-')), bodies = [], calls = [];
     const selection = { entityIds: ['actor-a'], objects: [{ id: 'actor-a', name: '人物 A' }], clips: [{ kind: 'action', entityId: 'actor-a', id: 'walk-a', start: 2, end: 5 }], timeRange: { start: 2, end: 5 }, scope: 'clips' };
     const server = http.createServer(async (req, res) => {
+        req.setEncoding('utf8');
         let raw = ''; for await (const chunk of req) raw += chunk; bodies.push(JSON.parse(raw));
         res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '已收到范围' } }] }));
     });

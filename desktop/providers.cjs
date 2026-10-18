@@ -140,7 +140,14 @@ async function complete(profileInput, key, system, messages, tools, signal, opti
         text = raw.content.filter(c => c.type === 'text').map(c => c.text).join(''); calls = raw.content.filter(c => c.type === 'tool_use').map(c => ({ id: c.id, name: c.name, args: toolArguments(c.input, false) }));
     }
     if (!stream && text) options.onText?.(text);
-    if (calls.length > 100 || calls.some(c => !c.id || !c.name || !c.args || typeof c.args !== 'object' || Array.isArray(c.args))) throw new Error('无效工具调用');
+    if (calls.length > 100 || calls.some(c => typeof c.id !== 'string' || !c.id.trim() || !c.name || !c.args || typeof c.args !== 'object' || Array.isArray(c.args))) throw new Error('无效工具调用');
+    // IDs correlate persisted results with calls. Reject the entire response before
+    // it can be stored or dispatched; renaming would change the provider's turn.
+    if (new Set(calls.map(c => c.id)).size !== calls.length) {
+        const error = new Error('模型返回了重复的工具调用标识，本轮工具均未执行，请重试');
+        error.code = 'DUPLICATE_TOOL_IDS';
+        throw error;
+    }
     return { text, calls, assistant, usage: raw.usage || {} };
     } catch (error) { error.usage ??= raw.usage || {}; error.finishReason ??= raw.choices?.[0]?.finish_reason || raw.stop_reason || raw.status; throw error; }
 }

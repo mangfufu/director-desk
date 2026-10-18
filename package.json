@@ -1,7 +1,7 @@
 {
   "name": "director-desk",
-  "version": "0.5.0",
-  "shortVersion": "0.5.0",
+  "version": "0.5.1",
+  "shortVersion": "0.5.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -21,6 +21,8 @@
     "predesktop:pack": "npm run desktop:prepare",
     "desktop:pack:mac": "electron-builder --config desktop/builder.cjs --mac --arm64 --publish never",
     "predesktop:pack:mac": "npm run desktop:prepare",
+    "desktop:pack:linux": "electron-builder --config desktop/builder.cjs --linux --x64 --publish never",
+    "predesktop:pack:linux": "npm run desktop:prepare",
     "preview": "vite preview --host 127.0.0.1",
     "test:assets": "node scripts/test-assets.mjs prepare",
     "pretest": "node scripts/test-assets.mjs check",

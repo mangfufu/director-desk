@@ -24,7 +24,7 @@ export function mountUpdates(prepareInstall: (run: () => Promise<void>) => Promi
         find<HTMLButtonElement>('download').disabled = busy || next.phase !== 'available' || next.mode !== 'installed' || !next.canDownload;
         find<HTMLButtonElement>('install').disabled = busy || next.phase !== 'downloaded';
         find('mode').textContent = next.mode === 'portable' ? '免安装版 · 手动更新'
-            : next.mode === 'unsupported' ? '当前平台请从下载页获取新版。' : next.mode === 'development' ? '开发测试版 · 更新不可用' : '安装版';
+            : next.mode === 'unsupported' ? '当前平台请从下载页获取新版。' : next.mode === 'development' ? '开发测试版 · 更新不可用' : '应用内更新';
         if (fields) { find<HTMLSelectElement>('source').value = next.config.source; find<HTMLInputElement>('url').value = next.config.url; }
     };
     const request = async (action: Parameters<typeof bridge.update>[0], data?: unknown) => {

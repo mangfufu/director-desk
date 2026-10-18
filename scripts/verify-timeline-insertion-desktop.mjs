@@ -5,6 +5,7 @@ import {createRequire} from 'node:module';
 import {_electron as electron} from 'playwright-core';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {verifyTimelinePointer} from './verify-timeline-pointer.mjs';
 
 const output=path.resolve('output/playwright/timeline-insertion');await fs.mkdir(output,{recursive:true});
 const profile=await fs.mkdtemp(path.join(output,'desktop-')),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
@@ -14,6 +15,7 @@ try{
     const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.waitForFunction(()=>window.directorDesktop);
     await page.locator('#timeline-content .track-lane').first().waitFor();
+    await verifyTimelinePointer(page);
     const started=await page.evaluate(()=>window.directorDesktop.mcp(true));assert.equal(started.ok,true);
     const connection=JSON.parse(await fs.readFile(path.join(profile,'mcp-connection.json'),'utf8'));
     const token=await app.evaluate(({safeStorage},secret)=>safeStorage.decryptString(Buffer.from(secret,'base64')),connection.secret);

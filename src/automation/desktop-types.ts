@@ -7,6 +7,7 @@ export interface SkillRequest { action: 'list' | 'read' | 'enable' | 'remove' | 
 export interface AgentEvent { type: string; text?: string; name?: string; status?: string; model?: string; channel?: string; sessionId: string; summary?: unknown; usage?: unknown; timing?: { rounds: number; modelMs: number; toolMs: number; toolCalls: number; totalMs: number; firstTextMs?: number } }
 declare global {
     interface Window { directorDesktop?: {
+        wslPointerInput?: boolean;
         setLanguage?(language: 'zh-CN' | 'en'): void;
         extensions?(args:Record<string,unknown>):Promise<DesktopResult<any>>;
         onExtensionRequest?(callback:(request:{id:string;plugin:string;method:string;args:any})=>Promise<unknown>):()=>void;

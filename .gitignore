@@ -147,3 +147,8 @@ file-locations.json
 !/scripts/verify-language-desktop.mjs
 !/scripts/verify-context-menus.mjs
 !/scripts/verify-context-menus-desktop.mjs
+!/scripts/test-mcp-files-desktop.mjs
+!/scripts/verify-linux-package.mjs
+!/scripts/prepare-linux-update.mjs
+!/scripts/test-linux-update.mjs
+!/scripts/verify-timeline-pointer.mjs

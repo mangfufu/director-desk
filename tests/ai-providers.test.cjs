@@ -24,6 +24,37 @@ for (const protocol of ['chat', 'responses', 'anthropic']) test(`${protocol}: co
         assert.equal(body.model, 'mock-flash'); assert.equal(body.tools.length, 1); res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ chat, responses, anthropic }[protocol]));
     });
 });
+for (const protocol of ['chat', 'responses', 'anthropic']) for (const stream of [false, true]) {
+    test(`${protocol} ${stream ? 'SSE' : 'JSON'}: duplicate call IDs reject the whole response; distinct IDs remain unchanged`, async () => {
+        for (const duplicate of [true, false]) {
+            const ids = ['first', duplicate ? 'first' : 'second'];
+            const args = [{ sections: ['entities'] }, { sections: ['selection'] }];
+            const raw = structuredClone({ chat, responses, anthropic }[protocol]);
+            if (protocol === 'chat') raw.choices[0].message.tool_calls = ids.map((id, i) => ({ id, type: 'function', function: { name: definition.name, arguments: JSON.stringify(args[i]) } }));
+            else if (protocol === 'responses') raw.output = ids.map((call_id, i) => ({ type: 'function_call', call_id, name: definition.name, arguments: JSON.stringify(args[i]) }));
+            else raw.content = ids.map((id, i) => ({ type: 'tool_use', id, name: definition.name, input: args[i] }));
+            await mock(async url => {
+                if (duplicate) await assert.rejects(call(profile(url, protocol, stream)), e => e.code === 'DUPLICATE_TOOL_IDS' && JSON.stringify(e.usage) === JSON.stringify(raw.usage));
+                else {
+                    const result = await call(profile(url, protocol, stream));
+                    assert.deepEqual(result.calls.map(c => c.id), ids);
+                    assert.deepEqual(result.calls.map(c => c.args), args);
+                }
+            }, (_req, res) => {
+                if (!stream) return res.end(JSON.stringify(raw));
+                const events = protocol === 'chat'
+                    ? [{ choices: [{ delta: { tool_calls: raw.choices[0].message.tool_calls.map((c, index) => ({ ...c, index })) }, finish_reason: 'tool_calls' }], usage: raw.usage }]
+                    : protocol === 'responses' ? [{ type: 'response.completed', response: raw }]
+                    : [{ type: 'message_start', message: { usage: raw.usage } }, ...raw.content.map((content_block, index) => ({ type: 'content_block_start', index, content_block })), { type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: raw.usage }, { type: 'message_stop' }];
+                res.setHeader('content-type', 'text/event-stream');
+                const body = events.map(e => 'data: ' + JSON.stringify(e) + '\n\n').join('');
+                for (let i = 0; i < body.length; i += 11) res.write(body.slice(i, i + 11));
+                res.end();
+            });
+        }
+    });
+}
+
 test('Production accepts user-selected models and large limits without old Flash policy', () => {
     for (const model of ['deepseek-v4-pro', 'deepseek-chat', 'flash-pro']) assert.equal(validateProfile({ ...profile('https://api.deepseek.com/v1', 'chat'), model, flashOnly: true }).model, model);
     const defaults = validateProfile({ baseUrl: 'https://api.deepseek.com/v1', protocol: 'chat', model: 'deepseek-v4-pro' });

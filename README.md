@@ -6,11 +6,11 @@
 
 面向 AI 短剧与视频创作的三维预演工具。用白模先确定人物站在哪里、怎么走、镜头怎么拍，再把参考视频与配套提示词交给视频生成模型。可以自己操作，也可以让 AI 直接编辑工程。
 
-[下载 Windows 版](https://github.com/mangfufu/director-desk/releases/latest) · [更新记录](https://github.com/mangfufu/director-desk/releases) · [反馈问题](https://github.com/mangfufu/director-desk/issues) · [配套 Skill](skills/director-desk/)
+[下载 Windows / Linux 版](https://github.com/mangfufu/director-desk/releases/latest) · [更新记录](https://github.com/mangfufu/director-desk/releases) · [反馈问题](https://github.com/mangfufu/director-desk/issues) · [配套 Skill](skills/director-desk/)
 
 ![导演台 0.4.10：左侧布景、右侧摄影机画面，下方编排动作和切镜](docs/images/workspace-0.4.10.jpg)
 
-当前版本 **[0.5.0](https://github.com/mangfufu/director-desk/releases/tag/v0.5.0)** · 新增中英文切换、动作库拖放及右键菜单，改进时间轴插入和拖动预览。
+当前版本 **[0.5.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.1)** · 新增 Linux 版与 AppImage 应用内更新，修复 WSL 时间轴拖动及 AI 工具调用问题。
 
 ## 从一场戏开始
 
@@ -113,7 +113,9 @@
 
 到 [Releases](https://github.com/mangfufu/director-desk/releases/latest) 下载 **Windows 安装版**，或完整解压 **免安装 ZIP** 后运行 `DirectorDesk.exe`。两种版本都包含配套 Skill。
 
-在设置中选择默认工程和导出目录。软件支持官网与 GitHub 检查更新；安装版可下载后重启安装，免安装版下载新的 ZIP。
+**Linux x64**：下载 AppImage，添加执行权限后运行；也可下载 tar.gz，解压后运行 `DirectorDesk`。两种版本同样内置 Skill。已在 Ubuntu 24.04 / WSL 2 验证。
+
+在设置中选择默认工程和导出目录。软件支持官网与 GitHub 检查更新；Windows 安装版和 Linux AppImage 可下载后重启更新，ZIP 与 tar.gz 下载新版后手动替换。AppImage 请放在用户可写目录。
 
 问题和建议欢迎提交到 [Issues](https://github.com/mangfufu/director-desk/issues)。想参与代码开发或运行网页版，请看 [开发与构建说明](docs/development.md)。
 

@@ -2,6 +2,8 @@ const path = require('node:path');
 const { publicFiles: publicSkillFiles } = require('../scripts/builtin-skill-files.cjs');
 const { releaseVersion, parseReleaseVersion } = require('./release-version.cjs');
 const metadata = require('../package.json');
+// Electron downloads its runtime on first require; npm ci alone may not create dist.
+require('electron');
 const version = releaseVersion(metadata.version);
 if (metadata.shortVersion !== version) throw Error('Public release version does not match package version');
 module.exports = {
@@ -21,6 +23,7 @@ module.exports = {
     extraMetadata: { version: metadata.version },
     electronVersion: require('electron/package.json').version,
     electronDist: 'node_modules/electron/dist',
+    toolsets: { appimage: '1.0.3' },
     win: { target: [{ target: 'nsis', arch: ['x64'] }], executableName: 'DirectorDesk', icon: path.join(__dirname, 'icon.ico'), signExecutable: false },
     nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
         createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: '导演台',
@@ -30,4 +33,7 @@ module.exports = {
     mac: { target: [{ target: 'dmg', arch: ['arm64'] }], icon: path.join(__dirname, 'icon.icns'), identity: null,
         category: 'public.app-category.video', artifactName: `DirectorDesk-${version}-\${arch}.\${ext}` },
     dmg: { title: `导演台 ${version}`, writeUpdateInfo: false },
+    linux: { target: [{ target: 'AppImage', arch: ['x64'] }, { target: 'tar.gz', arch: ['x64'] }], executableName: 'DirectorDesk',
+        publish: { provider: 'generic', url: 'https://bigthat.me/updates/linux-x64/' },
+        category: 'AudioVideo', artifactName: `DirectorDesk-${version}-linux-x64.\${ext}` },
 };
