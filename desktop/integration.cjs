@@ -7,10 +7,13 @@ const { createMcpHost } = require('./mcp-host.cjs');
 const { releaseVersion } = require('./release-version.cjs');
 const { createSkillStore } = require('./skills/store.cjs');
 const { createSkillHost } = require('./skills/host.cjs');
+const { createOfficialSkill } = require('./skills/official.cjs');
 const { TOOL_DEFINITIONS, MCP_TOOL_DEFINITIONS, DISCUSSION_TOOLS, isDiscussionToolCall, BUILTIN_SKILL } = require('./tools-contract.cjs');
 function attachIntegration(window) {
     const pending = new Map(); let ready = false;
-    const skills = createSkillStore({ directory: app.getPath('userData'), builtin: BUILTIN_SKILL });
+    const officialSkill = createOfficialSkill({ directory: app.getPath('userData'), builtin: BUILTIN_SKILL,
+        onChange: data => { if (!window.isDestroyed()) window.webContents.send('director-skill-changed', data); } });
+    const skills = createSkillStore({ directory: app.getPath('userData'), builtin: BUILTIN_SKILL, getBuiltin: officialSkill.current });
     void skills.ready.catch(() => {});
     const trusted = event => event.sender === window.webContents && event.senderFrame?.url === 'director://app/';
     const callTool = async (name, args) => {
@@ -29,7 +32,7 @@ function attachIntegration(window) {
     const host = createAIHost({ directory: app.getPath('userData'), safeStorage, definitions: TOOL_DEFINITIONS, discussionTools: DISCUSSION_TOOLS, isDiscussionToolCall, callTool,
         skill: BUILTIN_SKILL, skills,
         send: data => { if (!window.isDestroyed()) window.webContents.send('director-ai-event', data); } });
-    const skillHost = createSkillHost({ store: skills, window, isRunning: () => host.isRunning() });
+    const skillHost = createSkillHost({ store: skills, window, isRunning: () => host.isRunning(), official: officialSkill });
     const resultHandler = (event, data) => { if (!trusted(event) || !data || !pending.has(data.id)) return; const item = pending.get(data.id); clearTimeout(item.timer); pending.delete(data.id); item.resolve(data.result); };
     const readyHandler = event => { if (trusted(event)) ready = true; };
     ipcMain.on('director-tool-result', resultHandler); ipcMain.on('director-tools-ready', readyHandler);
@@ -43,6 +46,7 @@ function attachIntegration(window) {
             else if (action === 'configure') result = await host.configure(data);
             else if (action === 'run') { if (skillHost.isBusy()) throw Error('请等技能导入完成后再发送任务'); result = await host.run(data); }
             else if (action === 'skills') result = await skillHost.handle(data);
+            else if (action === 'builtin-skill') result = await officialSkill.current();
             else if (action === 'stop') { host.stop(); result = true; }
             else if (action === 'test') result = await host.test(data);
             else if (action === 'mcp') {

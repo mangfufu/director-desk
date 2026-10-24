@@ -8,3 +8,8 @@
 .skill-actions{flex-wrap:wrap}
 .skill-actions .ai-check{margin-right:auto}
 #ai-skills #skill-meta{height:58px;min-height:58px;flex-shrink:0;color:#aaa;padding:5px 7px;font-size:11px}
+#skill-official-update{display:flex;flex-direction:column;gap:6px;flex-shrink:0;padding:8px;border:1px solid #3b3b3b;border-radius:5px}
+#skill-official-update[hidden],#skill-install-update[hidden]{display:none}
+.skill-update-summary{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;line-height:1.5}
+#skill-official-status{color:#bcbcbc;overflow-wrap:anywhere}
+.skill-update-actions{display:flex;flex-wrap:wrap;gap:6px}

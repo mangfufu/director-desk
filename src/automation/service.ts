@@ -208,8 +208,8 @@ export function createToolService(ctx: AppContext): ToolService {
         }
         if (name === 'director_skill') {
             if (args.action === 'list') {
-                const { name, version, files } = readBuiltinSkill();
-                return { skills: [{ id: 'builtin', name, version, files, enabled: true, builtin: true }] };
+                const { name, version, releaseVersion, files } = readBuiltinSkill();
+                return { skills: [{ id: 'builtin', name, version, releaseVersion, files, enabled: true, builtin: true }] };
             }
             if (args.id && args.id !== 'builtin') throw Error('网页版仅提供内置操作说明；自定义技能请在桌面版管理');
             return readBuiltinSkill(args.knownVersion as string | undefined, args.path as string | undefined);

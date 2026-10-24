@@ -1,4 +1,5 @@
 import { extensionHost } from './plugins/extension-host.ts';
+import { connectDesktopSkill } from './automation/desktop-skill.ts';
 import { mountLocalization } from './i18n/dom.ts';
 import { t, onLanguageChange } from './i18n/locale.ts';
 import './plugins/extension-panels.css';
@@ -370,7 +371,7 @@ void recoverSession().then(async restored => { const p = restored?.document; if 
     history.setFile(restored.file.path, !restored.file.dirty); dirty = history.dirty;
     $('#save-status').textContent = dirty ? '自动备份已保存' : '项目已保存'; toast('已恢复上次工作');
 } }).catch(() => toast('未能读取自动恢复或模型资源，可以打开手动保存的项目文件'))
-    .finally(async () => { await extensionHost(uiContext).start().catch(error=>toast(error.message,true)); window.directorDesktop?.onTool((name, args) => toolService.call(name, args)); });
+    .finally(async () => { await connectDesktopSkill().catch(error=>toast(error.message,true)); await extensionHost(uiContext).start().catch(error=>toast(error.message,true)); window.directorDesktop?.onTool((name, args) => toolService.call(name, args)); });
 window.addEventListener('beforeunload', event => { if (dirty || busy || history.pending || draft) {
     window.directorDesktop?.closingState?.({ busy: !!(busy || history.pending || draft) });
     event.preventDefault();

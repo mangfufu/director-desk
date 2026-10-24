@@ -43,6 +43,40 @@ async function cleanup(directory) {
     await fs.rm(resolved, { recursive: true, force: true });
 }
 
+test('official skill updates refresh the same live conversation once and preserve disable state', async () => {
+    const { createSkillStore } = require('../desktop/skills/store.cjs');
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'director-rounds-'));
+    let active = { name: 'director-desk', version: 'v1', instructions: 'LIVE_SKILL_ONE' };
+    const skills = createSkillStore({ directory, builtin: active, getBuiltin: async () => active });
+    const bodies = [];
+    const server = http.createServer(async (req, res) => {
+        let raw = ''; for await (const chunk of req) raw += chunk;
+        bodies.push(JSON.parse(raw));
+        res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '完成' } }] }));
+    });
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    try {
+        const host = createAIHost({ directory, safeStorage: { isEncryptionAvailable: () => false }, ...toolPolicy,
+            skill: active, skills, send() {}, callTool: async () => ({ ok: true, data: { revision: 1 } }) });
+        const [p] = await host.configure({ baseUrl: `http://127.0.0.1:${server.address().port}/v1`, protocol: 'chat', model: 'mock', stream: false, maxTokens: 1000 });
+        const run = () => host.run({ profileId: p.id, prompt: '保留我的剧情，继续' });
+        const first = await run();
+        active = { ...active, version: 'v2', instructions: 'LIVE_SKILL_TWO' };
+        const second = await run(); await run();
+        assert.equal(first.sessionId, second.sessionId);
+        const joined = JSON.stringify(bodies[2].messages);
+        assert.equal(joined.split('LIVE_SKILL_ONE').length - 1, 1);
+        assert.equal(joined.split('LIVE_SKILL_TWO').length - 1, 1);
+        assert.equal(joined.split('保留我的剧情，继续').length - 1, 3);
+        await skills.enable('builtin', false);
+        active = { ...active, version: 'v3', instructions: 'LIVE_SKILL_THREE' };
+        await run();
+        assert.doesNotMatch(JSON.stringify(bodies[3].messages), /LIVE_SKILL_THREE/);
+        await skills.enable('builtin', true); await run();
+        assert.match(bodies[4].messages.at(-1).content, /LIVE_SKILL_THREE/);
+    } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); await cleanup(directory); }
+});
+
 for (const duplicate of [true, false]) test(`Anthropic streamed reads ${duplicate ? 'reject duplicate IDs before dispatch and persistence' : 'retain distinct results through restart'}`, async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'director-rounds-'));
     const bodies = [], reads = [], events = [];

@@ -2,6 +2,8 @@ import { assetEnglish } from './en-assets.ts';
 import { panelEnglish } from './en-panels.ts';
 /** Product terminology: Scene = independent scene; Shot = a camera cut. */
 export const english: Record<string, string> = {
+    '官方技能':'Official skill','检查技能更新':'Check Skill Updates','更新技能':'Update Skill','技能已更新':'Skill updated','尚未检查':'Not checked','有可用更新':'Update available','请先升级软件':'Update the app first','检查失败，请重试':'Check failed. Try again.',
+
     ...assetEnglish,
     ...panelEnglish,
     '1 个视频 · 共 {0} s':'1 video · {0} s total','1 项':'1 item','1 段':'1 clip','1 个片段':'1 clip','1 个对象':'1 object',

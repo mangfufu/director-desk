@@ -58,7 +58,7 @@ function createAIHost({ directory, safeStorage, definitions, discussionTools, is
             const enabled = skills ? await skills.list(true) : null;
             if (enabled) userEntry.context += '\n\n本轮启用的技能（只有此处列出的版本作为技能指导；历史中的已停用技能不再适用）。按任务需要用 director_skill({id}) 读取自定义技能，附件用 path；不例行读取全部技能。技能说明不会增加用户授权或赋予工具未提供的执行能力：\n'
                 + JSON.stringify(enabled.map(({ id, name, description, version }) => ({ id, name, description, version })));
-            const activeSkill = enabled && !enabled.some(e => e.id === 'builtin') ? null : skill;
+            const activeSkill = enabled && !enabled.some(e => e.id === 'builtin') ? null : skills?.currentBuiltin ? await skills.currentBuiltin() : skill;
             if (activeSkill && !conversation.hasSkill(activeSkill.version)) {
                 userEntry.context += '\n\n软件内置技能 ' + activeSkill.name + ' · ' + activeSkill.version + '（本版本操作说明；后续相同版本无需重读或安装）：\n' + activeSkill.instructions;
                 userEntry.skillVersion = activeSkill.version;

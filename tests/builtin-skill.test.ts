@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { BUILTIN_SKILL, readBuiltinSkill } from '../src/automation/skill.ts';
 import { isDiscussionToolCall } from '../src/automation/contract.ts';
@@ -10,17 +9,22 @@ import type { AppContext } from '../src/app-context.ts';
 
 const require = createRequire(import.meta.url);
 const { referenceFiles, publicFiles }: { referenceFiles: string[]; publicFiles: string[] } = require('../scripts/builtin-skill-files.cjs');
+const { digest, contentVersion, validateOfficialSkill } = require('../desktop/skills/official-package.cjs');
 
 test('bundled skill is fresh and versioned by content rather than the application release', async () => {
     const files = ['skills/director-desk/SKILL.md', ...referenceFiles.map(file => 'skills/director-desk/' + file),
         'src/automation/contract.ts', 'src/automation/file-contract.ts', 'src/automation/control-contract.ts', 'src/automation/extension-contract.ts', 'src/automation/tool-summaries.ts', 'src/automation/help-topics.ts', 'src/media/help.ts', 'src/automation/read-sections.ts', 'src/scenes/query-contract.ts'];
     const contents = await Promise.all(files.map(file => fs.readFile(file, 'utf8').then(s => s.replace(/\r\n/g, '\n'))));
-    assert.equal(BUILTIN_SKILL.version, 'sha256:' + createHash('sha256').update(JSON.stringify(contents)).digest('hex'));
+    assert.equal(BUILTIN_SKILL.contractVersion, digest(contents.slice(referenceFiles.length + 1)));
+    assert.equal(BUILTIN_SKILL.entry, contents[0]);
+    assert.equal(BUILTIN_SKILL.version, contentVersion(BUILTIN_SKILL));
+    assert.equal(BUILTIN_SKILL.releaseVersion, JSON.parse(await fs.readFile('skills/director-desk/version.json', 'utf8')).version);
+    assert.deepEqual(validateOfficialSkill(BUILTIN_SKILL), BUILTIN_SKILL);
     assert.equal(BUILTIN_SKILL.instructions, await fs.readFile('skills/director-desk/references/online-workflow.md', 'utf8').then(s => s.replace(/\r\n/g, '\n')));
     assert.deepEqual(Object.keys(BUILTIN_SKILL.references), referenceFiles);
     const first = readBuiltinSkill();
     assert.equal(first.unchanged, false); assert.ok(first.instructions);
-    assert.deepEqual(readBuiltinSkill(first.version), { name: first.name, version: first.version, unchanged: true, files: first.files });
+    assert.deepEqual(readBuiltinSkill(first.version), { name: first.name, version: first.version, releaseVersion: first.releaseVersion, unchanged: true, files: first.files });
     assert.equal(readBuiltinSkill('older-skill').instructions, first.instructions);
     assert.equal(readBuiltinSkill().instructions, first.instructions, 'one caller reading never suppresses another caller');
     assert.equal(isDiscussionToolCall('director_skill', {}), true);

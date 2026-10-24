@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('directorDesktop', {
     extensions: data => ipcRenderer.invoke('director-extensions', data),
     onExtensionRequest: callback => {const listener=async(_event,request)=>{try{ipcRenderer.send('director-extension-reply',{id:request.id,result:await callback(request)});}catch(error){ipcRenderer.send('director-extension-reply',{id:request.id,error:error.message});}};ipcRenderer.on('director-extension-request',listener);return()=>ipcRenderer.removeListener('director-extension-request',listener);},
     skills: data => invoke('skills', data),
+    builtinSkill: () => invoke('builtin-skill'),
+    onBuiltinSkill: callback => { const fn = (_event, data) => callback(data); ipcRenderer.on('director-skill-changed', fn); return () => ipcRenderer.removeListener('director-skill-changed', fn); },
     files: (action, data) => ipcRenderer.invoke('director-files', { action, data }),
     pathForFile: file => webUtils.getPathForFile(file),
     closingState: data => ipcRenderer.sendSync('director-close-state', data),

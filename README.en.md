@@ -12,7 +12,7 @@ Work directly in the editor, or connect an AI agent that can build and edit the 
 
 ![DirectorDesk: stage view on the left, camera view on the right, and the timeline below](docs/images/workspace-0.4.10.jpg)
 
-Latest release: **[0.5.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.1)** — Linux packages, in-app updates for AppImage, and fixes for timeline scrubbing in WSL and AI tool calls. Screenshots below are from 0.4.10 and show the Chinese interface.
+Latest release: **[0.5.2](https://github.com/mangfufu/director-desk/releases/tag/v0.5.2)** — Update the official skill separately from the app, with improved guidance for video prompts. Screenshots below are from 0.4.10 and show the Chinese interface.
 
 ## From an idea to a reference video
 
@@ -36,7 +36,7 @@ Browse built-in and saved actions in the **Actions** tab, then drag one onto a c
 
 *This screenshot shows a draft request before it is sent.*
 
-Each scene can store two independent prompts: one for generation with a reference video, and one for text-only generation. The bundled skill is included with the app. You can also import your own skills and enable or disable them as needed.
+Each scene can store two independent prompts: one for generation with a reference video, and one for text-only generation. The official skill comes with the app and can be updated separately under **AI → Skills**. You can also import your own skills and enable or disable them as needed.
 
 ## Draw character movement
 

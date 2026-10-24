@@ -4,18 +4,20 @@ const { localPackage } = require('./package.cjs');
 const { githubPackage } = require('./github.cjs');
 const path = require('node:path');
 
-function createSkillHost({ store, window, isRunning }) {
+function createSkillHost({ store, window, isRunning, official }) {
     let importing = false;
     async function handle(data = {}) {
         const { action, id } = data;
-        if (action === 'list') return { skills: await store.list() };
+        if (action === 'list') return { skills: await store.list(), update: official?.state() };
+        if (action === 'check-update' && official) return { skills: await store.list(), update: await official.check() };
         if (action === 'read') return store.read({ id, path: data.path }, true);
         if (action === 'open') { const error = await shell.openPath(await store.folder(id)); if (error) throw Error('无法打开技能目录'); return { skills: await store.list() }; }
         if (isRunning()) throw Error('请先结束当前 AI 任务，再修改启用的技能');
         if (importing) throw Error('正在导入技能，请稍候');
         importing = true;
         try {
-            if (action === 'enable') await store.enable(id, data.enabled);
+            if (action === 'update-builtin' && official) await official.install();
+            else if (action === 'enable') await store.enable(id, data.enabled);
             else if (action === 'remove') await store.remove(id);
             else if (action === 'import') {
                 if (data.path !== undefined) {
@@ -32,7 +34,7 @@ function createSkillHost({ store, window, isRunning }) {
                 const entry = (await store.list()).find(e => e.id === id); if (!entry || entry.builtin) throw Error('请选择自定义技能');
                 await store.install(await localPackage(await store.folder(id)), entry.source, id);
             } else throw Error('未知技能操作');
-            return { skills: await store.list() };
+            return { skills: await store.list(), update: official?.state() };
         } finally { importing = false; }
     }
     return { handle, isBusy: () => importing };

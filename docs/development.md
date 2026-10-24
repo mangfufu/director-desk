@@ -93,6 +93,16 @@ WSLg 手动拖动诊断记录到鼠标按下／松开使用 `pointerId=1`，中�
 新增人形动作与可选通用物理，见[物理与动作](physics.md)。23 个默认人形动作使用 `src/assets/authored-human-actions.ts` 的手工关键姿态，已替换原默认成品曲线与公式动作；原有动作素材库和导入功能仍保留。关节节点在布景窗口选择及旋转，右侧三轴偏移使用共用 pose/poseKeys，保持旧单轴工程兼容。`node scripts/verify-human-actions.mjs` 生成全部基础动作的真实渲染检查图，并验证多种人形随机跳帧；`node --experimental-strip-types --test tests/physics.test.ts` 验证共用数据与求值，`node scripts/verify-physics.mjs` 验证界面和导出，`node scripts/test-physics-desktop.mjs` 验证隔离桌面配置与真实 MCP。
 
 人物曲面由 `src/assets/human-surfaces.ts` 的平滑截面生成；骨架与接拍节点路径保持兼容。手工动作通过 `src/animation/authored-curve.ts` 的五次 Hermite 曲线匹配关键帧速度与加速度。衔接期间继续求值前一个动作，不能改成定格姿态后再混合。`tests/human-motion-quality.test.ts` 检查曲线与实际骨骼速度、衔接边界、轮廓法线及模型成本；`node scripts/verify-human-motion-playback.mjs` 逐帧检查 23 个动作并生成完整 60fps 播放视频，输出保存在非发布目录。
+## 官方 Skill 独立更新
+
+AI → 技能中的“检查技能更新”和“更新技能”独立于软件更新。官方源为本仓库 main 分支的 `src/automation/builtin-skill.json`；本机更新保存在用户配置目录的 `skills/official.json`，不覆盖自定义技能、工程或对话。MCP、内置助手及渲染端帮助共用生效版本；保留会话在下一次任务读取新版核心说明，同版不重复注入。
+
+发布技能说明修改时，提高 `skills/director-desk/version.json` 的版本，运行 `node scripts/build-offline-skill.mjs`，将说明、版本文件及生成的 JSON 一起提交。未发布的同一批修改可沿用版本，已发布版本不可换内容。`releaseVersion` 按数字比较，`version` 为说明与契约的内容散列；`contractVersion` 匹配才允许独立安装。工具契约变化需要随软件更新，不把不兼容说明安装给旧客户端。
+
+客户端只下载经过校验的说明 JSON，不下载脚本。校验失败、断网或写入失败保留现有版本；重启选用兼容的新版本，损坏副本回退内置版本。已安装在外部 Agent 目录的离线技能不会被自动覆盖。
+
+验证：`tests/official-skill.test.cjs`、`tests/ai-host.test.cjs`，以及 `npm run desktop:prepare` 后的 `node scripts/test-skills-desktop.mjs`。桌面检查使用隔离配置和模拟更新内容，覆盖真实更新按钮、MCP、渲染端版本、重启及自定义技能。
+
 ## 界面语言
 
 界面语言在 `src/i18n/` 维护：内置文案按完整标签匹配，动态标签用明确的占位格式；新功能应补齐英文术语。界面层保留原文以支持即时往返切换，不修改输入值、option 的 value、工程数据或 MCP 协议。用户名称与第三方内容使用 `data-i18n-ignore`；动态标题应仅翻译固定部分。桌面原生弹窗使用 `desktop/language.cjs`，与界面选择同步。

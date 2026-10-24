@@ -1,9 +1,10 @@
 export interface Channel { id: string; name: string; protocol: 'chat' | 'responses' | 'anthropic'; baseUrl: string; model: string; hasKey: boolean; remembered: boolean; stream: boolean; maxTokens: number; maxRounds: number }
 export interface DesktopResult<T = unknown> { ok: boolean; data?: T; error?: string }
 export interface ConversationSnapshot { sessionId: string; profileId: string; transcript: string }
-export interface SkillEntry { id: string; name: string; description: string; version: string; enabled: boolean; builtin: boolean; source: string; files: string[] }
-export interface SkillResult { skills?: SkillEntry[]; instructions?: string; files?: string[]; version?: string }
-export interface SkillRequest { action: 'list' | 'read' | 'enable' | 'remove' | 'import' | 'github' | 'open' | 'reload'; id?: string; enabled?: boolean; kind?: 'file' | 'folder'; path?: string; url?: string }
+export interface SkillEntry { id: string; name: string; description: string; version: string; releaseVersion?: string; enabled: boolean; builtin: boolean; source: string; files: string[] }
+export interface SkillUpdate { status: 'unchecked' | 'checking' | 'available' | 'current' | 'incompatible' | 'error'; currentVersion: string; latestVersion?: string; error?: string }
+export interface SkillResult { skills?: SkillEntry[]; instructions?: string; files?: string[]; version?: string; update?: SkillUpdate }
+export interface SkillRequest { action: 'list' | 'read' | 'enable' | 'remove' | 'import' | 'github' | 'open' | 'reload' | 'check-update' | 'update-builtin'; id?: string; enabled?: boolean; kind?: 'file' | 'folder'; path?: string; url?: string }
 export interface AgentEvent { type: string; text?: string; name?: string; status?: string; model?: string; channel?: string; sessionId: string; summary?: unknown; usage?: unknown; timing?: { rounds: number; modelMs: number; toolMs: number; toolCalls: number; totalMs: number; firstTextMs?: number } }
 declare global {
     interface Window { directorDesktop?: {
@@ -14,6 +15,8 @@ declare global {
         pathForFile?(file: File): string;
         closingState?(data: { busy: boolean }): void;
         skills?(data: SkillRequest): Promise<DesktopResult<SkillResult>>;
+        builtinSkill?(): Promise<DesktopResult<typeof import('./skill.ts').BUILTIN_SKILL>>;
+        onBuiltinSkill?(callback: (data: typeof import('./skill.ts').BUILTIN_SKILL) => void): () => void;
         files?(action: 'locations' | 'set-locations' | 'choose' | 'choose-export-directory' | 'save-project' | 'save-export' | 'automation-read' | 'automation-write-begin' | 'automation-write-chunk' | 'automation-write-close' | 'automation-write-abort', data?: unknown): Promise<DesktopResult<{ projects?: string; exports?: string; saved?: boolean; filename?: string; name?: string; id?: string; path?: string; content?: string; package?: import('../resources/model-package.ts').ModelPackage }>>;
         onSaveBeforeClose?(callback: () => Promise<boolean>): () => void;
         update(action: 'state' | 'save' | 'check' | 'download' | 'install' | 'page', data?: unknown): Promise<DesktopResult<import('../updates/types.ts').UpdateState>>;

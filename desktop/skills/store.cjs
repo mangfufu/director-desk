@@ -3,7 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { relativeFile, skillPackage } = require('./package.cjs');
 
-function createSkillStore({ directory, builtin }) {
+function createSkillStore({ directory, builtin, getBuiltin }) {
     const root = path.join(directory, 'skills'), index = path.join(root, 'index.json');
     let state = { version: 1, builtinEnabled: true, entries: [] }, changes = Promise.resolve();
     const ready = fs.readFile(index, 'utf8').then(text => {
@@ -14,9 +14,10 @@ function createSkillStore({ directory, builtin }) {
         state = parsed;
     }).catch(error => { if (error.code !== 'ENOENT') throw Error('无法读取本机技能目录，原文件已保留'); });
     const validId = id => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id);
-    const builtinEntry = () => ({ id: 'builtin', name: builtin.name, description: '导演台操作、空间规则与配套提示词', version: builtin.version, enabled: state.builtinEnabled, builtin: true, source: '随软件内置', files: ['SKILL.md', ...Object.keys(builtin.references ?? {})] });
+    const currentBuiltin = async () => { if (getBuiltin) builtin = await getBuiltin(); return builtin; };
+    const builtinEntry = () => ({ id: 'builtin', name: builtin.name, description: '导演台操作、空间规则与配套提示词', version: builtin.version, releaseVersion: builtin.releaseVersion, enabled: state.builtinEnabled, builtin: true, source: '官方技能', files: ['SKILL.md', ...Object.keys(builtin.references ?? {})] });
     const list = async (enabledOnly = false) => {
-        await ready; await changes;
+        await ready; await changes; await currentBuiltin();
         return [builtinEntry(), ...state.entries.map(({ folder: _folder, ...e }) => ({ ...e, builtin: false }))].filter(e => !enabledOnly || e.enabled);
     };
     async function persist(next) {
@@ -63,13 +64,14 @@ function createSkillStore({ directory, builtin }) {
         });
     }
     async function read({ id = 'builtin', path: requested, knownVersion } = {}, allowDisabled = false) {
-        await ready; await changes;
+        await ready; await changes; await currentBuiltin();
         const entry = id === 'builtin' ? builtinEntry() : entryFor(id);
         if (!entry.enabled && !allowDisabled) throw Error('此技能已停用，请遵循用户当前启用的技能');
         const file = relativeFile(requested ?? entry.entry ?? 'SKILL.md');
         if (!entry.files.includes(file)) throw Error('技能中没有这个文件');
         const unchanged = knownVersion === entry.version && requested === undefined;
-        if (unchanged) return { id, name: entry.name, version: entry.version, enabled: entry.enabled, unchanged: true, files: entry.files };
+        const release = entry.releaseVersion ? { releaseVersion: entry.releaseVersion } : {};
+        if (unchanged) return { id, name: entry.name, version: entry.version, ...release, enabled: entry.enabled, unchanged: true, files: entry.files };
         let text = file === 'SKILL.md' ? builtin.instructions : builtin.references?.[file];
         if (id !== 'builtin') {
             const folder = await fs.realpath(path.join(root, entry.folder));
@@ -80,7 +82,7 @@ function createSkillStore({ directory, builtin }) {
             try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw Error('该文件是二进制附件，请在技能目录中查看'); }
             if (text.includes('\0')) throw Error('该文件是二进制附件，请在技能目录中查看');
         }
-        return { id, name: entry.name, version: entry.version, enabled: entry.enabled, unchanged: false, path: file, instructions: text, files: entry.files };
+        return { id, name: entry.name, version: entry.version, ...release, enabled: entry.enabled, unchanged: false, path: file, instructions: text, files: entry.files };
     }
     async function folder(id) { await ready; await changes; return path.join(root, entryFor(id).folder); }
     async function tool(args = {}) {
@@ -88,6 +90,6 @@ function createSkillStore({ directory, builtin }) {
             || Object.values(args).some(v => typeof v !== 'string') || args.action && !['list', 'read'].includes(args.action)) throw Error('技能查询参数无效');
         return args.action === 'list' ? { skills: await list(true) } : read(args);
     }
-    return { ready, list, install, enable, remove, read, folder, tool };
+    return { ready, list, install, enable, remove, read, folder, tool, currentBuiltin };
 }
 module.exports = { createSkillStore };

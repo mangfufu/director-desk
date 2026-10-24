@@ -28,7 +28,7 @@ export function readScene(ctx: AppContext, revision: number, args: SceneReadOpti
         time: ctx.time, cameraId: ctx.preview, selectedId: ctx.selected,
         referenceLabels: project.referenceLabels ?? false, creationMode: project.creationMode ?? 'full',
         ...(project.creationMode === 'geometry' ? { geometry: geometryCreationGuide() } : {}),
-        skill: { name: BUILTIN_SKILL.name, version: BUILTIN_SKILL.version },
+        skill: { name: BUILTIN_SKILL.name, version: BUILTIN_SKILL.version, releaseVersion: BUILTIN_SKILL.releaseVersion },
         sections: [...sections], entityCount: project.entities.length,
     };
     if (sections.has('selection')) result.selection = editorSelection(project, ctx.selected);

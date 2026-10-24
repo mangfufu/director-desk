@@ -1,4 +1,5 @@
-import type { DesktopResult, SkillEntry, SkillResult, SkillRequest } from '../automation/desktop-types.ts';
+import type { DesktopResult, SkillEntry, SkillResult, SkillRequest, SkillUpdate } from '../automation/desktop-types.ts';
+import { t, onLanguageChange } from '../i18n/locale.ts';
 import { escape } from './common.ts';
 import './ai-skills-panel.css';
 
@@ -9,12 +10,13 @@ export function mountAISkills(panel: HTMLElement, status: (message: string) => v
 <div class="skill-download"><input id="skill-url" type="url" aria-label="GitHub 技能链接" placeholder="GitHub 技能目录链接"/><button id="skill-download">下载</button></div>
 <label>已安装技能<select id="skill-select" aria-label="已安装技能"></select></label>
 <textarea id="skill-meta" readonly aria-label="技能来源和简介"></textarea>
+<div id="skill-official-update" hidden><div class="skill-update-summary"><span id="skill-official-version"></span><span id="skill-official-status" role="status" aria-live="polite"></span></div><div class="skill-update-actions"><button id="skill-check-update">检查技能更新</button><button id="skill-install-update" hidden>更新技能</button></div></div>
 <div class="skill-actions"><label class="ai-check"><input id="skill-enabled" type="checkbox"/>启用</label><button id="skill-reload">重新加载</button><button id="skill-folder">打开目录</button><button id="skill-remove">移除</button></div>
 <label>技能说明与附件<select id="skill-file" aria-label="技能文件"></select></label>
 <textarea id="skill-content" readonly aria-label="技能说明内容" placeholder="选择技能后查看说明。"></textarea>
 `;
     const find = <T extends HTMLElement = HTMLInputElement>(id: string) => section.querySelector<T>('#' + id)!;
-    let entries: SkillEntry[] = [], working = false, reading = 0;
+    let entries: SkillEntry[] = [], working = false, reading = 0, update: SkillUpdate | undefined;
     const selected = () => entries.find(e => e.id === find('skill-select').value);
     const check = (result: DesktopResult<SkillResult>) => { if (!result.ok) throw Error(result.error || '技能操作失败'); return result.data!; };
     function disabled() {
@@ -23,6 +25,7 @@ export function mountAISkills(panel: HTMLElement, status: (message: string) => v
         const entry = selected();
         for (const id of ['skill-reload', 'skill-folder', 'skill-remove']) find<HTMLButtonElement>(id).disabled = blocked || !entry || entry.builtin;
         find('skill-enabled').disabled = blocked || !entry;
+        find<HTMLButtonElement>('skill-install-update').disabled = blocked || update?.status !== 'available';
     }
     const observer = new MutationObserver(disabled); observer.observe(panel, { attributes: true, attributeFilter: ['data-running'] });
     async function read() {
@@ -36,13 +39,22 @@ export function mountAISkills(panel: HTMLElement, status: (message: string) => v
     function show() {
         const entry = selected();
         find('skill-enabled').checked = entry?.enabled ?? false;
-        find('skill-meta').value = entry ? `${entry.builtin ? '内置' : '自定义'} · ${entry.version} · ${entry.source}\n${entry.description}` : '还没有技能';
+        find('skill-meta').value = entry ? `${entry.builtin ? t('内置') : t('自定义')} · ${entry.releaseVersion || entry.version} · ${t(entry.source)}\n${entry.description}` : t('还没有技能');
         find('skill-reload').textContent = entry?.source.startsWith('https://github.com/') ? '更新' : '重新加载';
         find('skill-file').innerHTML = (entry?.files || []).map(file => `<option value="${escape(file)}">${escape(file)}</option>`).join('');
         const main = entry?.files.find(file => file.toLowerCase() === 'skill.md'); if (main) find('skill-file').value = main;
-        disabled(); void read();
+        showUpdate(); disabled(); void read();
     }
+    function showUpdate() {
+        find('skill-official-update').hidden = !selected()?.builtin;
+        find('skill-official-version').textContent = update ? `v${update.currentVersion}${update.latestVersion ? ` → v${update.latestVersion}` : ''}` : '';
+        const labels = { unchecked: '尚未检查', checking: '正在检查…', available: '有可用更新', current: '已是最新版本', incompatible: '请先升级软件', error: '检查失败，请重试' };
+        find('skill-official-status').textContent = update?.error ? t(update.error) : t(labels[update?.status || 'unchecked']);
+        find('skill-install-update').hidden = update?.status !== 'available';
+    }
+    onLanguageChange(showUpdate);
     function refresh(data: SkillResult, prefer?: string) {
+        if (data.update) update = data.update;
         const id = prefer || find('skill-select').value; entries = data.skills || [];
         find('skill-select').innerHTML = entries.map(entry => `<option value="${escape(entry.id)}">${entry.enabled ? '●' : '○'} ${escape(entry.name)}</option>`).join('');
         if (entries.some(entry => entry.id === id)) find('skill-select').value = id;
@@ -51,16 +63,22 @@ export function mountAISkills(panel: HTMLElement, status: (message: string) => v
     async function run(data: SkillRequest) {
         if (!bridge?.skills || working) return;
         working = true; disabled(); status('正在处理技能…');
+        if (data.action === 'check-update' && update) { update = { ...update, status: 'checking', error: undefined }; showUpdate(); }
         try {
             const previous = new Set(entries.map(e => e.id)), result = check(await bridge.skills(data));
             refresh(result, result.skills?.find(e => !previous.has(e.id))?.id);
-            status(data.action === 'enable' ? '技能开关已保存，从下一次任务生效；对话历史保留。' : '技能操作完成。');
-        } catch (error) { status((error as Error).message); find('skill-enabled').checked = selected()?.enabled ?? false; }
+            status(data.action === 'check-update' ? find('skill-official-status').textContent || '' : data.action === 'enable' ? '技能开关已保存，从下一次任务生效；对话历史保留。' : data.action === 'update-builtin' ? '技能已更新' : '技能操作完成。');
+        } catch (error) {
+            status((error as Error).message); find('skill-enabled').checked = selected()?.enabled ?? false;
+            if (data.action === 'check-update' && update) { update = { ...update, status: 'error', error: undefined }; showUpdate(); }
+        }
         finally { working = false; disabled(); }
     }
     section.querySelectorAll<HTMLElement>('[data-skill-import]').forEach(button => button.onclick = () => { void run({ action: 'import', kind: button.dataset.skillImport as 'file' | 'folder' }); });
     find('skill-download').onclick = () => { const url = find('skill-url').value.trim(); if (url) void run({ action: 'github', url }); else status('请粘贴包含 SKILL.md 的 GitHub 技能目录链接'); };
     find('skill-select').onchange = show; find('skill-file').onchange = () => { void read(); };
+    find('skill-check-update').onclick = () => { void run({ action: 'check-update' }); };
+    find('skill-install-update').onclick = () => { void run({ action: 'update-builtin' }); };
     find('skill-enabled').onchange = () => { const entry = selected(); if (entry) void run({ action: 'enable', id: entry.id, enabled: find('skill-enabled').checked }); };
     find('skill-reload').onclick = () => { const entry = selected(); if (entry) void run(entry.source.startsWith('https://github.com/') ? { action: 'github', id: entry.id, url: entry.source } : { action: 'reload', id: entry.id }); };
     find('skill-folder').onclick = () => { const entry = selected(); if (entry) void run({ action: 'open', id: entry.id }); };

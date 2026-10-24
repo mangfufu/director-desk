@@ -5,8 +5,6 @@ import { createRequire } from 'node:module';
 import { _electron } from 'playwright-core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import net from 'node:net';
-import { randomBytes } from 'node:crypto';
 
 await fs.mkdir('tmp', { recursive: true });
 const directory = await fs.mkdtemp(path.resolve('tmp/skills-desktop-'));
@@ -15,6 +13,13 @@ await fs.mkdir(path.join(source, 'references'), { recursive: true });
 await fs.writeFile(path.join(source, 'SKILL.md'), '---\nname: 我的动作创作\ndescription: 按场景目标安排动作与人物反应。\n---\n技能正文第一版');
 await fs.writeFile(path.join(source, 'references/guide.md'), '附件内容：先确认人物目标。');
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+const { contentVersion } = createRequire(import.meta.url)('../desktop/skills/official-package.cjs');
+const { OFFICIAL_SKILL_URL } = createRequire(import.meta.url)('../desktop/skills/official.cjs');
+const updated = JSON.parse(await fs.readFile('src/automation/builtin-skill.json', 'utf8'));
+updated.releaseVersion = '99.0.0';
+updated.references['references/online-workflow.md'] += '\nOFFICIAL_UPDATE_DESKTOP_FIXTURE';
+updated.instructions = updated.references['references/online-workflow.md'];
+updated.version = contentVersion(updated);
 let application, page, client;
 const launch = async () => {
     application = await _electron.launch({ executablePath: createRequire(import.meta.url)('electron'), args: [path.resolve(process.env.DIRECTOR_TEST_APP || '.audit/desktop-app'), `--director-test-profile=${profile}`], env });
@@ -45,17 +50,16 @@ try {
     // Small assistant width and height: all controls fit; only text areas may scroll.
     await page.evaluate(() => { const panel = document.querySelector('#ai-panel'); panel.style.width = '340px'; panel.style.height = '620px'; });
     const overflow = await page.evaluate(() => [...document.querySelectorAll('#ai-skills,#ai-skills button,#ai-skills input,#ai-skills select')].filter(e => {
+        if (!e.getClientRects().length) return false;
         const r = e.getBoundingClientRect(), outer = document.querySelector('#ai-panel').getBoundingClientRect();
         return r.left < outer.left || r.right > outer.right || r.bottom > outer.bottom;
     }).map(e => e.id || e.tagName));
     assert.deepEqual(overflow, []);
     await page.screenshot({ path: path.join(directory, 'skills.png') });
-    // Assign an ephemeral test port without touching the user's MCP connection.
-    const probe = net.createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r)); const port = probe.address().port; await new Promise(r => probe.close(r));
-    const token = randomBytes(32).toString('hex');
-    const secret = await application.evaluate(({ safeStorage }, value) => safeStorage.encryptString(value).toString('base64'), token);
-    await fs.writeFile(path.join(profile, 'mcp-connection.json'), JSON.stringify({ version: 1, port, secret }));
+    // Use the isolated profile's automatically started MCP, never the user's connection.
     const connection = await page.evaluate(async () => window.directorDesktop.mcp(true)); assert.equal(connection.ok, true);
+    const savedConnection = JSON.parse(await fs.readFile(path.join(profile, 'mcp-connection.json'), 'utf8'));
+    const token = await application.evaluate(({ safeStorage }, secret) => safeStorage.decryptString(Buffer.from(secret, 'base64')), savedConnection.secret);
     client = new Client({ name: 'skill-verification', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(connection.data.url), { requestInit: { headers: { Authorization: 'Bearer ' + token } } }));
     const tool = async args => JSON.parse((await client.callTool({ name: 'director_skill', arguments: args })).content[0].text);
@@ -72,11 +76,41 @@ try {
     await page.locator('#skill-enabled').uncheck(); await page.waitForFunction(() => !document.querySelector('#skill-enabled').disabled);
     assert.equal((await tool({ id })).ok, false);
     assert.ok(!(await tool({ action: 'list' })).data.skills.some(e => e.id === id));
-    await page.locator('#skill-select').selectOption('builtin'); await page.locator('#skill-enabled').uncheck();
+    await page.locator('#skill-select').selectOption('builtin');
+    await application.evaluate((_electron, { url, payload }) => {
+        const original = globalThis.fetch;
+        globalThis.fetch = (input, options) => String(input) === url
+            ? Promise.resolve(new Response(JSON.stringify(payload))) : original(input, options);
+    }, { url: OFFICIAL_SKILL_URL, payload: updated });
+    const before = JSON.parse((await client.callTool({ name: 'director_read', arguments: { sections: [] } })).content[0].text).data;
+    await page.locator('#skill-check-update').click();
+    await page.locator('#skill-install-update').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#skill-official-version').innerText(), /99\.0\.0/);
+    const updateOverflow = await page.evaluate(() => [...document.querySelectorAll('#ai-skills button,#ai-skills select,#skill-content')].filter(e => {
+        if (!e.getClientRects().length) return false;
+        const r = e.getBoundingClientRect(), p = document.querySelector('#ai-panel').getBoundingClientRect();
+        return r.left < p.left || r.right > p.right || r.bottom > p.bottom;
+    }).map(e => e.id));
+    assert.deepEqual(updateOverflow, []);
+    await page.screenshot({ path: path.join(directory, 'official-update.png') });
+    await page.locator('#skill-install-update').click();
+    await page.waitForFunction(() => document.querySelector('#skill-content').value.includes('OFFICIAL_UPDATE_DESKTOP_FIXTURE'));
+    assert.equal((await tool({ knownVersion: builtin.version })).data.version, updated.version);
+    assert.equal((await tool({ knownVersion: updated.version })).data.unchanged, true);
+    const after = JSON.parse((await client.callTool({ name: 'director_read', arguments: { sections: [] } })).content[0].text).data;
+    assert.equal(after.skill.version, updated.version);
+    assert.equal(after.skill.releaseVersion, '99.0.0');
+    assert.deepEqual({ ...after, skill: before.skill }, before);
+    assert.equal((await page.evaluate(() => window.directorDesktop.builtinSkill())).data.version, updated.version);
+    await page.locator('#skill-enabled').uncheck();
     await page.waitForFunction(() => !document.querySelector('#skill-enabled').disabled); assert.equal((await tool({})).ok, false);
     await page.locator('#skill-select').selectOption(id); await page.locator('#skill-remove').click();
     await page.waitForFunction(() => document.querySelector('#skill-select').options.length === 1);
     assert.match(await fs.readFile(path.join(source, 'SKILL.md'), 'utf8'), /第一版/);
+    await client.close(); client = null; await application.close(); await launch();
+    assert.match(await page.locator('#skill-meta').inputValue(), /99\.0\.0/);
+    assert.equal(await page.locator('#skill-enabled').isChecked(), false);
+    assert.equal((await page.evaluate(() => window.directorDesktop.builtinSkill())).data.version, updated.version);
     assert.deepEqual(errors, []);
-    console.log('Desktop skill import, references, enable/disable, restart, reload, layout, removal and real MCP reads passed.');
+    console.log('Desktop skill import, official update, shared renderer/MCP version, restart, enable/disable, layout and removal passed. Screenshots: ' + directory);
 } finally { await client?.close(); await application?.close(); }

@@ -10,6 +10,6 @@ const referenceFiles = [
     'references/extensions.md',
     'references/project-format.md',
 ];
-const publicFiles = ['SKILL.md', 'LICENSE', ...referenceFiles, 'scripts/project-tool.mjs', 'assets/minimal.director'];
+const publicFiles = ['SKILL.md', 'LICENSE', 'version.json', ...referenceFiles, 'scripts/project-tool.mjs', 'assets/minimal.director'];
 
 module.exports = { referenceFiles, publicFiles };
