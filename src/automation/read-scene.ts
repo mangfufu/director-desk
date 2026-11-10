@@ -1,3 +1,4 @@
+import { entityVisibleAt } from '../scenes/visibility.ts';
 import { DEFAULT_DEPTH_VIDEO } from '../cinematography/depth-video.ts';
 import { memberPathSummary } from '../navigation/member-paths.ts';
 import { editorSelection } from '../editor/timeline-selection.ts';
@@ -37,7 +38,7 @@ export function readScene(ctx: AppContext, revision: number, args: SceneReadOpti
         result.entities = entities.map(e => args.details ? {
             ...clone(e), ...(e.initialPose ? { initialPose: { active: inheritedPoseAt(e, ctx.time), nodeCount: e.initialPose.nodes.length,
                 description: '接拍姿态；原始节点数组保存在工程文件中，新动作开始后不再保持' } } : {}),
-        } : { id: e.id, name: e.name, asset: e.asset, kind: e.kind, color: e.color, reference: e.reference, locked: e.locked, visible: e.visible, position: e.position, ...(e.memberPaths ? {memberRoutes:memberPathSummary(e)} : {}) });
+        } : { id: e.id, name: e.name, asset: e.asset, kind: e.kind, color: e.color, reference: e.reference, locked: e.locked, visible: e.visible, visibleAtTime: entityVisibleAt(e,ctx.time), visibilityClips: e.visibility?.length, position: e.position, ...(e.memberPaths ? {memberRoutes:memberPathSummary(e)} : {}) });
         if (args.ids) result.missingIds = args.ids.filter(id => !entities.some(e => e.id === id));
         if (args.details) result.structureModules = entities.filter(e => structurePorts(e).length).map(e => ({
             id: e.id, localPorts: structurePorts(e), worldPorts: !e.path && !e.handBinding && !e.clips.length ? worldStructurePorts(e) : [], link: e.structureLink ?? null,

@@ -16,12 +16,14 @@ if (!app.isPackaged && app.commandLine.hasSwitch('director-test-profile'))
 app.setName('DirectorDesk');
 let window;
 let extensions;
+let integration;
 const csp = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 async function createWindow() {
     const windowTitle = app.isPackaged ? '导演台' : '导演台 · 开发测试版';
     window = new BrowserWindow({ width: 1600, height: 1000, minWidth: 1000, minHeight: 720, show: false,
         title: windowTitle, backgroundColor: '#101214', icon: path.join(__dirname, 'icon.ico'),
+        frame: false,
         webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck: false,
             additionalArguments: process.platform==='linux' && process.env.WSL_DISTRO_NAME ? ['--director-wsl-pointer'] : [] } });
     attachLanguage(window);
@@ -31,10 +33,14 @@ async function createWindow() {
         const suffix = ' · ' + text(window, '开发测试版');
         window.setTitle(!app.isPackaged && !name.endsWith(suffix) ? name + suffix : name);
     });
-    const integration = attachIntegration(window), updates = attachUpdates(window, integration);
-    const files = attachFiles(window);
+    integration = attachIntegration(window); const updates = attachUpdates(window, integration);
+    const files = attachFiles(window, { isBusy: () => integration.isBusy() });
     extensions = attachExtensions(window);
     Menu.setApplicationMenu(null);
+    window.webContents.on('before-input-event', (event, input) => {
+        const key = input.key.toLowerCase();
+        if (input.type === 'keyDown' && (key === 'f5' || (input.control || input.meta) && ['r', '+', '-', '=', '0'].includes(key))) event.preventDefault();
+    });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event, url) => { if (url !== origin + '/') event.preventDefault(); });
     window.webContents.on('will-attach-webview', event => event.preventDefault());
@@ -59,6 +65,7 @@ else {
         protocol.handle('director', async request => {
             try {
                 const url = new URL(request.url), relative = decodeURIComponent(url.pathname).replace(/^\//, '') || 'index.html';
+                if(url.hostname==='app'&&relative.startsWith('reconstruction-video/'))return integration?.videoResponse(request)??new Response('Not found',{status:404});
                 if(url.hostname==='app'&&request.method==='GET'&&relative.startsWith('extensions/')){
                     const [,id,digest,...parts]=relative.split('/');const resource=parts.join('/');
                     const mime={'.js':'text/javascript','.mjs':'text/javascript','.cjs':'text/javascript','.json':'application/json','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.wasm':'application/wasm','.woff2':'font/woff2'}[path.extname(resource)]||'application/octet-stream';

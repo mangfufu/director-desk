@@ -10,9 +10,23 @@ Work directly in the editor, or connect an AI agent that can build and edit the 
 
 [Download for Windows / Linux](https://github.com/mangfufu/director-desk/releases/latest) · [Release notes](https://github.com/mangfufu/director-desk/releases) · [Report an issue](https://github.com/mangfufu/director-desk/issues) · [Agent skill](skills/director-desk/)
 
-![DirectorDesk: stage view on the left, camera view on the right, and the timeline below](docs/images/workspace-0.4.10.jpg)
+![DirectorDesk: stage view, camera view, and timeline](docs/images/workspace-0.5.3.png)
 
-Latest release: **[0.5.2](https://github.com/mangfufu/director-desk/releases/tag/v0.5.2)** — Update the official skill separately from the app, with improved guidance for video prompts. Screenshots below are from 0.4.10 and show the Chinese interface.
+Latest release: **[0.5.3](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3)** — Video reconstruction, shot contact sheets, cached previews, composition guides, and improvements to character models and editing. Screenshots show the Chinese interface; older feature screenshots are labeled with their version.
+
+## Start from a video
+
+Open **Video Reconstruction** in the title bar, choose a video and a time range, and reconstruct character motion and camera movement, with optional simplified scenery. Watch the source and reconstruction side by side, review the result, choose character models, and open it as an editable project.
+
+You can replace a character's appearance, trim or retime the recovered animation, and continue editing movement paths and cameras.
+
+This optional feature runs Human3R locally and requires an NVIDIA GPU. Download and set up the model on first use; the settings panel includes hardware guidance, installation progress, and cleanup controls. Human3R is licensed for non-commercial use only; commercial use requires separate authorization. Its license is shown before downloading.
+
+## Review shots and complex scenes
+
+- **Shot contact sheets:** review shot images, timing, and notes together, then export an HTML sheet to share.
+- **Cached previews:** render a selected range once and loop the preview for smoother playback of complex scenes.
+- **Composition guides:** toggle thirds, center lines, and safe-area guides.
 
 ## From an idea to a reference video
 

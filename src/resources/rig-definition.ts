@@ -24,10 +24,14 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 export function assertRigDefinition(rig: HumanoidRig | undefined, pose: ModelRestPose | undefined) {
     if (rig !== undefined) {
         if (!record(rig) || Object.keys(rig).some(key => !['version', 'family', 'bones'].includes(key)) || rig.version !== 1 || rig.family !== 'humanoid' || !record(rig.bones)) throw Error('人形骨骼映射格式无效');
-        const used = new Set<string>();
+        const used = new Map<string, HumanBone>();
         for (const [key, path] of Object.entries(rig.bones)) {
-            if (!Object.hasOwn(HUMAN_BONES, key) || !isBonePath(path) || used.has(path)) throw Error('骨骼映射部位、路径无效或重复');
-            used.add(path);
+            if (!Object.hasOwn(HUMAN_BONES, key)) throw Error('未知人体部位：' + key);
+            const part = key as HumanBone;
+            if (!isBonePath(path)) throw Error(HUMAN_BONES[part] + '的骨骼路径无效');
+            const occupied = used.get(path);
+            if (occupied) throw Error(`${HUMAN_BONES[part]}与${HUMAN_BONES[occupied]}重复使用同一骨骼，请先解除原映射`);
+            used.set(path, part);
         }
         for (const key of Object.keys(rig.bones) as HumanBone[]) {
             let ancestor = parent[key]; while (ancestor && !rig.bones[ancestor]) ancestor = parent[ancestor];

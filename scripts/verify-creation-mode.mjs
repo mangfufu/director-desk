@@ -111,7 +111,7 @@ try {
     await page.waitForFunction(() => window.__director.getProject().creationMode === 'geometry' && window.__director.getProject().referenceLabels === true);
     assert.equal(await page.locator('[data-creation-mode="geometry"]').getAttribute('aria-pressed'), 'true');
     assert.equal(await page.locator('#reference-labels').isChecked(), true);
-    await page.locator('[data-side="assets"]').click();
+    await page.locator('#resource-home').click(); await page.locator('[data-side="assets"]').click();
     assert.equal((await page.locator('#library-count').textContent()).trim(), '16 项');
     await page.screenshot({ path: 'tmp/creation-mode/wide.png' });
     await page.setViewportSize({ width: 1000, height: 720 });

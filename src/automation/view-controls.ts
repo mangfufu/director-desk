@@ -11,7 +11,7 @@ export function controlView(ctx: AppContext, args: Record<string, unknown>) {
     for (const id of [...(ids ?? []), ...(args.entityId ? [args.entityId] : [])]) if (!ctx.project.entities.some(e => e.id === id)) throw Error('对象不存在');
     if (ids && args.clips !== undefined) throw Error('请选择对象或片段，不同时设置两种选区');
     const clips = args.clips as TimelineSelection[] | undefined;
-    for (const clip of clips ?? []) { if (!['cut', 'action', 'path'].includes(clip.kind)) throw Error('片段类型无效'); clipRange(ctx.project, clip); }
+    for (const clip of clips ?? []) { if (!['cut', 'action', 'path', 'visibility'].includes(clip.kind)) throw Error('片段类型无效'); clipRange(ctx.project, clip); }
     const range = args.timeRange as { start: number; end: number } | null | undefined;
     if (range && (!Number.isFinite(range.start) || !Number.isFinite(range.end) || range.start < 0 || range.end < range.start || range.end > ctx.project.duration)) throw Error('时间选区无效');
     if (args.focus === 'selected' && !(args.entityId || ids?.[0] || ctx.selected)) throw Error('没有可聚焦对象');

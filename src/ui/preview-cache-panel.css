@@ -1,0 +1,8 @@
+.preview-cache-modal{width:900px}
+.preview-cache-settings{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+.preview-cache-settings label{display:grid;gap:4px;font-size:12px;min-width:0;flex:1}
+.preview-cache-settings input{width:100%;min-width:0}
+#cached-frame{display:block;width:100%;height:min(42vh,360px);object-fit:contain;background:#0d0d0d}
+.preview-cache-transport{display:flex;align-items:center;gap:12px;margin-top:12px}
+#cached-seek{flex:1;min-width:0}#cached-time{font-variant-numeric:tabular-nums;font-size:12px}
+#cached-status{font-size:12px;min-height:18px;margin-top:8px}

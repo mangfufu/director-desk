@@ -13,6 +13,7 @@ export function mountSettings(ctx:AppContext) {
         const p=editorPreferences.current,orbit=ctx.engine.orbit;
         orbit.rotateSpeed=p.rotationSpeed;orbit.zoomSpeed=p.zoomSpeed;orbit.panSpeed=p.panSpeed;orbit.enableDamping=p.viewDamping;
         ctx.engine.gizmo.setSize(p.gizmoSize);
+        ctx.engine.adaptivePreview=p.adaptivePreview;
         document.querySelector<HTMLElement>('#stage-hint')!.hidden=!p.showNavigationHint;
         ctx.engine.render();
     };
@@ -20,13 +21,13 @@ export function mountSettings(ctx:AppContext) {
     const row=(label:string,control:string)=>`<div class="setting-row"><div><strong>${label}</strong></div><div class="setting-control">${control}</div></div>`;
     const input=(key:PreferenceKey)=>{
         const value=editorPreferences.current[key];
-        if(typeof value==='boolean')return `<input type="checkbox" data-preference="${key}" aria-label="${key==='viewDamping'?'视角惯性':'布景操作提示'}" ${value?'checked':''}/>`;
+        if(typeof value==='boolean')return `<input type="checkbox" data-preference="${key}" aria-label="${({viewDamping:'视角惯性',showNavigationHint:'布景操作提示',adaptivePreview:'自动流畅预览'} as Partial<Record<PreferenceKey,string>>)[key]??key}" ${value?'checked':''}/>`;
         const range=preferenceRanges[key]!;
         return `<input type="number" data-preference="${key}" aria-label="${key}" value="${Number(value.toFixed(2))}" min="${range[0]}" max="${range[1]}" step=".1"/>`;
     };
     trigger.onclick=()=>{
         if(ctx.busy || ctx.history.pending || ctx.draft)return;
-        ctx.showModal('设置',`<div class="settings-list">
+        if (!ctx.showModal('设置',`<div class="settings-list">
             ${row('语言',`<select id="ui-language" aria-label="Language"><option value="zh-CN" ${getLanguage()==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${getLanguage()==='en'?'selected':''}>English</option></select>`)}
             <div class="settings-navigation"><div class="settings-categories" role="group" aria-label="设置分类"><button data-settings-category="navigation" aria-pressed="true">操作与视角</button><button data-settings-category="editing">编辑辅助</button><button data-settings-category="files">保存与软件</button></div><button data-setting="help">操作与快捷键</button></div><section data-settings-panel="navigation">
             ${row('键盘移动速度 / 米每秒',input('navigationSpeed'))}
@@ -38,15 +39,20 @@ export function mountSettings(ctx:AppContext) {
             </section><section data-settings-panel="editing" hidden>
             ${row('变换手柄大小',input('gizmoSize'))}
             ${row('布景操作提示',input('showNavigationHint'))}
+            ${row('自动流畅预览',input('adaptivePreview'))}
+            ${row('预览精度',`<select id="settings-preview-quality"><option value="full" ${ctx.engine.previewQuality==='full'?'selected':''}>完整</option><option value="draft" ${ctx.engine.previewQuality==='draft'?'selected':''}>流畅</option></select>`)}
+            ${row('工作区布局','<button data-setting="layout">恢复布局</button>')}
             </section><section data-settings-panel="files" hidden>
             ${row('默认文件位置',`<button data-setting="files" ${locations?'':'disabled'}>设置目录</button>`)}
+            ${row('视频反推',`<button data-setting="reconstruction" ${window.directorDesktop?'':'disabled'}>模型与存储</button>`)}
             ${row('软件更新',`<button data-setting="updates" ${window.directorDesktop?'':'disabled'}>更新设置</button>`)}
-            ${row('工作区布局','<button data-setting="layout">恢复布局</button>')}
+
             </section><p id="settings-feedback" role="status"></p>
-        </div>`, '<button data-setting="reset" class="subtle">恢复操作偏好默认值</button><button data-act="close-modal">完成</button>');
+        </div>`, '<button data-setting="reset" class="subtle">恢复操作偏好默认值</button><button data-act="close-modal">完成</button>')) return;
         document.querySelector('.modal')!.classList.add('preferences-modal');
         const list=document.querySelector('.settings-list')!;
         list.querySelector<HTMLSelectElement>('#ui-language')!.addEventListener('change',event=>{event.stopPropagation();setLanguage((event.target as HTMLSelectElement).value);});
+        list.querySelector<HTMLSelectElement>('#settings-preview-quality')!.addEventListener('change',event=>{event.stopPropagation();ctx.engine.setPreviewQuality((event.target as HTMLSelectElement).value as 'full'|'draft');});
         list.addEventListener('input',event=>{
             const input=event.target as HTMLInputElement,key=input.dataset.preference as PreferenceKey;
             if(!key)return;event.stopPropagation();
@@ -62,6 +68,7 @@ export function mountSettings(ctx:AppContext) {
             if(action==='layout')document.querySelector<HTMLButtonElement>('#reset-layout')!.click();
             if(action==='files')locations?.click();
             if(action==='help')ctx.helpDialog();
+            if(action==='reconstruction')void import('./video-reconstruction-settings.ts').then(m=>m.openReconstructionSettings(ctx)).catch(e=>ctx.toast(e.message,true));
             if(action==='updates'){ctx.closeModal();document.querySelector<HTMLButtonElement>('#update-toggle')?.click();const dialog=document.querySelector<HTMLDialogElement>('#update-panel');if(dialog)addPageBack(dialog,'返回设置',()=>{dialog.close();trigger.click();});}
         });
     };

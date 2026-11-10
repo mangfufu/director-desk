@@ -52,10 +52,9 @@ export interface AppContext {
     seek(t: number, deferSample?: boolean): void;
     saveProject(saveAs?: boolean): Promise<boolean>;
     flushRecovery?(): Promise<void>;
-    showModal(title: string, body: string, footer?: string, child?: boolean): void;
+    showModal(title: string, body: string, footer?: string, child?: boolean): boolean;
     closeModal(): void;
     projectDialog(): void;
-    roomDialog(): void;
     createNew(template?: SceneTemplate): void;
     sceneDialog(): void;
     makeCamera(fromView?: boolean): void;

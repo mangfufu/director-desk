@@ -1,3 +1,4 @@
+import { entityVisibleAt } from '../scenes/visibility.ts';
 import type { Entity, Project } from '../model.ts';
 export interface Floor { id: string; name: string; elevation: number }
 export interface EditorView { trackOrder?: string[]; activeFloorId: string; hiddenFloorIds: string[]; hiddenEntityIds: string[]; hideWalls: boolean }
@@ -15,7 +16,7 @@ export function assertFloors(project: Project) {
     for (const e of project.entities) if (e.floorId !== undefined && (typeof e.floorId !== 'string' || e.floorId && !ids.has(e.floorId))) throw Error('对象归属的楼层不存在');
     const view = project.editorView;
     if (view !== undefined) {
-        if (view && view.trackOrder !== undefined && (!Array.isArray(view.trackOrder) || view.trackOrder.length > 20000 || new Set(view.trackOrder).size !== view.trackOrder.length || view.trackOrder.some(key => typeof key !== 'string' || key.length > 450 || !/^(entity|path|note):.+$/.test(key)))) throw Error('时间轴轨道顺序无效');
+        if (view && view.trackOrder !== undefined && (!Array.isArray(view.trackOrder) || view.trackOrder.length > 20000 || new Set(view.trackOrder).size !== view.trackOrder.length || view.trackOrder.some(key => typeof key !== 'string' || key.length > 450 || !/^(entity|path|note|visibility):.+$/.test(key)))) throw Error('时间轴轨道顺序无效');
         const entityIds = new Set(project.entities.map(e => e.id));
         const list = (v: unknown, choices: Set<string>) => Array.isArray(v) && new Set(v).size === v.length && v.every(id => typeof id === 'string' && choices.has(id));
         if (!view || typeof view !== 'object' || Array.isArray(view) || typeof view.activeFloorId !== 'string' || view.activeFloorId && !ids.has(view.activeFloorId)
@@ -53,9 +54,9 @@ export function removeFloor(project: Project, id: string) {
     project.floors = project.floors.filter(f => f.id !== id);
     if (project.editorView) { project.editorView.hiddenFloorIds = project.editorView.hiddenFloorIds.filter(f => f !== id); if (project.editorView.activeFloorId === id) project.editorView.activeFloorId = ''; }
 }
-export function editorEntityVisible(project: Project, entity: Entity) {
+export function editorEntityVisible(project: Project, entity: Entity, time=0) {
     const view = project.editorView;
-    const shown = (e: Entity, ownFloor = true) => e.visible && !view?.hiddenEntityIds.includes(e.id) && (!ownFloor || !e.floorId || !view?.hiddenFloorIds.includes(e.floorId))
+    const shown = (e: Entity, ownFloor = true) => entityVisibleAt(e,time) && !view?.hiddenEntityIds.includes(e.id) && (!ownFloor || !e.floorId || !view?.hiddenFloorIds.includes(e.floorId))
         && !(view?.hideWalls && (['wall', 'structure-wall'].includes(e.asset) || e.asset === 'room-part' && (e.assetParameters?.part ?? 0) !== 0));
     if (!shown(entity, !entity.handBinding)) return false;
     if (entity.handBinding) { const actor = project.entities.find(e => e.id === entity.handBinding!.actorId); return !!actor && shown(actor); }

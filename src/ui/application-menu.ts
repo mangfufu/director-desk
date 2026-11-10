@@ -24,17 +24,20 @@ export function mountApplicationMenu() {
     const mode = document.getElementById('creation-mode')!;
     mode.querySelector('[data-creation-mode="full"]')!.textContent = '精细模型';
     mode.querySelector('[data-creation-mode="geometry"]')!.textContent = '几何体';
-    document.querySelector('.sidebar .side-tabs')!.append(mode);
-    for (const [action, label] of [['group-create', '编组'], ['group-select', '选择整组'], ['group-ungroup', '解组'], ['arrange-open', '对齐与阵列'], ['staging-open', '布景库'], ['versions-open','历史版本'], ['plugins-open','插件'], ['navigate-open','自动避障']]) {
+    document.querySelector('.sidebar .search-field')!.before(mode);
+    for (const [action, label] of [['group-create', '编组'], ['group-select', '选择整组'], ['group-ungroup', '解组'], ['arrange-open', '对齐与阵列'], ['staging-open', '布景库'], ['versions-open','历史版本'], ['plugins-open','插件'], ['navigate-open','自动避障'], ['scene-reuse-open','场景复用 / 插入'], ['preview-settings','预览设置']]) {
         const control = document.createElement('button'); control.dataset.act = action; control.textContent = label;
         document.querySelector('.side-bottom')!.append(control);
     }
     const saveAs = document.createElement('button'); saveAs.dataset.act = 'save-as'; saveAs.textContent = '另存为…';
     document.querySelector('.side-bottom')!.append(saveAs);
+    const contact=document.createElement('button');contact.dataset.act='contact-sheet';contact.textContent='镜头联系表';document.querySelector('.side-bottom')!.append(contact);
+    const previewCache=document.createElement('button');previewCache.dataset.act='preview-cache';previewCache.textContent='局部预览';document.querySelector('.side-bottom')!.append(previewCache);
     const definitions: [string, string, [string, string?][]][] = [
-        ['file', '文件', [['[data-act="project"]'], ['[data-act="scene-templates"]'], ['[data-act="open"]'], ['[data-menu-copy="save"]'], ['[data-act="save-as"]'], ['[data-act="versions-open"]'], ['[data-menu-copy="export"]'], ['[data-act="model-import"]'], ['[data-act="staging-open"]'], ['[data-act="user-motion-library"]'], ['[data-act="production-notes"]']]],
-        ['edit', '编辑', [['[data-act="undo"]', '撤销'], ['[data-act="redo"]', '重做'], ['[data-act="group-create"]'], ['[data-act="group-select"]'], ['[data-act="group-ungroup"]'], ['[data-act="arrange-open"]'], ['#settings-toggle', '设置'], ['#reset-layout', '重置面板布局']]],
-        ['scene', '场景', [['[data-act="room"]'], ['[data-act="spatial-open"]'], ['[data-act="navigate-open"]']]],
+        ['file', '文件', [['[data-act="project"]'], ['[data-act="scene-templates"]'], ['[data-act="open"]'], ['[data-menu-copy="save"]'], ['[data-act="save-as"]'], ['[data-act="versions-open"]'], ['[data-menu-copy="export"]'], ['[data-act="model-import"]']]],
+        ['edit', '编辑', [['[data-act="undo"]', '撤销'], ['[data-act="redo"]', '重做'], ['[data-act="group-create"]'], ['[data-act="group-select"]'], ['[data-act="group-ungroup"]'], ['[data-act="arrange-open"]'], ['#settings-toggle', '设置']]],
+        ['view', '视图', [['[data-act="preview-settings"]'], ['[data-act="room"]', '场景属性'], ['[data-act="preview-cache"]'], ['#reset-layout', '重置面板布局']]],
+        ['production', '制作', [['[data-act="scene-reuse-open"]'], ['[data-act="production-notes"]', '剧情与提示词'], ['[data-act="spatial-open"]'], ['[data-act="navigate-open"]'], ['[data-act="contact-sheet"]']]],
         ['extensions', '扩展', [['[data-act="plugins-open"]']]],
         ['help', '帮助', [['[data-act="help"]', '操作与快捷键'], ['#update-toggle', '检查更新']]],
     ];
@@ -86,6 +89,7 @@ export function mountApplicationMenu() {
         });
         window.addEventListener('resize', place);
     }
+    if(window.directorDesktop?.reconstruction){const video=document.createElement('button');video.type='button';video.dataset.act='video-reconstruction';video.textContent='视频反推';bar.append(video);}
     bar.addEventListener('pointerover', event => {
         const next = menus.find(m => m.trigger === event.target);
         if (next && menus.some(m => m.menu.matches(':popover-open')) && !next.menu.matches(':popover-open')) next.menu.showPopover();

@@ -1,3 +1,6 @@
+import { bindNumericDials } from './ui/numeric-dial.ts';
+import { updateTimelinePlayhead } from './ui/timeline-playhead.ts';
+import {refreshTimelineActions} from './ui/timeline-actions.ts';
 import { extensionHost } from './plugins/extension-host.ts';
 import { connectDesktopSkill } from './automation/desktop-skill.ts';
 import { mountLocalization } from './i18n/dom.ts';
@@ -7,15 +10,19 @@ import { renderDepthControls } from './ui/depth-controls.ts';
 import { setSelectedEntities, selectedEntities } from './editor/timeline-selection.ts';
 import { beginGroupDrag } from './editor/group-transform-drag.ts';
 import { mountApplicationMenu } from './ui/application-menu.ts';
+import { mountWorkbenchChrome } from './ui/workbench-chrome.ts';
+import { mountReconstructionStatus } from './ui/reconstruction-status.ts';
+import { mountAppStatus } from './ui/app-status.ts';
+import { bindEditorShellInput } from './ui/editor-shell-input.ts';
 import { saveProjectFile } from './ui/project-save.ts';
 import { mountFileLocations } from './ui/file-locations.ts';
 import { mountSettings } from './ui/settings-panel.ts';
+import { mountCompositionGuides } from './ui/composition-guides.ts';
 import { bindLiveFields } from './ui/live-fields.ts';
 import { selectClip } from './ui/clip-controls.ts';
 import { captureStructureEdits, syncStructureLinks } from './building/structure-links.ts';
 import { syncFloorElevations } from './building/floors.ts';
 import { editBoundTransform } from './animation/hand-binding.ts';
-import { isAnimalAsset } from './asset-catalog.ts';
 import { createToolService } from './automation/service.ts';
 import { mountAI } from './ui/ai-panel.ts';
 import { mountUpdates } from './ui/update-panel.ts';
@@ -47,6 +54,7 @@ import './ui/workspace-shell.css';
 import './ui/fixed-zones.css';
 import './ui/dialog-shell.css';
 import './ui/video-panel.css';
+import './ui/workbench.css';
 import { entityPosition, shiftPath } from './timeline.ts';
 import { createCommands } from './ui/commands.ts';
 import type { AppContext } from './app-context.ts';
@@ -73,6 +81,7 @@ const recoverySave = new RecoveryAutosave(force => autosave(() =>
 let inspectorSeekTimer: ReturnType<typeof setTimeout> | undefined;
 let aborter: AbortController | null = null;
 let transformError: Error | undefined;
+let transformActive = false;
 let groupDrag: ReturnType<typeof beginGroupDrag> | undefined;
 mountLayout(project);
 const engine = new Engine(project, $('#stage-canvas'), $('#shot-canvas'), {
@@ -80,12 +89,16 @@ const engine = new Engine(project, $('#stage-canvas'), $('#shot-canvas'), {
     select: selectEntity, point: i => { engine.select(selected, i); inspectorTab = 'path'; renderInspector(); }, ground: addGroundPoint, stroke: points => editingTools.addFreehandStroke(points),
     joint: () => { inspectorTab='pose'; renderInspector(); },
     transformStart: () => {
+        transformActive = false;
+        if (busy || engine.exporting || history.pending || draft) return;
+        transformActive = true;
         transformError=undefined; groupDrag=undefined; playing = false; history.begin(project);
         if (engine.selectionIds.length > 1 && engine.selectedPoint < 0 && !engine.selectedJoint) {
             try { groupDrag = beginGroupDrag(project, engine.selectionIds, engine.proxy.position.toArray()); } catch (error) { transformError = error as Error; }
         } else { const e = current(); if (e?.camera && e.camera.mode !== 'free') freezeCamera(engine, e); }
     },
     transform: (p, r, s) => {
+        if (busy || engine.exporting || !transformActive || !history.pending) return;
         const e = current();
         if (!e || transformError)
             return;
@@ -121,6 +134,8 @@ const engine = new Engine(project, $('#stage-canvas'), $('#shot-canvas'), {
         engine.sample(time);
         engine.refreshHelpers();
     }, transformEnd: (cancel=false) => {
+        if (!transformActive) { engine.syncProxy(); return; }
+        transformActive = false;
         try {
             if(cancel || transformError)throw transformError ?? new Error('已取消拖动');
             assertLockedEntitiesUnchanged(history.pending!,project);assertProject(project);
@@ -184,10 +199,8 @@ function renderPanels() {
     $('#fps').value = String(project.fps);
     $('#duration').value = String(project.duration);
     $('#duration-label').textContent = `${project.duration.toFixed(1)} s`;
-    $('#room-badge').textContent = project.room.enabled ? `${project.room.width} × ${project.room.depth} m / 层高 ${project.room.height} m` : '室外 / 自由搭建 · 1 格 = 1 米';
-    const animalCount = project.entities.filter(e => isAnimalAsset(e.asset)).length;
-    $('#scene-status').textContent = `${project.entities.filter(e => e.kind === 'actor' && !isAnimalAsset(e.asset)).length} 人${animalCount ? ` · ${animalCount} 只动物` : ''} · ${project.entities.filter(e => e.kind === 'camera').length} 台摄影机 · ${project.entities.filter(e => e.kind === 'prop').length} 件道具`;
-    $('#selection-status').textContent = current() ? `已选：${current()!.name}` : '请选择人物、道具或摄影机';
+    $('#room-badge').textContent = project.room.enabled ? `${project.room.width} × ${project.room.depth} m / 层高 ${project.room.height} m` : '';
+    $('#scene-status').textContent = `${t('对象')} ${project.entities.length}`;
     renderSidebar();
     renderInspector();
     renderTimeline();
@@ -204,9 +217,10 @@ function renderCameras() {
 }
 function timeCode(t: number) { const frames = Math.round(t * project.fps), f = frames % project.fps, s = Math.floor(frames / project.fps); return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60, f].map(x => String(x).padStart(2, '0')).join(':'); }
 function updateTimeUI() {
-    $('#timecode').textContent = timeCode(time);
-    $('#shot-time').textContent = timeCode(time);
-    $('#timeline-content').style.setProperty('--timeline-playhead', String(time));
+    refreshTimelineActions(uiContext);
+    const text = timeCode(time);
+    for (const id of ['timecode','shot-time']) { const node = $('#'+id);if(node.textContent!==text)node.textContent=text; }
+    updateTimelinePlayhead(time);
     const play = $<HTMLButtonElement>('[data-act="play"]');
     const label = t(playing ? '暂停' : '播放');
     // Preserve the pointer target between press and release, including a slow click.
@@ -221,8 +235,8 @@ function frameText(id: string, value: string) { const node=frameFields.get(id)!;
 engine.onFrame = () => {
     frameText('object-snap-status', engine.objectSnapEnabled && engine.objectSnapTarget ? `已吸附：${engine.objectSnapTarget}` : '');
     const camera = engine.cameraEntity();
-    frameText('shot-name', camera.name + (preview === 'program' ? ' · ' + t('成片') : ''));
-    frameText('shot-lens', `${camera.camera!.focal} mm · ${project.aspect}`);
+    frameText('shot-name', camera.name);
+    frameText('shot-lens', `${Number(engine.getShotCamera().getFocalLength().toFixed(1))} mm`);
     const p = engine.getShotCamera().position, r = project.room;
     const outside = r.enabled && (Math.abs(p.x) > r.width / 2 || Math.abs(p.z) > r.depth / 2 || p.y > r.height || p.y < 0);
     const hiddenObjects = camera.camera!.hiddenEntityIds?.length ?? 0;
@@ -254,10 +268,12 @@ engine.onFrame = () => {
         }
     }
 };
+let interactiveSeekUntil = 0;
 function seek(t: number, deferSample = false) { if (busy)
-    return; time = Math.max(0, Number.isFinite(t) ? t : 0); extendTimelineView(uiContext, time); if(!deferSample)engine.sample(time); updateTimeUI();
+    return; const next = Math.max(0, Number.isFinite(t) ? t : 0), changedTime = next !== time;time = next; if(changedTime)extendTimelineView(uiContext, time); if(!deferSample)engine.sample(time); updateTimeUI();
+    if (deferSample) interactiveSeekUntil = performance.now() + 120;
     clearTimeout(inspectorSeekTimer);
-    inspectorSeekTimer = setTimeout(() => { if (!draft && !busy && !engine.dragging && !document.activeElement?.closest('#inspector-content input,#inspector-content select,#timeline-curves')) renderInspector(); }, 80);
+    inspectorSeekTimer = setTimeout(() => { if (!draft && !busy && !engine.dragging && !document.documentElement.dataset.timelineDrag && !document.activeElement?.closest('#inspector-content input,#inspector-content select,#timeline-curves')) renderInspector(); }, 80);
 }
 function setView(value: string) { if (!['stage', 'split', 'shot'].includes(value)) return; mode = value; $('#viewports').className = 'viewports ' + value; document.querySelectorAll('.view-modes button[data-view]').forEach(el => el.classList.toggle('active', (el as HTMLElement).dataset.view === value)); engine.requestResize(); }
 async function saveProject(saveAs = false) { return saveProjectFile(uiContext, saveAs); }
@@ -289,7 +305,10 @@ function createNew(template: SceneTemplate = 'bedroom') {
     } catch (error) { toast((error as Error).message, true); }
 }
 let previousFrame = performance.now(), lastUI = 0;
-function frame(now: number) { const delta = Math.min((now - previousFrame) / 1000, .1); previousFrame = now; if (!busy && !engine.exporting) {
+function frame(now: number) { const delta = Math.min((now - previousFrame) / 1000, .1); previousFrame = now;
+    const gesture = document.documentElement.dataset.timelineDrag;
+    engine.updateInteractionPreview(!busy && !engine.exporting && (engine.dragging || gesture === 'seek' || gesture === 'resize' || gesture === 'move' || now < interactiveSeekUntil));
+    if (!busy && !engine.exporting) {
     if (playing) {
         time += delta;
         if (time >= project.duration) {
@@ -303,7 +322,7 @@ function frame(now: number) { const delta = Math.min((now - previousFrame) / 100
     }
     navigation.update(delta);
     extensionHost(uiContext).poll();
-    if (playing || time !== engine.time || (history.pending && document.documentElement.dataset.timelineDrag !== 'insert') || draft || engine.dragging) engine.sample(time);
+    if (playing || time !== engine.time || engine.needsSample || (history.pending && !document.documentElement.dataset.timelineDrag) || draft || engine.dragging) engine.sample(time);
     engine.render(false);
     if (now - lastUI > 50) {
         updateTimeUI();
@@ -325,10 +344,10 @@ const uiContext: AppContext = {
     get dirty() { return dirty; }, set dirty(value) { dirty = value; if (!value) history.markSaved(); recoverySave.request(); },
     flushRecovery: () => recoverySave.flush(),
     get revision() { return revision; },
-    get busy() { return busy; }, set busy(value) { busy = value; },
+    get busy() { return busy; }, set busy(value) { busy = value; engine.gizmo.enabled = !value; refreshTimelineActions(uiContext); },
     get draft() { return draft; }, set draft(value) { draft = value; },
     get aborter() { return aborter; }, set aborter(value) { aborter = value; },
-    get engine() { return engine; }, history, scenes: history, applyDocument, switchScene, current, toast, change, changed, extendDuration, selectEntity, renderPanels, renderSidebar, renderInspector, renderTimeline, renderCameras, updateTimeUI, seek, saveProject, showModal, closeModal, projectDialog, roomDialog, sceneDialog, createNew, makeCamera, startPath, finishPath, cancelPath, replaceAction, deleteDialog, deleteEntity, seatDialog, seatApply, snapshot, exportDialog, startExport, helpDialog, updateExportSummary, setView, addAsset, addGroundPoint, retimePath, applyField, applyMotion, applyFraming, act
+    get engine() { return engine; }, history, scenes: history, applyDocument, switchScene, current, toast, change, changed, extendDuration, selectEntity, renderPanels, renderSidebar, renderInspector, renderTimeline, renderCameras, updateTimeUI, seek, saveProject, showModal, closeModal, projectDialog, sceneDialog, createNew, makeCamera, startPath, finishPath, cancelPath, replaceAction, deleteDialog, deleteEntity, seatDialog, seatApply, snapshot, exportDialog, startExport, helpDialog, updateExportSummary, setView, addAsset, addGroundPoint, retimePath, applyField, applyMotion, applyFraming, act
 };
 const editingTools = createEditingTools(uiContext);
 bindEvents(uiContext);
@@ -345,13 +364,19 @@ const toolService = createToolService(uiContext);
 mountAI(uiContext);
 mountFileLocations(uiContext);
 mountSettings(uiContext);
+mountCompositionGuides(engine.shotRenderer.domElement);
 bindLiveFields(uiContext, editingTools.mutateField);
+bindNumericDials();
 mountUpdates(async run => {
     if (busy || history.pending || draft || document.querySelector('#ai-panel')?.getAttribute('data-running') === 'true') throw Error('请先完成当前编辑、导出或 AI 任务');
-    busy = true; playing = false;
-    try { await recoverySave.flush(); await run(); } finally { busy = false; }
+    uiContext.busy = true; playing = false;
+    try { await recoverySave.flush(); await run(); } finally { uiContext.busy = false; }
 });
 mountApplicationMenu();
+mountWorkbenchChrome();
+mountAppStatus();
+mountReconstructionStatus(uiContext);
+bindEditorShellInput(toast);
 renderPanels();
 mountLocalization();
 onLanguageChange(updateWindowTitle); updateWindowTitle();
@@ -372,8 +397,8 @@ void recoverSession().then(async restored => { const p = restored?.document; if 
     $('#save-status').textContent = dirty ? '自动备份已保存' : '项目已保存'; toast('已恢复上次工作');
 } }).catch(() => toast('未能读取自动恢复或模型资源，可以打开手动保存的项目文件'))
     .finally(async () => { await connectDesktopSkill().catch(error=>toast(error.message,true)); await extensionHost(uiContext).start().catch(error=>toast(error.message,true)); window.directorDesktop?.onTool((name, args) => toolService.call(name, args)); });
-window.addEventListener('beforeunload', event => { if (dirty || busy || history.pending || draft) {
-    window.directorDesktop?.closingState?.({ busy: !!(busy || history.pending || draft) });
+window.addEventListener('beforeunload', event => { if (window.directorDesktop?.closingState || dirty || busy || history.pending || draft) {
+    window.directorDesktop?.closingState?.({ busy: !!(busy || history.pending || draft), dirty });
     event.preventDefault();
     event.returnValue = '';
 } });
@@ -384,11 +409,10 @@ if (import.meta.env.DEV) {
 function renderSidebar() { sidebarUI.renderSidebar(); }
 function renderInspector() { clearTimeout(inspectorSeekTimer); const key = selected + ':' + inspectorTab; const scroll = key === inspectorRenderedFor ? $('#inspector-content').scrollTop : 0; inspectorUI.renderInspector(); inspectorRenderedFor = key; $('#inspector-content').scrollTop = scroll; }
 function renderTimeline() { timelineUI.renderTimeline(); }
-function showModal(title: string, body: string, footer = '', child = false) { dialogsUI.showModal(title, body, footer, child); }
+function showModal(title: string, body: string, footer = '', child = false) { return dialogsUI.showModal(title, body, footer, child); }
 function closeModal() { dialogsUI.closeModal(); }
 function sceneDialog() { dialogsUI.sceneDialog(); }
 function projectDialog() { dialogsUI.projectDialog(); }
-function roomDialog() { dialogsUI.roomDialog(); }
 function deleteDialog(e: Entity) { dialogsUI.deleteDialog(e); }
 function seatDialog() { dialogsUI.seatDialog(); }
 function helpDialog() { dialogsUI.helpDialog(); }

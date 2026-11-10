@@ -1,4 +1,6 @@
+import { setNumberKey } from '../animation/channels.ts';
 import { CAMERA_PRESETS, applyCameraMotion } from '../cinematography/motion-presets.ts';
+import { editCameraFocal } from './camera-focal.ts';
 import { setEntityColor } from './entity-color.ts';
 import { worldContactAnchors } from '../assets/contact-anchors.ts';
 import { removeCameraVisibilityReference } from '../scenes/camera-visibility.ts';
@@ -8,6 +10,7 @@ import { disconnectStructure } from '../building/structure-links.ts';
 import { workingElevation } from '../building/floors.ts';
 import { sliceAction } from '../clip-editing.ts';
 import { recordPositionKey } from './position-keys.ts';
+import {retimeEntityPath} from './path-editing.ts';
 import { propParameters } from '../parametric-props.ts';
 import * as T from 'three';
 import type { AppContext } from '../app-context.ts';
@@ -16,7 +19,7 @@ import type { Action, Entity, Vec3 } from '../model.ts';
 import { COLORS, clip, entity } from '../model.ts';
 import { entityPosition, shiftPath } from '../timeline.ts';
 import { $ } from '../ui/common.ts';
-import { freezeCamera } from './camera-editing.ts';
+import { freezeCamera, setCameraAim, setCameraMode, setCameraTarget } from './camera-editing.ts';
 import { libraryPreferences } from '../assets/library-preferences.ts';
 import { simplifyFreehand, timeFreehand } from './freehand-path.ts';
 import { pathDrawingPosition } from './path-drawing-position.ts';
@@ -117,7 +120,7 @@ export function createEditingTools(ctx: AppContext) {
         ctx.history.commit(ctx.project);
         ctx.changed(false);
         ctx.engine.select(ctx.selected);
-        $('#stage-hint').textContent = '点击布景启用键盘 · WASD 移动 · QE 转向 · RF 升降';
+        $('#stage-hint').textContent = 'WASD 移动　QE 转向　RF 升降';
     }
     function cancelPath() {
         if (!ctx.draft)
@@ -131,7 +134,7 @@ export function createEditingTools(ctx: AppContext) {
         $('#object-labels').classList.remove('drawing-path');
         ctx.engine.rebuild(ctx.project);
         ctx.renderPanels();
-        $('#stage-hint').textContent = '点击布景启用键盘 · WASD 移动 · QE 转向 · RF 升降';
+        $('#stage-hint').textContent = 'WASD 移动　QE 转向　RF 升降';
     }
     function replaceAction(e: Entity, action: Action, start: number, end: number) {
         if(end<=start)throw Error('需要两个不同时间的位置点才能匹配动作');
@@ -149,23 +152,8 @@ export function createEditingTools(ctx: AppContext) {
         e.clips = [...retained, clip(action, start, end)].sort((a, b) => a.start - b.start);
     }
     function retimePath(e: Entity, start: number, end: number) {
-        const p = e.path;
-        if (!p)
-            return;
-        const oldStart = p.points[0].time, oldEnd = p.points.at(-1)!.time;
-        if (p.points.length===1)throw Error('单个位置关键帧请直接修改途经点时间');
-        if (end <= start)
-            throw new Error('结束时间必须晚于开始时间');
-        const matching = e.clips.find(c => Math.abs(c.start - oldStart) < 1e-6 && Math.abs(c.end - oldEnd) < 1e-6 && ['walk', 'run'].includes(c.action));
-        p.sections?.forEach(s => {
-            const map=(t:number)=>start+(t-oldStart)/(oldEnd-oldStart)*(end-start);
-            s.start=map(s.start); s.end=map(s.end); s.from=map(s.from); s.to=map(s.to);
-        });
-        p.points.forEach(w => w.time = start + (w.time - oldStart) / (oldEnd - oldStart) * (end - start));
-        if (matching) {
-            matching.start = start;
-            matching.end = end;
-        }
+        if(!e.path)return;
+        retimeEntityPath(e,start,end);
         ctx.extendDuration();
     }
     function mutateField(key: string, value: string) {
@@ -249,16 +237,21 @@ export function createEditingTools(ctx: AppContext) {
             const c = e.camera;
             switch (key.slice(7)) {
                 case 'aim':
-                    if (value === 'manual') {
-                        const camera = ctx.engine.cameras.get(e.id)!, base = camera.userData.directorBasePose;
-                        const r = base ? new T.Euler().setFromQuaternion(new T.Quaternion().fromArray(base.quaternion)) : camera.rotation;
-                        e.rotation = [r.x, r.y, r.z];
-                    }
-                    c.aim = value as typeof c.aim;
+                    setCameraAim(e, value, ctx.engine.cameras.get(e.id)!);
                     break;
+                case 'focusDistance':
+                case 'blur': {
+                    const name = key.slice(7) as 'focusDistance' | 'blur';
+                    if (name === 'focusDistance' && c.effects?.focusTargetId) throw Error('请先取消对象对焦');
+                    const channels = (c.effects ??= {}).channels ??= {};
+                    const current = channels[name];
+                    const time = Math.round(ctx.time * ctx.project.fps) / ctx.project.fps;
+                    channels[name] = typeof current === 'object'
+                        ? setNumberKey(current, time, n, name === 'blur' ? 0 : 5, current.keys.find(k => Math.abs(k.time - time) < 1e-7)?.easing ?? 'smooth') : n;
+                    break;
+                }
                 case 'focal':
-                    c.focal = n;
-                    if (c.effects) { delete c.effects.channels?.focal; c.effects.dollyZoom = null; }
+                    editCameraFocal(c, ctx.time, n, ctx.project.fps);
                     break;
                 case 'targetHeight':
                     c.targetHeight = n;
@@ -270,20 +263,10 @@ export function createEditingTools(ctx: AppContext) {
                     else c.aimResponse = { duration: n };
                     break;
                 case 'targetId':
-                    if (!value && c.mode !== 'free') freezeCamera(ctx.engine, e);
-                    c.targetId = value;
+                    setCameraTarget(ctx.project, e, value, ctx.engine.getShotCamera(e.id), ctx.time);
                     break;
                 case 'mode':
-                    if (value === c.mode) break;
-                    if (value === 'free') { freezeCamera(ctx.engine, e); break; }
-                    if (value !== 'free' && !c.targetId)
-                        c.targetId = ctx.project.entities.find(t => t.kind === 'actor')?.id ?? ctx.project.entities.find(t => t.kind !== 'camera')?.id ?? '';
-                    if (!c.targetId) throw new Error('先添加人物或道具，再设置跟随／POV');
-                    c.mode = value as typeof c.mode;
-                    if (value === 'pov')
-                        c.offset = [0, 1.67, .13];
-                    if (value === 'follow')
-                        c.offset = [0, 1.5, -2];
+                    setCameraMode(ctx.project, e, value, ctx.engine.getShotCamera(e.id), ctx.time);
                     break;
                 case 'inheritRotation':
                     c.inheritRotation = value === 'true';

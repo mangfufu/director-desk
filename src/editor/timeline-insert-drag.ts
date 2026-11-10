@@ -1,4 +1,4 @@
-import { clipRange, pathSections, setClipRange, type TimelineSelection } from '../clip-editing.ts';
+import { clipRange, trackRanges, setClipRange, type TimelineSelection } from '../clip-editing.ts';
 import type { Project } from '../model.ts';
 import { selectionKey } from './timeline-selection.ts';
 import { insertionPoint, makeInsertionRoom } from './timeline-insertion.ts';
@@ -13,9 +13,7 @@ export function createTimelineInsertDrag(project: Project, selections: TimelineS
         if (s.kind === 'cut' || tracks.has(trackKey(s))) continue;
         const entity = project.entities.find(e => e.id === s.entityId)!;
         if (entity.locked) throw Error('对象已锁定');
-        const ranges = s.kind === 'action'
-            ? entity.clips.map(c => ({ selection: { kind: 'action' as const, entityId: entity.id, id: c.id }, start: c.start, end: c.end }))
-            : pathSections(entity.path!).map((r, index) => ({ selection: { kind: 'path' as const, entityId: entity.id, index }, start: r.start, end: r.end }));
+        const ranges = trackRanges(project,s);
         tracks.set(trackKey(s), ranges);
     }
     const all = [...tracks.values()].flat(), selected = all.filter(r => picked.has(selectionKey(r.selection)));

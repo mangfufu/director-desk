@@ -14,7 +14,7 @@ export async function saveProjectFile(ctx: AppContext, saveAs = false): Promise<
             const result = await files('save-project', { name, content, ...(!saveAs && ctx.scenes.filePath ? { path: ctx.scenes.filePath } : {}) });
             if (!result.ok) throw Error(result.error || '保存失败');
             if (!result.data?.saved) return false;
-            ctx.scenes.markSaved(result.data.path);
+            ctx.scenes.markSaved(result.data.path, document);
         } else {
             download(new Blob([content], { type: 'application/json' }), name);
             ctx.toast('工程下载已开始');
@@ -22,8 +22,9 @@ export async function saveProjectFile(ctx: AppContext, saveAs = false): Promise<
             // open/new continuation; keep unsaved protection on this document.
             return true;
         }
-        ctx.dirty = false;
+        ctx.dirty = ctx.scenes.dirty;
         await ctx.flushRecovery?.().catch(() => ctx.toast('工程已保存，自动备份失败', true));
+        if (ctx.dirty) { ctx.toast('保存期间有新更改，请再次保存'); return false; }
         documentStatus('项目已保存');
         ctx.toast('项目已保存');
         return true;

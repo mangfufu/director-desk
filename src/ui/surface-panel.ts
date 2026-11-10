@@ -24,7 +24,6 @@ export function createSurfacePanel(ctx:AppContext){
         put(field.dataset.surfaceField,Number(field.value));ctx.engine.project=ctx.project;ctx.engine.sample(ctx.time);
     });
     host.addEventListener('change',event=>{const field=event.target as HTMLInputElement;if(field===activeInput){finish();return;}if(field.dataset.surfaceChoice)edit(()=>{const l=layer();if(!l)return;const k=field.dataset.surfaceChoice!;Object.assign(l,{[k]:['mesh','material'].includes(k)?Number(field.value):['unlit','loop','tile'].includes(k)?field.value==='true':field.value});});
-        if(field.id==='surface-preview-quality'){ctx.engine.setPreviewQuality(field.value as 'full'|'draft');return;}
         if(field.id==='surface-appearance-key')appearanceKey=field.value;
         if(field.id==='surface-layer'){layerId=field.value;ctx.renderInspector();}
         if(field.id==='surface-library'&&field.value)edit(e=>{const l=defaultSurfaceLayer(field.value);if(e.light)e.surface={layers:[l]};else (e.surface??={layers:[]}).layers.push(l);layerId=l.id;});
@@ -57,7 +56,7 @@ export function createSurfacePanel(ctx:AppContext){
         if(!l && !['source','appearance'].includes(page))continue;
         if(page==='play' && !resource?.mime.startsWith('video/'))continue;
         html+=`<section class="inspector-parameter-group" data-surface-section="${page}"><h3>${label}</h3>`;
-        if(page==='source')html+=`<select id="surface-library" aria-label="复用工程媒体">${options([['','复用工程内的媒体'],...(ctx.project.media??[]).map(r=>[r.id,r.name] as [string,string])],'')}</select><p class="panel-help">${resource?escape(resource.name)+' · '+resource.width+' × '+resource.height:''}</p><label class="field"><span>预览精度</span><select id="surface-preview-quality">${options([['full','完整'],['draft','流畅']],ctx.engine.previewQuality)}</select></label>`;
+        if(page==='source')html+=`<select id="surface-library" aria-label="复用工程媒体">${options([['','复用工程内的媒体'],...(ctx.project.media??[]).map(r=>[r.id,r.name] as [string,string])],'')}</select><p class="panel-help">${resource?escape(resource.name)+' · '+resource.width+' × '+resource.height:''}</p>`;
         else if(page==='appearance'){html+='<div class="surface-optical-grid">'+input('appearance.roughness','粗糙度',numberAt(s?.roughness,ctx.time,.7),'.01','0','1')+input('appearance.metalness','金属度',numberAt(s?.metalness,ctx.time,0),'.01','0','1')+input('appearance.transmission','透射',numberAt(s?.transmission,ctx.time,0),'.01','0','1')+input('appearance.ior','折射率',s?.ior??1.5,'.01','1','2.5')+input('appearance.opacity','整体透明度',numberAt(s?.opacity,ctx.time,1),'.01','0','1')+input('appearance.emissive','发光强度',numberAt(s?.emissive,ctx.time,0),'.1','0','20')+'</div>';}
         else if(!l)html+='<p class="panel-help">未添加媒体</p>';
         else if(page==='target'){const meshes=ctx.engine.surfaces.describe(ctx.engine.models.get(e.id)!);

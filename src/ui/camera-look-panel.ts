@@ -36,7 +36,7 @@ export function createCameraLookPanel(ctx: AppContext) {
         draftInterpolation = c.targetPath?.interpolation; draftSmooth = c.targetPath?.smooth ?? true;
         const point = points[index], at = point?.time ?? ctx.time, position = point?.position ?? ctx.engine.targetPosition(e).toArray();
         const disabled = readonly(e) ? 'disabled' : '';
-        ctx.showModal('摄影机 · 视线关键帧', `<div class="native-editor" id="look-editor">
+        if (!ctx.showModal('摄影机 · 视线关键帧', `<div class="native-editor" id="look-editor">
 
             <label>关键帧<select id="look-choice">${options(points.length ? points.map((p, i) => [String(i), `${i + 1} · ${p.time.toFixed(2)} 秒`]) : [['0', '尚未记录']], String(index))}</select></label>
             <div class="native-values"><label>时间 / 秒<input id="look-time" type="number" min="0" step=".1" value="${at.toFixed(3)}" ${disabled}/></label><label>视线运动<select id="look-interpolation" ${disabled}>${options(pathMotionChoices, draftInterpolation ?? 'segmented')}</select></label></div>
@@ -46,7 +46,7 @@ export function createCameraLookPanel(ctx: AppContext) {
             <div class="native-row"><label>取对象当前位置<select id="look-source" ${disabled}>${options([['', '当前机位注视点'], ...ctx.project.entities.filter(t => t.kind !== 'camera').map(t => [t.id, t.name] as [string, string])], '')}</select></label><button data-act="look-capture" ${disabled}>取当前帧</button></div>
             <div class="look-key-actions"><button data-act="look-save" ${disabled}>保存为关键帧</button><button data-act="look-seek" ${points.length ? '' : 'disabled'}>预览此帧</button><button data-act="look-remove" ${points.length ? disabled : 'disabled'}>删除此帧</button></div>
 
-        </div>`, `<button data-act="look-clear" ${disabled}>清除视线关键帧</button><button data-act="close-modal">关闭</button>`);
+        </div>`, `<button data-act="look-clear" ${disabled}>清除视线关键帧</button><button data-act="close-modal">关闭</button>`)) return;
         document.getElementById('look-editor')!.addEventListener('change', event => {
             const target = event.target as HTMLSelectElement;
             if (target.id === 'look-choice') { event.stopPropagation(); index = Number(target.value); render(); return; }

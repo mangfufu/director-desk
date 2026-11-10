@@ -12,12 +12,31 @@ import { createTimelineMovePreview } from './timeline-move-preview.ts';
 import { $ } from './common.ts';
 import { bindTimelineZoom, timelineTimeAt, pixelsPerSecond, extendTimelineView } from './timeline-zoom.ts';
 import { bindClipControls, clipFromBar, selectClip } from './clip-controls.ts';
+import { visibilityClips } from '../scenes/visibility.ts';
+import { planMotionInsertion } from '../editor/timeline-insertion.ts';
+import { uid } from '../model.ts';
+import { scrollTimelinePlayhead } from './timeline-playhead.ts';
 export function bindTimelineInput(ctx: AppContext) {
     const timeline=$('#timeline-content'), mode=$<HTMLSelectElement>('#timeline-mode');
     timeline.tabIndex=0;
     bindTrackOrder(ctx); bindTimelineZoom(ctx); bindClipControls(ctx);
     bindTimelineMotionDrop(ctx);
+    timeline.addEventListener('click',event=>{
+        const button=(event.target as HTMLElement).closest<HTMLElement>('[data-add-visibility]');
+        if(!button || ctx.busy || ctx.draft || ctx.history.pending)return;
+        const entity=ctx.project.entities.find(e=>e.id===button.dataset.addVisibility);if(!entity)return;
+        if(entity.locked){ctx.toast('对象已锁定');return;}
+        const id=uid();
+        if(ctx.change(()=>{
+            const plan=planMotionInsertion(visibilityClips(entity,ctx.project.duration),ctx.time,1,ctx.project.fps);
+            entity.visibility=[...plan.clips,{id,start:plan.start,end:plan.end}].sort((a,b)=>a.start-b.start);
+            ctx.project.duration=Math.max(ctx.project.duration,...entity.visibility.map(c=>c.end));
+        },false)){selectClip({kind:'visibility',entityId:entity.id,id});ctx.renderTimeline();}
+    });
     let lastClick={key:'',at:0};
+    document.addEventListener('pointerdown',event=>{
+        if(!timeline.contains(event.target as Node) || !(event.target as Element).closest('[data-clip-id],[data-path-id],[data-cut],[data-visibility-id]')) lastClick={key:'',at:0};
+    });
     let cleanup:((cancel?:boolean)=>void)|undefined;
     const seekAt=(x:number)=>{ctx.playing=false;const time=Math.round(timelineTimeAt(x)*ctx.project.fps)/ctx.project.fps;if(time!==ctx.time)ctx.seek(time,true);};
     mode.addEventListener('change',()=>{cleanup?.(true);timeline.classList.toggle('hover-preview',mode.value==='preview');});
@@ -30,7 +49,7 @@ export function bindTimelineInput(ctx: AppContext) {
         if(ev.button!==0 || ctx.busy || ctx.draft || ctx.history.pending || cleanup) return;
         const target=ev.target as HTMLElement;
         if(target.closest('button') || !target.closest('.ruler,.track-lane')) return;
-        const bar=mode.value==='preview'?null:target.closest<HTMLElement>('[data-clip-id],[data-path-id],[data-cut]');
+        const bar=mode.value==='preview'?null:target.closest<HTMLElement>('[data-clip-id],[data-path-id],[data-cut],[data-visibility-id]');
         const selection=bar?clipFromBar(bar):null;
         if(selection && (ev.ctrlKey||ev.metaKey)){ev.preventDefault();timeline.focus({preventScroll:true});toggleSelectedClip(selection);refreshTimelineSelection(ctx);return;}
         const choosingRange=!bar && (ev.ctrlKey||ev.metaKey);
@@ -42,7 +61,8 @@ export function bindTimelineInput(ctx: AppContext) {
         const before=ctx.project, startX=ev.clientX, startScroll=timeline.scrollLeft, pps=pixelsPerSecond();
         if(selection && !clipSelected(selection))selectClip(selection);
         const group=selection?selectedClips():[];
-        const resize=!!bar && !!target.closest('[data-resize]');
+        const handle=bar?target.closest<HTMLElement>('[data-resize]'):null;
+        const resize=handle?.dataset.resize==='start'?'start':!!handle;
         let groupDrag:ReturnType<typeof createTimelineGroupDrag>|undefined;
         let drag:ReturnType<typeof createTimelineDrag>|undefined;
         let insertDrag:ReturnType<typeof createTimelineInsertDrag>|undefined;
@@ -51,7 +71,9 @@ export function bindTimelineInput(ctx: AppContext) {
             else if(group.length>1)groupDrag=createTimelineGroupDrag(ctx.project,group,selection!);
             else if(selection)drag=createTimelineDrag(ctx.project,selection);
         }catch(e){ctx.toast((e as Error).message,true);return;}
-        const previews=insertDrag?[]:group.map(s=>createTimelineDragPreview(ctx,s,group.length===1,group.length===1));
+        // A cut preview updates the whole continuous sequence, once for the group.
+        const previewSelections=selection?.kind==='cut'?group.slice(0,1):group;
+        const previews=insertDrag?[]:previewSelections.map(s=>createTimelineDragPreview(ctx,s,group.length===1,group.length===1));
         const movePreview=insertDrag?createTimelineMovePreview(group,bar!,ev.clientX,ev.clientY,pps):undefined;
         let plan:ReturnType<NonNullable<typeof insertDrag>['preview']>|undefined;
         let x=startX,y=ev.clientY,moved=false,raf=0,planFrame=0,last=performance.now();
@@ -62,7 +84,7 @@ export function bindTimelineInput(ctx: AppContext) {
             return {left:Math.max(0,rect.left)+label,right:Math.min(window.innerWidth,rect.left+timeline.clientWidth)-12};
         };
         let appliedDelta:number|undefined;
-        if(selection){ctx.history.begin(ctx.project);refreshTimelineSelection(ctx);} else if(!choosingRange){if(!target.closest('.ruler'))selectClip(null);refreshTimelineSelection(ctx);seekAt(x);}
+        if(selection){ctx.history.begin(ctx.project);refreshTimelineSelection(ctx);} else if(!choosingRange){if(!target.closest('.ruler')){selectClip(null);refreshTimelineSelection(ctx);}seekAt(x);}
         document.documentElement.dataset.timelineDrag=insertDrag?'insert':selection?(resize?'resize':'move'):'seek';
         timeline.setPointerCapture(ev.pointerId);
         const apply=()=>{
@@ -81,16 +103,17 @@ export function bindTimelineInput(ctx: AppContext) {
                     return;
                 }
                 const next=groupDrag?groupDrag.apply(delta,resize):[drag!.apply(delta,resize)];
+                ctx.engine.requestSample();
                 setSelectedClips(next,true);
                 if(group.length>1)extendTimelineView(ctx,ctx.project.duration);
                 next.forEach((s,i)=>previews[i]?.(s));if(group.length>1 && selection.kind==='cut')timeline.querySelectorAll<HTMLElement>('[data-cut]').forEach(bar=>bar.classList.toggle('clip-selected',clipSelected(clipFromBar(bar))));
-            } catch { setSelectedClips(group,true);group.forEach((s,i)=>previews[i]?.(s)); }
+            } catch { ctx.engine.requestSample();setSelectedClips(group,true);group.forEach((s,i)=>previews[i]?.(s)); }
         };
         const tick=(now:number)=>{
             const dt=Math.min(.05,(now-last)/1000);last=now;
             const {left,right}=edgeBounds();
             const speed=x>right-42?Math.min(1,(x-right+42)/42)*850:x<left+42?-Math.min(1,(left+42-x)/42)*850:0;
-            if(speed){if(speed>0)extendTimelineView(ctx,timelineTimeAt(right)+30); const old=timeline.scrollLeft;timeline.scrollLeft+=speed*dt;if(old!==timeline.scrollLeft)apply();}
+            if(speed){if(speed>0)extendTimelineView(ctx,timelineTimeAt(right)+30); const old=timeline.scrollLeft;timeline.scrollLeft+=speed*dt;if(old!==timeline.scrollLeft){scrollTimelinePlayhead(timeline.scrollLeft);apply();}}
             raf=requestAnimationFrame(tick);
         };
         // Follow the pointer immediately; coalesce destination planning once per frame.
@@ -119,7 +142,7 @@ export function bindTimelineInput(ctx: AppContext) {
             delete document.documentElement.dataset.timelineDrag;
             movePreview?.dispose();
             if(timeline.hasPointerCapture(ev.pointerId))timeline.releasePointerCapture(ev.pointerId);
-            if(!selection){if(choosingRange){if(cancel){setSelectedEntities(previousEntities);setSelectedClips(previousClips,true);setSelectedTimeRange(previousRange);}else if(selectedTimeRange() && selectedTimeRange()!.end-selectedTimeRange()!.start<1/before.fps)setSelectedTimeRange(null);refreshTimelineSelection(ctx);}return;}
+            if(!selection){if(choosingRange){if(cancel){setSelectedEntities(previousEntities);setSelectedClips(previousClips,true);setSelectedTimeRange(previousRange);}else if(selectedTimeRange() && selectedTimeRange()!.end-selectedTimeRange()!.start<1/before.fps)setSelectedTimeRange(null);refreshTimelineSelection(ctx);}else ctx.seek(ctx.time,true);return;}
             if(cancel&&insertDrag){ctx.history.rollback();setSelectedClips(group);refreshTimelineSelection(ctx);return;}
             try {
                 if(cancel)throw Error('已取消拖动');
@@ -128,7 +151,7 @@ export function bindTimelineInput(ctx: AppContext) {
                 if(moved)ctx.changed(false);
                 else if(group.length===1) {
                     if(selection.kind==='cut'){ctx.seek(ctx.project.cuts[selection.index].time);ctx.preview='program';ctx.selectEntity(ctx.project.cuts[selection.index].cameraId,true);}
-                    else {ctx.inspectorTab=selection.kind==='path'?'path':'actions';ctx.selectEntity(selection.entityId,true);}
+                    else {ctx.inspectorTab=selection.kind==='path'?'path':selection.kind==='visibility'?'base':'actions';ctx.selectEntity(selection.entityId,true);}
                     ctx.renderTimeline();
                     const key=JSON.stringify(selection),now=performance.now();
                     if(lastClick.key===key && now-lastClick.at<450) {timeline.dispatchEvent(new Event('edit-selected-clip'));lastClick={key:'',at:0};}

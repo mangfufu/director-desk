@@ -8,7 +8,8 @@ export function validateToolInput(name: string, input: unknown) {
         if (depth > 30) throw new Error('工具参数嵌套过深');
         if (schema.anyOf) {
             for (const option of schema.anyOf) { try { visit(value, option, at, depth + 1); return; } catch { /* Try the other explicit variant. */ } }
-            throw Error('工具参数类型或取值错误：' + at);
+            const accepted=schema.anyOf.map(option=>option.enum?option.enum.map(v=>JSON.stringify(v)).join(' / '):option.type).filter(Boolean);
+            throw Error('工具参数类型或取值错误：' + at + (accepted.length?`；需要 ${[...new Set(accepted)].join(' / ')}`:''));
         }
         const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
         if (schema.type && type !== schema.type || schema.enum && !schema.enum.includes(value)) throw new Error('工具参数类型或取值错误：' + at

@@ -81,7 +81,7 @@ export async function verifyWorkspace(page, baseline) {
         if (template !== 'room') assert.ok(p.entities.some(e => e.asset === 'ground'));
         if (template === 'street') await page.screenshot({path:'tmp/smoke/06-street.png'});
     }
-    await page.locator('[data-side="assets"]').click();
+    await page.locator('#resource-home').click(); await page.locator('[data-side="assets"]').click();
     await page.locator('#asset-category').selectOption('室外'); await page.locator('#search').fill('building');
     await page.locator('[data-asset="building"]').click();
     const building = (await project()).entities.find(e => e.asset === 'building'); assert.ok(building);

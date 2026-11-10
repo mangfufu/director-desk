@@ -1,5 +1,6 @@
 import {makePlanarView} from './planar-view.ts';
 import {entityPosition} from '../timeline.ts';
+import {entityVisibleAt} from '../scenes/visibility.ts';
 import * as T from 'three';
 import type { Entity } from '../model.ts';
 import { numberAt } from '../animation/channels.ts';
@@ -86,7 +87,7 @@ function uniforms(e:Entity,v:VisualConfig){return {fieldCount:{value:0},fieldCen
 export function sampleVisual(e:Entity,root:T.Group,time:number,draft:boolean){
     if(e.warp){root.children.forEach(child=>child.scale.setScalar(e.warp!.radius));return;}
     if(e.field){root.children[0]?.scale.setScalar(e.field.radius);return;}
-    const v=e.visual;if(!v)return;root.visible=e.visible&&time>=v.start&&(!v.end||time<v.end);if(!root.visible)return;
+    const v=e.visual;if(!v)return;root.visible=entityVisibleAt(e,time)&&time>=v.start&&(!v.end||time<v.end);if(!root.visible)return;
     const lifetime=v.lifetime??5,clock=(time-v.start+(v.timeOffset??0))*numberAt(v.speed,time),spread=numberAt(v.spread,time),size=numberAt(v.size,time),amplitude=numberAt(v.amplitude,time),frequency=numberAt(v.frequency,time),opacity=numberAt(v.opacity,time);
     const material=root.userData.visualMaterial as T.ShaderMaterial|undefined;
     if(material){const u=material.uniforms;for(const [key,value]of Object.entries({clock,spread,size,amplitude,frequency,opacity,lifetime:v.lifetime??5}))u[key].value=value;u.color.value.set(e.color);u.secondary.value.set(v.secondaryColor);

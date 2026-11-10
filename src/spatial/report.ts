@@ -69,7 +69,7 @@ export function collectSpatialReport(engine: Engine, cameraId: string, includeCr
     const direction = (root: Object3D) => new Vector3(0, 0, 1).applyQuaternion(root.getWorldQuaternion(new Quaternion())).normalize();
     function item(root: Object3D, data: Pick<SpatialObject, 'key' | 'entityId' | 'memberIndex' | 'name' | 'kind' | 'asset' | 'enabled' | 'action'>, forward = direction(root), excluded?: Object3D) {
         const entity = p.entities.find(e => e.id === data.entityId);
-        const enabled = data.enabled && (!entity || shotEntityVisible(p, entity, config));
+        const enabled = data.enabled && (!entity || shotEntityVisible(p, entity, config,engine.time));
         const box = data.kind === 'camera' || entity?.light ? null : geometryBounds(root);
         const shotBox = excluded ? geometryBounds(root, excluded) : box;
         const framing: FrameData = data.kind === 'camera' || entity?.light ? { status: 'not-rendered', rectangle: null, occlusion: 'not-checked' }
@@ -144,7 +144,7 @@ export function collectSpatialReport(engine: Engine, cameraId: string, includeCr
         camera: { id: cameraEntity.id, name: cameraEntity.name, position: camera.getWorldPosition(new Vector3()).toArray(), forward: camera.getWorldDirection(new Vector3()).toArray(),
             focal: camera.getFocalLength(), hiddenWalls: [...config.hideWalls], hiddenEntityIds: [...(config.hiddenEntityIds ?? [])], hiddenHeadEntityId: hiddenHeadId },
         counts: { entities: p.entities.length, people: people.reduce((sum, e) => sum + (e.kind === 'crowd' ? e.count : 1), 0),
-            enabledPeople: people.filter(e => shotEntityVisible(p, e, config)).reduce((sum, e) => sum + (e.kind === 'crowd' ? e.count : 1), 0), animals: animals.length, enabledAnimals: animals.filter(e => shotEntityVisible(p, e, config)).length, crowdMembersIncluded: includeCrowdMembers },
+            enabledPeople: people.filter(e => shotEntityVisible(p, e, config,engine.time)).reduce((sum, e) => sum + (e.kind === 'crowd' ? e.count : 1), 0), animals: animals.length, enabledAnimals: animals.filter(e => shotEntityVisible(p, e, config,engine.time)).length, crowdMembersIncluded: includeCrowdMembers },
         objects, floors: p.floors ? structuredClone(p.floors) : undefined, zones: p.zones ? structuredClone(p.zones) : undefined,
         limitations: ['边界为当前几何顶点的世界轴对齐包围盒，包含姿态、旋转和缩放；群演组边界包含成员之间的空隙。', '开启镜头畸变时，入画范围为畸变后包围边界采样估计；遮挡射线使用同一畸变的逆投影。景深模糊不算几何遮挡。',
             '包围盒重叠仅表示可能接近或相交，不是身体或道具碰撞结论。',

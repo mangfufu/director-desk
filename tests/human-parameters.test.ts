@@ -66,7 +66,7 @@ test('skirt length and garment thickness alter geometry independently and disabl
     const e = entity('actor', 'human-dwarf', '衣服'), originals = makeHuman(e);
     e.assetParameters = { outfit: 2, outfitLength: 1 }; const long = makeHuman(e);
     e.assetParameters.outfitLength = .5; e.assetParameters.outfitThickness = 2; const short = makeHuman(e);
-    const skirt = (r: ReturnType<typeof makeHuman>) => r.joints.leftHip.children.find(o => o.userData.costume === 'dress') as T.Mesh;
+    const skirt = (r: ReturnType<typeof makeHuman>) => r.hips.children.find(o => o.userData.garmentHem) as T.SkinnedMesh;
     const a = new T.Box3().setFromObject(skirt(long), true).getSize(new T.Vector3()), b = new T.Box3().setFromObject(skirt(short), true).getSize(new T.Vector3());
     assert.ok(Math.abs(b.y / a.y - .5) < 1e-6); assert.ok(b.x > a.x);
     e.assetParameters = { outfit: 0, headwear: 0, backpack: 0 }; const none = makeHuman(e);

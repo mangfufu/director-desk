@@ -60,7 +60,7 @@ export function createLightingPanel(ctx: AppContext) {
                 + `<button data-act="lighting-key-remove" ${disabled || !keys.length ? 'disabled' : ''}>删除所选关键帧</button>`;
         }
         const layout = inspectorToolLayout(body);
-        html += `<section class="inspector-parameter-group" data-light-section="${tab}"><h3>${label}</h3><div class="cinema-panel inspector-cinema">${layout.body}<div class="inspector-tool-actions">${layout.footer}</div></div></section>`;
+        html += `<section class="inspector-parameter-group" data-light-section="${tab}" aria-label="${label}"><div class="cinema-panel inspector-cinema">${layout.body}<div class="inspector-tool-actions">${layout.footer}</div></div></section>`;
         }
         footer = !light ? `<select id="lighting-new-type" aria-label="新增灯光类型">${options(Object.entries(LIGHT_TYPES), 'light-spot')}</select><button data-act="lighting-add">添加灯光</button>` : '';
         return html;

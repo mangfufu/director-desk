@@ -6,6 +6,8 @@ import { createContextMenu, type ContextItem } from './context-menu.ts';
 import { refreshTimelineSelection } from './timeline-selection-view.ts';
 import { timelineTimeAt } from './timeline-zoom.ts';
 import { $ } from './common.ts';
+import { seatTargets } from '../editor/seat-targets.ts';
+import { isAnimalAsset } from '../asset-catalog.ts';
 
 export function bindEditorContextMenus(ctx: AppContext) {
     const menu = createContextMenu(), timeline = $('#timeline-content');
@@ -31,14 +33,15 @@ export function bindEditorContextMenus(ctx: AppContext) {
         selectObject(id);
         return [action('focus', '定位对象'), action('duplicate', '复制对象'),
             item('visibility', e.visible ? '隐藏对象' : '显示对象', () => command('visibility', id), e.locked),
-            e.locked ? action('unlock-selected', '解除锁定') : null,
+            e.locked ? action('unlock-selected', '解除锁定') : action('lock-selected', '锁定'),
+            e.kind==='actor' && !e.external && !isAnimalAsset(e.asset) && !e.locked && seatTargets(ctx.project,ctx.engine.models,ctx.time).length ? action('seat','放到座面') : null,
             null, action('position-key', '位置关键帧', e.locked), action('draw-path', '绘制路径', e.locked || !!e.handBinding),
             null, action('delete', '删除对象', e.locked), null, ...history()];
     };
     const seek = (time: number) => { ctx.playing = false; ctx.seek(time); };
     const timelineMenu = (x: number, y: number, target: HTMLElement, keyboard = false) => {
         if (!ready()) return;
-        const bar = target.closest<HTMLElement>('[data-clip-id],[data-path-id],[data-cut]');
+        const bar = target.closest<HTMLElement>('[data-clip-id],[data-path-id],[data-cut],[data-visibility-id]');
         const selection = bar ? clipFromBar(bar) : keyboard ? selectedClips().at(-1) : undefined;
         const time = keyboard ? ctx.time : Math.min(ctx.project.duration, Math.round(timelineTimeAt(x) * ctx.project.fps) / ctx.project.fps);
         if (selection) {
@@ -47,10 +50,10 @@ export function bindEditorContextMenus(ctx: AppContext) {
             refreshTimelineSelection(ctx);
             const group = selectedClips(), ranges = group.map(value => clipRange(ctx.project, value));
             const locked = group.some(value => value.kind !== 'cut' && ctx.project.entities.find(e => e.id === value.entityId)?.locked);
-            const canSplit = !locked && ranges.some(range => ctx.time - range.start >= 1 / ctx.project.fps - 1e-8 && range.end - ctx.time >= 1 / ctx.project.fps - 1e-8);
+            const canSplit = !$<HTMLButtonElement>('#timeline-split').disabled;
             show(x, y, [
                 item('split', '在播放头处分割', () => $('#timeline-split').click(), !canSplit),
-                item('trim', '片段时长', () => $('#timeline-trim').click(), locked),
+                item('trim', '片段时长', () => $('#timeline-trim').click(), $<HTMLButtonElement>('#timeline-trim').disabled),
                 item('clip-start', '跳到片段开头', () => seek(Math.min(...ranges.map(range => range.start)))),
                 item('ask-ai', '交给 AI', () => $('#timeline-to-ai').click()), null,
                 item('delete-clips', '删除片段', () => timeline.dispatchEvent(new Event('delete-selected-clips')), locked || group.some(value => value.kind === 'cut' && value.index === 0)),
@@ -76,6 +79,18 @@ export function bindEditorContextMenus(ctx: AppContext) {
         timelineMenu(bounds.left + 210, bounds.top + 35, event.target as HTMLElement, true);
     });
 
+    const objectList = $('#sidebar-content');
+    objectList.addEventListener('contextmenu',event=>{
+        const row=(event.target as HTMLElement).closest<HTMLElement>('.object-row[data-select]');
+        if(!row || !ready())return;event.preventDefault();
+        show(event.clientX,event.clientY,objects(row.dataset.select!),row);
+    });
+    objectList.addEventListener('keydown',event=>{
+        if(event.key!=='ContextMenu' && !(event.shiftKey&&event.key==='F10'))return;
+        const row=(event.target as HTMLElement).closest<HTMLElement>('.object-row[data-select]');
+        if(!row || !ready())return;event.preventDefault();const bounds=row.getBoundingClientRect();
+        show(bounds.right,bounds.top,objects(row.dataset.select!),row);
+    });
     const canvas = ctx.engine.editorRenderer.domElement, shot = ctx.engine.shotRenderer.domElement;
     const stageMenu = (x: number, y: number, keyboard = false) => {
         if (!ready()) return;

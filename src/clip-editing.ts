@@ -1,5 +1,6 @@
 import { clone, uid, type Project, type MotionPath, type Clip } from './model.ts';
-export type TimelineSelection = { kind:'action'; entityId:string; id:string } | { kind:'path'; entityId:string; index:number } | { kind:'cut'; index:number };
+import { visibilityClips } from './scenes/visibility.ts';
+export type TimelineSelection = { kind:'action'; entityId:string; id:string } | { kind:'visibility'; entityId:string; id:string } | { kind:'path'; entityId:string; index:number } | { kind:'cut'; index:number };
 export function pathSections(path: MotionPath) { return path.sections ?? [{start:path.points[0].time,end:path.points.at(-1)!.time,from:path.points[0].time,to:path.points.at(-1)!.time}]; }
 export function clipRange(p: Project, s: TimelineSelection) {
     const missing=()=>{throw Error('所选片段已不存在，请重新选择');};
@@ -10,6 +11,7 @@ export function clipRange(p: Project, s: TimelineSelection) {
     const e=p.entities.find(e=>e.id===s.entityId);
     if(!e)return missing();
     if(s.kind==='action')return e.clips.find(c=>c.id===s.id)??missing();
+    if(s.kind==='visibility')return visibilityClips(e,p.duration).find(c=>c.id===s.id)??missing();
     if(!e.path || !Number.isInteger(s.index))return missing();
     return pathSections(e.path)[s.index]??missing();
 }
@@ -27,6 +29,10 @@ export function setClipRange(p:Project,s:TimelineSelection,start:number,end:numb
         const e=p.entities.find(e=>e.id===s.entityId)!;
         if(e.locked) throw Error('对象已锁定');
         if(s.kind==='action') Object.assign(e.clips.find(c=>c.id===s.id)!,{start,end});
+        else if(s.kind==='visibility') {
+            e.visibility ??= visibilityClips(e,p.duration);
+            Object.assign(e.visibility.find(c=>c.id===s.id)!,{start,end});
+        }
         else {
             const path=e.path!;
             if(path.sections) Object.assign(path.sections[s.index],{start,end});
@@ -40,10 +46,11 @@ export function setClipRange(p:Project,s:TimelineSelection,start:number,end:numb
     }
 }
 /** Interactive dragging keeps a track valid without moving unrelated clips. */
-export function dragClipRange(p:Project,s:TimelineSelection,delta:number,resize=false):TimelineSelection {
+export function dragClipRange(p:Project,s:TimelineSelection,delta:number,resize:boolean|'start'=false):TimelineSelection {
     const {start:a,end:b}=clipRange(p,s),frame=1/p.fps;
     if(!Number.isFinite(delta))throw Error('拖动时间无效');
     if(s.kind==='cut') {
+        if(resize==='start')throw Error('切镜请调整相邻镜头的结束位置');
         if(resize) {
             const shift=Math.max(a+frame,b+delta)-b;
             p.cuts.slice(s.index+1).forEach(c=>c.time+=shift);
@@ -65,9 +72,12 @@ export function dragClipRange(p:Project,s:TimelineSelection,delta:number,resize=
         return s;
     }
     const e=p.entities.find(e=>e.id===s.entityId)!;
-    const others=(s.kind==='action' ? e.clips.filter(c=>c.id!==s.id) : pathSections(e.path!).filter((_,i)=>i!==s.index))
+    const others=(s.kind==='action' ? e.clips.filter(c=>c.id!==s.id) : s.kind==='visibility' ? visibilityClips(e,p.duration).filter(c=>c.id!==s.id) : pathSections(e.path!).filter((_,i)=>i!==s.index))
         .slice().sort((x,y)=>x.start-y.start);
-    if(resize) {
+    if(resize==='start') {
+        const previous=others.filter(c=>c.end<=a+1e-8).at(-1);
+        setClipRange(p,s,Math.max(previous?.end??0,Math.min(b-frame,a+delta)),b);
+    } else if(resize) {
         // The right handle stops at the next clip; shifting other performances is a separate edit.
         const next=others.find(c=>c.start>=b-1e-8);
         setClipRange(p,s,a,Math.min(next?.start??Infinity,Math.max(a+frame,b+delta)));
@@ -97,6 +107,11 @@ export function splitClip(p:Project,s:TimelineSelection,time:number):TimelineSel
     if(s.kind==='cut') { p.cuts.splice(s.index+1,0,{time:at,cameraId:p.cuts[s.index].cameraId}); return {kind:'cut',index:s.index+1}; }
     const e=p.entities.find(e=>e.id===s.entityId)!;
     if(e.locked) throw Error('对象已锁定');
+    if(s.kind==='visibility') {
+        e.visibility ??= visibilityClips(e,p.duration);
+        const c=e.visibility.find(c=>c.id===s.id)!,right={id:uid(),start:at,end:c.end};c.end=at;e.visibility.push(right);
+        e.visibility.sort((a,b)=>a.start-b.start);return {kind:'visibility',entityId:e.id,id:right.id};
+    }
     if(s.kind==='action') {
         const c=e.clips.find(c=>c.id===s.id)!,right=sliceAction(c,at,end);
         Object.assign(c,sliceAction(c,start,at,false));
@@ -114,5 +129,16 @@ export function deleteClip(p:Project,s:TimelineSelection) {
     if(s.kind==='cut') { if(s.index===0) throw Error('第一个切镜点不能删除'); p.cuts.splice(s.index,1); return; }
     const e=p.entities.find(e=>e.id===s.entityId)!; if(e.locked) throw Error('对象已锁定');
     if(s.kind==='action') e.clips=e.clips.filter(c=>c.id!==s.id);
+    else if(s.kind==='visibility') e.visibility=visibilityClips(e,p.duration).filter(c=>c.id!==s.id);
     else { e.path!.sections ??= pathSections(e.path!); e.path!.sections.splice(s.index,1); if(!e.path!.sections.length) e.path=null; }
+}
+
+/** Shared track enumeration for dragging, insertion and multi-selection. */
+export function trackRanges(project: Project, selection: Exclude<TimelineSelection,{kind:'cut'}>) {
+    const entity=project.entities.find(e=>e.id===selection.entityId)!;
+    if(selection.kind==='action'||selection.kind==='visibility') {
+        const kind=selection.kind,clips=kind==='action'?entity.clips:visibilityClips(entity,project.duration);
+        return clips.map(c=>({selection:{kind,entityId:entity.id,id:c.id} as TimelineSelection,start:c.start,end:c.end}));
+    }
+    return pathSections(entity.path!).map((c,index)=>({selection:{kind:'path',entityId:entity.id,index} as TimelineSelection,start:c.start,end:c.end}));
 }

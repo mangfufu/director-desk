@@ -44,7 +44,7 @@ try {
     // Camera channel curves use the same editor and survive editing another key property.
     await page.evaluate(id => window.__director.callTool('director_view', { time: 5, entityId: id }), ids.camera);
     await page.locator('[data-timeline-view="curves"]').click(); await page.locator('#curve-channel').selectOption('camera:focal'); await drag();
-    await page.locator('[data-inspect="path"]').click(); await page.locator('#cinema-key').selectOption('1');
+    await page.locator('[data-inspect="camera"]').click(); await page.locator('#cinema-key').selectOption('1');
     assert.equal(await page.locator('#cinema-ease').inputValue(), 'custom'); await page.locator('#cinema-value').fill('55'); await page.locator('[data-act="cinema-key-save"]').click();
     assert.ok(await page.evaluate(id => window.__director.getProject().entities.find(e => e.id === id).camera.effects.channels.focal.keys[1].easing.bezier, ids.camera));
     const result = await page.evaluate(async ids => {
@@ -57,6 +57,10 @@ try {
         const records = await readEdits([ids.scene]); if (records.length !== before + 1) throw Error('Preview or retry created duplicate receipts');
         const failed = await api.callTool('director_apply', { revision: applied.revision, requestId: 'invalid', operations: [{ operation: 'update', id: 'missing', patch: { name: 'No' } }] });
         if (failed.ok || (await readEdits([ids.scene])).length !== records.length) throw Error('Failed edit was recorded');
+        const snapshot=JSON.stringify(api.getDocument());
+        const badCamera=await api.callTool('director_apply',{revision:applied.revision,requestId:'bad-camera-field',operations:[{operation:'update',id:ids.camera,patch:{camera:{focal:500}}}]});
+        if(badCamera.ok || !/camera\.focal.*8—300/.test(badCamera.error) || !badCamera.error.includes(ids.camera))throw Error('Missing camera field diagnostic');
+        if(JSON.stringify(api.getDocument())!==snapshot || (await readEdits([ids.scene])).length!==records.length)throw Error('Invalid camera changed project or receipt');
         read = await call('director_read'); const created = await call('director_scene', { action: 'copy', name: 'Second scene', revision: read.revision, requestId: 'copy' });
         return { receipt: records[0].id, second: created.sceneContext.sceneId };
     }, ids);
@@ -65,6 +69,11 @@ try {
     await page.locator('[data-change-location]').filter({ hasText: '动作' }).click();
     const located = await page.evaluate(async () => (await window.__director.callTool('director_read')).data);
     assert.equal(located.sceneContext.sceneId, ids.scene); assert.equal(located.selectedId, ids.actor); assert.equal(located.time, 8);
+    const selection=await page.evaluate(async()=>(await window.__director.callTool('director_read',{sections:['selection']})).data.selection);
+    assert.deepEqual(selection.clips.map(c=>({kind:c.kind,id:c.id,start:c.start,end:c.end})),[{kind:'action',id:'qa-run',start:8,end:12}]);
+    assert.deepEqual(selection.timeRange,{start:8,end:12});
+    assert.equal(await page.locator('.timeline-clip[data-clip-id="qa-run"]').getAttribute('aria-selected'),'true');
+    assert.equal(await page.locator('.timeline-selection-range').innerText(),'8.00–12.00s');
     errors.push(...await page.evaluate(()=>window.__qaErrors));
     // Local receipt survives reload without modifying or exporting the scene document.
     await page.waitForTimeout(700); page.on('dialog', d => d.accept()); await page.reload(); await page.waitForFunction(() => window.__director);

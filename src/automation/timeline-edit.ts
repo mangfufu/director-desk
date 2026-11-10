@@ -5,7 +5,7 @@ import type { Project } from '../model.ts';
 export function editTimeline(project: Project, value: Record<string, unknown> | undefined) {
     if (!value || Object.keys(value).some(k => !['action', 'selection', 'time', 'delta', 'start', 'end'].includes(k))) throw Error('时间轴操作参数无效');
     const selection = value.selection as TimelineSelection;
-    if (!selection || !['cut', 'action', 'path'].includes(selection.kind)) throw Error('需要明确的时间轴片段 selection');
+    if (!selection || !['cut', 'action', 'path', 'visibility'].includes(selection.kind)) throw Error('需要明确的时间轴片段 selection');
     clipRange(project, selection);
     const numeric = (key: string) => { const n = value[key]; if (typeof n !== 'number' || !Number.isFinite(n)) throw Error(`时间轴 ${key} 必须为数字`); return n; };
     switch (value.action) {

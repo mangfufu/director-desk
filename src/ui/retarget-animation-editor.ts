@@ -10,10 +10,13 @@ import { applyOperationsWithResources } from '../automation/edits.ts';
 import { setPathLocomotion } from '../animation/locomotion.ts';
 import { builtinFootPlant } from '../animation/motion-catalog.ts';
 import { applyStrideEstimate } from '../animation/stride-fit.ts';
+import { currentClipSelection, selectClip } from './clip-controls.ts';
 
 export function createRetargetAnimationEditor(ctx: AppContext, refresh: () => void) {
     const content = document.querySelector<HTMLElement>('#inspector-content')!;
     let chosen = '', selected = '', parameter = 'speed';
+    let lastTimelineSelection='';
+    let panel: 'clip'|'correction'='clip';
     const infoFor = (id: string) => ctx.engine.externalModels.inspection(ctx.project.resources!.find(r => r.id === id)!);
     function choices() {
         const result: { id: string; label: string; duration: number; data?: RetargetAnimation; presetId?: string }[] = motionPresets().map(p => ({ id: p.id, label: `${p.basicAction ? '基础' : '内置'} / ${p.name}`, duration: p.defaultDuration, presetId: p.id }));
@@ -49,19 +52,24 @@ export function createRetargetAnimationEditor(ctx: AppContext, refresh: () => vo
         if (!input.closest('.retarget-editor')) return;
         event.stopPropagation(); const e = ctx.current(); if (!e) return;
         if (input.id === 'retarget-source') { chosen = input.value; return; }
-        if (input.id === 'retarget-clip') { selected = input.value; refresh(); return; }
+        if (input.id === 'retarget-clip') { selected = input.value;selectClip({kind:'action',entityId:e.id,id:selected});refresh();ctx.renderTimeline();return; }
         if (input.id === 'retarget-parameter') { parameter = input.value; refresh(); return; }
-        if (e.locked || input.id !== 'retarget-value') return;
+        if (e.locked || ctx.busy || ctx.history.pending || ctx.draft) return;
+        if(input.dataset.retargetAxis!==undefined){
+            ctx.change(()=>{const clip=e.clips.find(c=>c.id===selected);if(!clip?.retarget)throw Error('请先选择适配动作');clip.retarget.orientation[Number(input.dataset.retargetAxis)]=Number(input.value)*Math.PI/180;});return;
+        }
+        const editParameter=input.dataset.retargetParam??parameter;
+        if (input.id !== 'retarget-value' && !input.dataset.retargetParam) return;
         ctx.change(() => {
             const clip = e.clips.find(c => c.id === selected); if (!clip) throw Error('请先选择动作片段');
             if (!clip.retarget) {
-                if (parameter === 'blend') e.actionBlend = Number(input.value);
-                else if (parameter === 'start' || parameter === 'end' || parameter === 'speed' || parameter === 'offset') clip[parameter] = Number(input.value);
+                if (editParameter === 'blend') e.actionBlend = Number(input.value);
+                else if (editParameter === 'start' || editParameter === 'end' || editParameter === 'speed' || editParameter === 'offset') clip[editParameter] = Number(input.value);
                 ctx.extendDuration(); return;
             }
             const duration = infoFor(clip.retarget.resourceId).animations.find(a => a.index === clip.retarget!.index)!.duration;
-            if (parameter === 'blend') { clip.retarget.blend = Number(input.value); return; }
-            if (parameter === 'footPlant') {
+            if (editParameter === 'blend') { clip.retarget.blend = Number(input.value); return; }
+            if (editParameter === 'footPlant') {
                 if (input.value === 'off') delete clip.retarget.footPlant;
                 else {
                     const profile = builtinFootPlant(clip); if (!profile) throw Error('此素材尚无内置落脚区间，请先校准');
@@ -71,32 +79,40 @@ export function createRetargetAnimationEditor(ctx: AppContext, refresh: () => vo
                 }
                 return;
             }
-            if (parameter === 'plantCorrection' && clip.retarget.footPlant) { clip.retarget.footPlant.maxCorrection = Number(input.value); return; }
-            if (parameter === 'locomotion') setPathLocomotion(e, clip, duration, input.value === 'distance' ? clip.retarget.locomotion?.cycleDistance ?? Math.max(.01, e.height * .7) : undefined);
-            else if (parameter === 'grounding') {
+            if (editParameter === 'plantCorrection' && clip.retarget.footPlant) { clip.retarget.footPlant.maxCorrection = Number(input.value); return; }
+            if (editParameter === 'locomotion') setPathLocomotion(e, clip, duration, input.value === 'distance' ? clip.retarget.locomotion?.cycleDistance ?? Math.max(.01, e.height * .7) : undefined);
+            else if (editParameter === 'grounding') {
                 if (input.value === 'off') { delete clip.retarget.grounding; delete clip.retarget.footPlant; }
                 else clip.retarget.grounding ??= { mode: 'preventPenetration', maxCorrection: .2 };
-            } else if (parameter === 'maxCorrection' && clip.retarget.grounding) clip.retarget.grounding.maxCorrection = Number(input.value);
-            else if (parameter === 'maxPelvisLift' && clip.retarget.grounding) clip.retarget.grounding.maxPelvisLift = Number(input.value);
-            else if (parameter === 'cycleDistance' && clip.retarget.locomotion) clip.retarget.locomotion.cycleDistance = Number(input.value);
-            else if (parameter === 'loop') {
+            } else if (editParameter === 'maxCorrection' && clip.retarget.grounding) clip.retarget.grounding.maxCorrection = Number(input.value);
+            else if (editParameter === 'maxPelvisLift' && clip.retarget.grounding) clip.retarget.grounding.maxPelvisLift = Number(input.value);
+            else if (editParameter === 'cycleDistance' && clip.retarget.locomotion) clip.retarget.locomotion.cycleDistance = Number(input.value);
+            else if (editParameter === 'loop') {
                 if (input.value !== 'true' && clip.retarget.locomotion) setPathLocomotion(e, clip, duration);
                 clip.retarget.loop = input.value === 'true';
                 if (!clip.retarget.loop) delete clip.retarget.footPlant;
             }
-            else if (parameter === 'motion') {
+            else if (editParameter === 'motion') {
                 if (input.value === 'source') { if (clip.retarget.locomotion) setPathLocomotion(e, clip, duration); delete clip.retarget.motion; delete clip.retarget.footPlant; }
                 else clip.retarget.motion = { mode: 'inPlace', node: clip.retarget.rig.bones.hips! };
-            } else if (parameter === 'motionNode' && clip.retarget.motion) clip.retarget.motion.node = input.value;
-            else if (parameter === 'start' || parameter === 'end' || parameter === 'speed' || parameter === 'offset') clip[parameter] = Number(input.value);
+            } else if (editParameter === 'motionNode' && clip.retarget.motion) clip.retarget.motion.node = input.value;
+            else if (editParameter === 'start' || editParameter === 'end' || editParameter === 'speed' || editParameter === 'offset') clip[editParameter] = Number(input.value);
             ctx.extendDuration();
         });
     });
     content.addEventListener('click', event => {
         const button = (event.target as HTMLElement).closest<HTMLElement>('[data-retarget-action]');
-        if (!button) return; event.stopPropagation(); const e = ctx.current();
+        if (!button) return; event.stopPropagation();
+        if(button.dataset.retargetAction==='panel'){
+            panel=button.dataset.panel==='correction'?'correction':'clip';refresh();
+            content.querySelector('[data-inspector-part="retarget"]')?.scrollIntoView({block:'start'});return;
+        }
+        const e = ctx.current();
         if (!e || e.locked || ctx.busy || ctx.draft || ctx.history.pending) return;
         const choice = choices().find(c => c.id === chosen);
+        if(button.dataset.retargetAction==='locate'){
+            const clip=e.clips.find(c=>c.id===selected);if(clip){ctx.playing=false;ctx.seek(clip.start);ctx.renderTimeline();}return;
+        }
         if (button.dataset.retargetAction === 'calibrate') {
             try {
                 const clip = e.clips.find(c => c.id === selected); if (!clip) throw Error('请先选择适配动作');
@@ -122,27 +138,32 @@ export function createRetargetAnimationEditor(ctx: AppContext, refresh: () => vo
     return { render(e: Entity) {
         if (!canRetarget(e)) return '<p class="panel-help">先在“骨架”中补齐人形映射，再使用其他模型的动作素材。</p>';
         const sources = choices(), clips = e.clips.filter(c => c.retarget || isBasicHumanAction(c.action));
+        const timeline=currentClipSelection(),timelineId=timeline?.kind==='action'&&timeline.entityId===e.id?timeline.id:'';
+        if(timelineId!==lastTimelineSelection&&clips.some(c=>c.id===timelineId))selected=timelineId;
+        lastTimelineSelection=timelineId;
         if (!sources.some(s => s.id === chosen)) chosen = sources[0]?.id ?? '';
         if (!clips.some(c => c.id === selected)) selected = clips[0]?.id ?? '';
         const clip = clips.find(c => c.id === selected), data = clip?.retarget, info = data ? infoFor(data.resourceId) : null;
         const plantProfile = clip ? builtinFootPlant(clip) : undefined;
         const choose = (id: string, label: string, list: [string, string][], value: string, disabled = false) => `<select id="${id}" aria-label="${label}" title="${escape(list.find(([key]) => key === value)?.[1] ?? label)}" ${disabled ? 'disabled' : ''}>${options(list, value)}</select>`;
-        const parameters: [string, string][] = [['speed', data?.locomotion ? '步频倍率' : '播放速度'], ['start', '开始 / 秒'], ['end', '结束 / 秒'], ['offset', '素材起点 / 秒'], ['loop', '素材循环'], ['motion', '水平走位'], ['motionNode', '走位参考点'], ['locomotion', '迈步驱动'], ['cycleDistance', '每周期距离 / 米'], ['grounding', '足部防穿透'], ['maxCorrection', '修正范围 / 米'], ['maxPelvisLift', '身体上抬 / 米'], ['footPlant', '支撑脚锁定'], ['plantCorrection', '锁脚范围 / 米'], ['blend', '衔接 / 秒']];
+        const parameters: [string, string][] = [['speed', data?.locomotion ? '步频倍率' : '播放速度'], ['start', '开始 / 秒'], ['end', '结束 / 秒'], ['offset', '素材起点 / 秒'], ['loop', '素材循环'], ['motionNode', '走位参考点'], ['locomotion', '迈步驱动'], ['cycleDistance', '每周期距离 / 米'], ['maxPelvisLift', '身体上抬 / 米'], ['footPlant', '支撑脚锁定'], ['plantCorrection', '锁脚范围 / 米'], ['blend', '衔接 / 秒']];
         if (clip && !data) parameters.splice(0, parameters.length, ['speed', '播放速度'], ['start', '开始 / 秒'], ['end', '结束 / 秒'], ['offset', '动作起点 / 秒'], ...(e.external ? [['blend', '基础衔接 / 秒'] as [string, string]] : []));
         if (!parameters.some(([key]) => key === parameter)) parameter = 'speed';
         const value = parameter === 'loop' ? choose('retarget-value', '素材循环', [['false', '播放一次 · 末帧停留'], ['true', '循环播放']], String(data?.loop ?? false), !clip)
-            : parameter === 'motion' ? choose('retarget-value', '水平走位控制', [['source', '保留素材位移'], ['inPlace', '路径控制 · 锁定参考点']], data?.motion?.mode ?? 'source', !clip)
             : parameter === 'motionNode' ? choose('retarget-value', '走位参考点', info?.nodes.map(n => [n.path, `${n.name || n.kind} · ${n.path}`]) ?? [['', '先添加动作']], data?.motion?.node ?? '', !data?.motion)
             : parameter === 'locomotion' ? choose('retarget-value', '迈步驱动', [['time', '按时间播放'], ['distance', '按路程迈步 · 停留时定格']], data?.locomotion?.mode ?? 'time', !clip)
             : parameter === 'cycleDistance' ? `<input id="retarget-value" type="number" aria-label="每周期距离 / 米" title="左右脚迈完一轮的移动距离。" min=".01" max="1000" step=".05" value="${(data?.locomotion?.cycleDistance ?? 1).toFixed(3)}" ${data?.locomotion ? '' : 'disabled'}/>`
-            : parameter === 'grounding' ? choose('retarget-value', '足部防穿透', [['off', '关闭'], ['preventPenetration', '开启 · 上抬修正']], data?.grounding?.mode ?? 'off', !clip)
-            : parameter === 'maxCorrection' ? `<input id="retarget-value" type="number" aria-label="修正范围 / 米" title="只在此范围内寻找承托面并上抬脚；不锁定脚底，不把抬起的脚压到地上。" min=".001" max="2" step=".01" value="${data?.grounding?.maxCorrection ?? .2}" ${data?.grounding ? '' : 'disabled'}/>`
             : parameter === 'maxPelvisLift' ? `<input id="retarget-value" type="number" aria-label="身体上抬 / 米" title="身体向上调整的最大距离；0 为关闭。" min="0" max="2" step=".01" value="${data?.grounding?.maxPelvisLift ?? 0}" ${data?.grounding ? '' : 'disabled'}/>`
             : parameter === 'footPlant' ? choose('retarget-value', '支撑脚锁定', [['off', '关闭'], ['stance', plantProfile || data?.footPlant ? '按落脚区间锁定' : '此素材需先校准落脚区间']], data?.footPlant?.mode ?? 'off', !plantProfile && !data?.footPlant)
             : parameter === 'plantCorrection' ? `<input id="retarget-value" type="number" aria-label="锁脚范围 / 米" title="最大水平修正量；腿长不足会报告受限，不拉长肢体。" min=".001" max="2" step=".01" value="${data?.footPlant?.maxCorrection ?? .25}" ${data?.footPlant ? '' : 'disabled'}/>`
             : parameter === 'blend' ? `<input id="retarget-value" type="number" aria-label="衔接 / 秒" title="动作衔接的过渡时间；0 为关闭。" min="0" max="2" step=".05" value="${data ? data.blend ?? 0 : e.actionBlend ?? .2}" ${clip ? '' : 'disabled'}/>`
             : `<input id="retarget-value" type="number" aria-label="${parameters.find(([key]) => key === parameter)?.[1]}" min="${parameter === 'speed' ? '.01' : '0'}" step="${parameter === 'speed' ? '.1' : 1 / ctx.project.fps}" value="${clip?.[parameter as 'speed' | 'start' | 'end' | 'offset'] ?? 0}" ${clip ? '' : 'disabled'}/>`;
         const field = parameter === 'cycleDistance' ? `<div class="retarget-stride">${value}<button class="subtle" data-retarget-action="calibrate" aria-label="按动作校准步幅" title="按当前动作估算步幅，可手动调整。" ${plantProfile || data?.footPlant ? '' : 'disabled'}>校准</button></div>` : value;
-        return button('user-motion-library', '用户动作库 / 导入动作', '', 'wide subtle') + `<div class="retarget-editor"><div class="native-row">${choose('retarget-source', '动作素材来源', sources.length ? sources.map(s => [s.id, s.label]) : [['', '先导入带骨架和动画的模型']], chosen)}<button class="subtle" data-retarget-action="add" ${sources.length ? '' : 'disabled'}>添加</button></div><div class="native-row">${choose('retarget-clip', '已排适配动作', clips.length ? clips.map(c => [c.id, `${clipLabel(c)} · ${c.start.toFixed(2)}—${c.end.toFixed(2)} 秒`]) : [['', '尚未添加适配动作']], selected)}<button class="subtle" data-retarget-action="remove" ${clip ? '' : 'disabled'}>移除</button></div><div class="native-values">${choose('retarget-parameter', '调整素材参数', parameters, parameter)}${field}</div></div>`;
+        const correction=data?`<div class="retarget-correction"><label><span>朝向校正 / 度</span><div class="retarget-axes">${['X','Y','Z'].map((axis,i)=>`<label>${axis}<input type="number" data-retarget-axis="${i}" aria-label="动作朝向 ${axis}" step="5" value="${Number((data.orientation[i]*180/Math.PI).toFixed(4))}"/></label>`).join('')}</div></label><label><span>水平走位</span><select data-retarget-param="motion" aria-label="动作水平走位">${options([['source','保留素材位移'],['inPlace','由导演路径控制']],data.motion?.mode??'source')}</select></label><div class="native-values"><label><span>足部防穿透</span><select data-retarget-param="grounding" aria-label="动作足部防穿透">${options([['off','关闭'],['preventPenetration','开启']],data.grounding?.mode??'off')}</select></label><label><span>修正范围 / 米</span><input data-retarget-param="maxCorrection" type="number" aria-label="动作修正范围" min=".001" max="2" step=".01" value="${data.grounding?.maxCorrection??.2}" ${data.grounding?'':'disabled'}/></label></div></div>`:'';
+        const calibrating=!!data&&panel==='correction';
+        const tabs=data?`<div class="retarget-tabs" role="tablist"><button role="tab" aria-selected="${!calibrating}" data-retarget-action="panel" data-panel="clip">片段</button><button role="tab" aria-selected="${calibrating}" data-retarget-action="panel" data-panel="correction">动作校正</button></div>`:'';
+        const clipRow=`<div class="native-row">${choose('retarget-clip', '已排适配动作', clips.length ? clips.map(c => [c.id, `${clipLabel(c)} · ${c.start.toFixed(2)}—${c.end.toFixed(2)} 秒`]) : [['', '尚未添加适配动作']], selected)}<button class="subtle" data-retarget-action="${calibrating?'locate':'remove'}" ${clip ? '' : 'disabled'}>${calibrating?'定位':'移除'}</button></div>`;
+        const controls=calibrating?correction:`<div class="native-row">${choose('retarget-source', '动作素材来源', sources.length ? sources.map(s => [s.id, s.label]) : [['', '先导入带骨架和动画的模型']], chosen)}<button class="subtle" data-retarget-action="add" ${sources.length ? '' : 'disabled'}>添加</button></div><div class="native-values">${choose('retarget-parameter', '调整素材参数', parameters, parameter)}${field}</div>`;
+        return (calibrating?'':button('user-motion-library', '用户动作库 / 导入动作', '', 'wide subtle')) + `<div class="retarget-editor">${tabs}${clipRow}${controls}</div>`;
     } };
 }

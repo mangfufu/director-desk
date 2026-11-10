@@ -13,7 +13,7 @@ export function meshesOf(root: Object3D, exclude?: Object3D): Mesh[] {
 export function sceneTargets(engine: Engine, cameraId?: string): SceneTarget[] {
     const targets: SceneTarget[] = [], config = cameraId === undefined ? null : engine.cameraEntity(cameraId).camera!;
     for (const e of engine.project.entities) {
-        if (e.kind === 'camera' || e.light || !shotEntityVisible(engine.project, e, config)) continue;
+        if (e.kind === 'camera' || e.light || !shotEntityVisible(engine.project, e, config,engine.time)) continue;
         if (e.kind === 'crowd') {
             engine.crowdRigs.get(e.id)!.forEach((rig, index) => targets.push({ key: `crowd:${e.id}:${index}`, entityId: e.id,
                 name: `${e.name} / 第 ${index + 1} 人`, root: rig.root, meshes: meshesOf(rig.root), head: rig.head, person: true }));

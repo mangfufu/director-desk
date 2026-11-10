@@ -16,7 +16,7 @@ export class SceneWorkspace implements EditorHistory {
     get projectId() { return this.#session.projectId; }
     get filePath() { return this.#session.filePath; }
     get dirty() { return this.#session.dirty; }
-    markSaved(path?: string) { this.#session.markSaved(path); }
+    markSaved(path?: string, document?: SceneDocument) { this.#session.markSaved(path, document); }
     setFile(path?: string, saved = false) { this.#session.setFile(path, saved); }
     get pending() { return this.#before; }
     get restoredSelection() { return this.restoredView?.selected; }

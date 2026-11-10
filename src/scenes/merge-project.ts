@@ -7,6 +7,7 @@ import { cameraLookAt } from '../animation/camera-look.ts';
 import { numberAt } from '../animation/channels.ts';
 import { lightIntensity } from '../lighting/model.ts';
 import { lightColor } from '../lighting/runtime.ts';
+import { entityVisibleAt } from './visibility.ts';
 
 export interface MergeSceneOptions {
     offset: Vec3;
@@ -79,10 +80,12 @@ export function mergeScene(destination: Project, source: Project, options: Merge
         for(const l of e.surface?.layers??[]){l.start=scheduling==='reset'?0:l.start+timeOffset;l.opacity=shift(l.opacity);}
 
         if (scheduling === 'reset') {
+            e.visible=entityVisibleAt(e,0);delete e.visibility;
             e.position = initial!.get(e.id)!.position;
             if ((e.kind === 'actor' || e.kind === 'crowd') && (!e.faceTarget || e.path?.points[0].heading !== undefined)) { e.rotation[1] = initial!.get(e.id)!.yaw; e.face = 'fixed'; e.faceTarget = ''; }
             e.path = null; e.clips = []; e.poseKeys = [];
         } else {
+            e.visibility?.forEach(c=>{c.id=fresh();c.start+=timeOffset;c.end+=timeOffset;});
             e.clips.forEach(c => { c.id = fresh(); c.start += timeOffset; c.end += timeOffset; });
             e.poseKeys.forEach(k => k.time += timeOffset);
             if (e.path) {
@@ -155,7 +158,7 @@ export function mergeScene(destination: Project, source: Project, options: Merge
     }
     if (source.aspect !== destination.aspect || source.fps !== destination.fps) warnings.push('沿用当前工程画幅和帧率；站位与秒数不变，构图边缘可能变化。');
     if (scheduling === 'reset') warnings.push('已清空插入对象的路径、动作、姿态关键帧与剧情时间备注；保留初始站位、默认姿态及人物／机位绑定。');
-    if (timeOffset > 0 && scheduling === 'keep') warnings.push('开始时间平移调度，不控制对象出现时间；开始前对象仍在场。');
+    if (timeOffset > 0 && scheduling === 'keep' && incoming.entities.some(e=>e.kind!=='camera'&&e.visible&&e.visibility==null)) warnings.push('未设置显示时段的对象在调度开始前仍会显示。');
     assertProject(p);
     return { project: p, entityIds: Object.fromEntries([...entityMap].filter(([id]) => source.entities.some(e => e.id === id))), addedIds: incoming.entities.map(e => e.id), addedResources, reusedResources, warnings };
 }

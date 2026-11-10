@@ -2,7 +2,7 @@ import type { AppContext } from '../app-context.ts';
 import { clone } from '../model.ts';
 import { $, button, escape, options } from './common.ts';
 import { importMotionFile, motionFromSource } from '../animation/import-user-motion.ts';
-import { MotionPreview } from '../animation/motion-preview.ts';
+import { MotionPreview, type MotionPreviewView } from '../animation/motion-preview.ts';
 import { assertUserMotion, type UserMotion } from '../animation/user-motion.ts';
 import { getUserMotion, listUserMotions, removeUserMotion, saveUserMotion } from '../animation/user-motion-store.ts';
 import { HUMAN_BONES, assertRigBindings, rigStatus, type HumanBone } from '../resources/rig-definition.ts';
@@ -10,11 +10,14 @@ import { canRetarget } from '../resources/retarget-animation.ts';
 import { assertAnimationBinding } from '../resources/native-animation.ts';
 import { applyOperationsWithResources } from '../automation/edits.ts';
 import './user-motion-panel.css';
+import { selectClip } from './clip-controls.ts';
 
 export function createUserMotionPanel(ctx: AppContext) {
     let loaded: Awaited<ReturnType<typeof importMotionFile>> | undefined, motion: UserMotion | undefined, preview: MotionPreview | undefined;
     let entries: UserMotion[] = [], query = '', page = 0, tab = 'action', bone: HumanBone = 'hips';
     let active = false, working = false, generation = 0;
+    let previewView: MotionPreviewView = 'source';
+    let previewTime=0,previewPlaying=true;
     const release = () => { preview?.dispose(); preview = undefined; loaded?.model.dispose(); loaded = undefined; motion = undefined; };
     const error = (e: unknown) => ctx.toast(e instanceof Error ? e.message : '动作操作失败', true);
     async function task(run: () => Promise<void>) {
@@ -24,7 +27,7 @@ export function createUserMotionPanel(ctx: AppContext) {
         finally { working = false; ctx.busy = false; ctx.updateTimeUI(); }
     }
     function show() {
-        ctx.showModal('用户动作库', `<div class="user-motion-layout"><aside class="user-motion-list">
+        if (!ctx.showModal('用户动作库', `<div class="user-motion-layout"><aside class="user-motion-list">
             <input id="user-motion-search" placeholder="搜索已收藏动作" aria-label="搜索用户动作" value="${escape(query)}"/>
             <div id="user-motion-list"></div><div id="user-motion-pages" class="button-row"></div>
             <button id="user-motion-import" type="button">导入动作文件</button><button id="user-motion-folder" type="button">选择资源文件夹</button>
@@ -32,9 +35,11 @@ export function createUserMotionPanel(ctx: AppContext) {
             <input id="user-motion-directory" type="file" multiple webkitdirectory hidden/>
 
         </aside><div class="user-motion-detail"><div id="user-motion-preview"><p>选择或导入动作进行预览</p></div>
-            <div class="user-motion-toolbar"><span id="user-motion-status">支持独立骨架或带模型的 FBX、GLB/glTF 动作</span><button id="user-motion-play" type="button">暂停预览</button></div>
+            <div class="user-motion-toolbar"><span id="user-motion-status">支持 FBX、GLB/glTF 动作</span><select id="user-motion-view" aria-label="动作预览对象"><option value="source">源动作</option><option value="human">默认人物</option></select><button id="user-motion-frame" type="button">全景</button><button id="user-motion-play" type="button">暂停预览</button></div>
+            <div class="user-motion-scrub"><input id="user-motion-time" type="range" min="0" max="1" step=".001" value="0" aria-label="动作预览时间"/><output id="user-motion-clock">0.00 s</output></div>
+            <div id="user-motion-measure" class="user-motion-measure"></div>
             <div class="button-row" role="tablist">${[['action', '动作'], ['rig', '骨架映射'], ['source', '来源']].map(([id, name]) => `<button data-user-motion-tab="${id}" role="tab" aria-selected="${tab === id}">${name}</button>`).join('')}</div>
-            <div id="user-motion-settings"></div></div></div>`, button('close-modal', '关闭', '', 'subtle') + '<button id="user-motion-delete" class="subtle">删除收藏</button><button id="user-motion-save" class="subtle">存入动作库</button><button id="user-motion-apply" class="primary">添加到当前人物</button>');
+            <div id="user-motion-settings"></div></div></div>`, button('close-modal', '关闭', '', 'subtle') + '<button id="user-motion-delete" class="subtle">删除收藏</button><button id="user-motion-save" class="subtle">存入动作库</button><button id="user-motion-apply" class="primary">添加到当前人物</button>')) return;
         const modal = $('.modal'); modal.classList.add('user-motion-modal');
         modal.addEventListener('director-before-close', () => { active = false; generation++; release(); }, { once: true });
         $('#user-motion-search').addEventListener('input', () => { query = $('#user-motion-search').value; page = 0; renderList(); });
@@ -62,6 +67,12 @@ export function createUserMotionPanel(ctx: AppContext) {
             if (section) { tab = section.dataset.userMotionTab!; renderSettings(); }
         });
         $('#user-motion-play').onclick = () => { if (preview) { preview.playing = !preview.playing; $('#user-motion-play').textContent = preview.playing ? '暂停预览' : '播放预览'; } };
+        $('#user-motion-view').onchange = () => {
+            const before=previewView;previewView=$('#user-motion-view').value as MotionPreviewView;
+            try{startPreview(false,true);}catch(e){previewView=before;error(e);startPreview();}
+        };
+        $('#user-motion-frame').onclick = () => preview?.frameAll();
+        $('#user-motion-time').oninput = () => {preview?.seek(Number($('#user-motion-time').value));$('#user-motion-play').textContent='播放预览';};
         $('#user-motion-save').onclick = () => void task(async () => {
             if (!motion || !loaded) return;
             assertUserMotion(motion); assertRigBindings(motion.data.rig, motion.data.referencePose, loaded.model.inspection.bones);
@@ -85,19 +96,32 @@ export function createUserMotionPanel(ctx: AppContext) {
             const { loadModelPackage } = await import('../resources/model-loader.ts');
             const token = ++generation, asset = await getUserMotion(id), model = await loadModelPackage(asset.resource.package);
             if (!active || token !== generation) { model.dispose(); return; }
-            release(); loaded = { resource: asset.resource, model }; motion = asset.motion; renderList(); renderSettings(); startPreview();
+            release(); loaded = { resource: asset.resource, model }; motion = asset.motion; renderList(); renderSettings(); startPreview(true);
         });
     }
     function chooseClip(index: number) {
         if (!loaded) return;
         motion = motionFromSource(loaded.resource, loaded.model.inspection, index);
-        bone = rigStatus(motion.data.rig).missing[0] ?? 'hips'; renderSettings(); startPreview();
+        bone = rigStatus(motion.data.rig).missing[0] ?? 'hips'; renderSettings(); startPreview(true);
     }
-    function startPreview() {
+    function startPreview(reset = false, throwOnFailure = false) {
+        if(reset){previewTime=0;previewPlaying=true;}
+        else if(preview){previewTime=preview.time;previewPlaying=preview.playing;}
         preview?.dispose(); preview = undefined;
         if (motion && loaded) {
-            try { preview = new MotionPreview($('#user-motion-preview'), loaded.model, motion); $('#user-motion-play').textContent = '暂停预览'; }
-            catch (e) { error(e); }
+            if(!rigStatus(motion.data.rig).complete)previewView='source';
+            $('#user-motion-view').value=previewView;$('#user-motion-time').max=String(motion.duration);
+            try {
+                preview = new MotionPreview($('#user-motion-preview'), loaded.model, motion, previewView,state=>{
+                    if(!active)return;
+                    $('#user-motion-time').value=String(state.time);$('#user-motion-clock').textContent=state.time.toFixed(2)+' s';
+                    const metric=(v:number|null)=>v===null?'—':v.toFixed(2);
+                    $('#user-motion-measure').textContent=`脚踝高度 L ${metric(state.leftFoot)} / R ${metric(state.rightFoot)} m · 位移 X ${metric(state.displacement[0])} / Y ${metric(state.displacement[1])} / Z ${metric(state.displacement[2])} m`;
+                });
+                preview.seek(previewTime);preview.playing=previewPlaying;preview.selectBone(tab==='rig'?motion.data.rig.bones[bone]??'':'');
+                $('#user-motion-play').textContent = previewPlaying?'暂停预览':'播放预览';
+            }
+            catch (e) { if(throwOnFailure)throw e;error(e); }
         }
     }
     function renderSettings() {
@@ -109,7 +133,9 @@ export function createUserMotionPanel(ctx: AppContext) {
         $('#user-motion-delete').toggleAttribute('disabled', !entries.some(m => m.id === motion?.id));
         if (!motion || !loaded) { $('#user-motion-settings').innerHTML = '<p class="panel-help">支持 FBX、GLB/glTF</p>'; return; }
         const m = motion, info = loaded.model.inspection, status = rigStatus(m.data.rig);
-        $('#user-motion-status').textContent = `${m.duration.toFixed(2)} 秒 · ${info.bones.length} 个骨骼 · ${status.complete ? '映射完整' : `待映射 ${status.missing.length} 处`} · 源动作预览`;
+        $('#user-motion-view').querySelector<HTMLOptionElement>('[value="human"]')!.disabled=!status.complete;
+        preview?.selectBone(tab==='rig'?m.data.rig.bones[bone]??'':'');
+        $('#user-motion-status').textContent = `${m.duration.toFixed(2)} 秒 · ${info.bones.length} 个骨骼 · ${status.complete ? '映射完整' : `待映射 ${status.missing.length} 处`}`;
         const choose = (id: string, label: string, pairs: [string, string][], val: string) => `<label class="field"><span>${label}</span><select id="${id}">${options(pairs, val)}</select></label>`;
         $('#user-motion-settings').innerHTML = tab === 'action' ? `<div class="field-pair">
             ${choose('uml-clip', '源文件动作', info.animations.filter(a => a.duration > 0 && a.tracks > 0).map(a => [String(a.index), a.name]), String(m.data.index))}
@@ -117,32 +143,39 @@ export function createUserMotionPanel(ctx: AppContext) {
             ${choose('uml-loop', '播放方式', [['false', '播放一次'], ['true', '循环播放']], String(m.data.loop))}
             ${choose('uml-motion', '走位方式', [['path', '由导演路径控制'], ['source', '保留素材位移']], m.data.motion ? 'path' : 'source')}
             <label class="field"><span>应用时长 / 秒</span><input id="uml-duration" type="number" min=".01" step=".1" value="${m.duration.toFixed(3)}"/></label>
+            ${choose('uml-grounding','足部防穿透',[['off','关闭'],['on','开启']],m.data.grounding?'on':'off')}
+            ${m.data.grounding?`<label class="field"><span>修正范围 / 米</span><input id="uml-ground-range" type="number" min=".001" max="2" step=".01" value="${m.data.grounding.maxCorrection}"/></label>`:''}
             </div>`
             : tab === 'source' ? `<label class="field"><span>来源网址或作者</span><input id="uml-source" maxlength="1000" value="${escape(loaded.resource.source)}"/></label><label class="field"><span>许可备注</span><input id="uml-license" maxlength="1000" value="${escape(loaded.resource.license)}"/></label>`
             : `<div class="field-pair">${choose('uml-part', '人体部位', Object.entries(HUMAN_BONES).map(([key, label]) => [key, label + (m.data.rig.bones[key as HumanBone] ? '' : ' · 未映射')]), bone)}
                 ${choose('uml-bone', '对应源骨骼', [['', '未映射'], ...info.bones.map(b => [b.path, b.name || b.path] as [string, string])], m.data.rig.bones[bone] ?? '')}
-                <label class="field"><span>单位倍率 · FBX 已换算为米</span><input id="uml-scale" type="number" min=".0001" step=".01" value="${m.data.unitScale}"/></label>
-                <label class="field"><span>朝向校正 Y / 度</span><input id="uml-facing" type="number" step="90" value="${m.data.orientation[1] * 180 / Math.PI}"/></label></div><p class="panel-help">${status.complete ? '映射完整' : '需要补齐：' + status.missing.map(key => HUMAN_BONES[key]).join('、')}</p>`;
+                <label class="field"><span>单位倍率</span><input id="uml-scale" type="number" min=".0001" step=".01" value="${m.data.unitScale}"/></label>
+                <div class="field"><span>朝向校正 / 度</span><div class="uml-axes">${['X','Y','Z'].map((axis,i)=>`<label>${axis}<input id="uml-facing-${axis}" data-uml-axis="${i}" aria-label="朝向 ${axis}" type="number" step="90" value="${m.data.orientation[i]*180/Math.PI}"/></label>`).join('')}</div></div></div><p class="panel-help">${status.complete ? '映射完整' : '需要补齐：' + status.missing.map(key => HUMAN_BONES[key]).join('、')}</p>`;
         $('#user-motion-settings').onchange = event => {
             const input = event.target as HTMLInputElement;
+            const before=clone(m);
             try {
                 if (input.id === 'uml-clip') { chooseClip(Number(input.value)); return; }
+                if (input.id === 'uml-part') { bone = input.value as HumanBone; renderSettings();return; }
                 if (input.id === 'uml-name') m.name = input.value;
-                if (input.id === 'uml-loop') m.data.loop = input.value === 'true';
+                if (input.id === 'uml-loop') {m.data.loop = input.value === 'true';if(!m.data.loop){delete m.data.locomotion;delete m.data.footPlant;}}
+                if(input.id==='uml-duration')m.duration=Number(input.value);
+                if(input.id==='uml-grounding'){if(input.value==='off'){delete m.data.grounding;delete m.data.footPlant;}else m.data.grounding??={mode:'preventPenetration',maxCorrection:.2};}
+                if(input.id==='uml-ground-range'&&m.data.grounding)m.data.grounding.maxCorrection=Number(input.value);
                 if (input.id === 'uml-motion') {
-                    if (input.value === 'source') delete m.data.motion;
+                    if (input.value === 'source') {delete m.data.motion;delete m.data.locomotion;delete m.data.footPlant;}
                     else { if (!m.data.rig.bones.hips) throw Error('请先映射骨盆'); m.data.motion = { mode: 'inPlace', node: m.data.rig.bones.hips }; }
-                    startPreview();
                 }
                 if (input.id === 'uml-source') loaded!.resource.source = input.value;
                 if (input.id === 'uml-license') loaded!.resource.license = input.value;
-                if (input.id === 'uml-part') { bone = input.value as HumanBone; renderSettings(); }
                 if (input.id === 'uml-bone') { if (input.value) m.data.rig.bones[bone] = input.value; else delete m.data.rig.bones[bone]; if (bone === 'hips' && m.data.motion) { if (input.value) m.data.motion.node = input.value; else delete m.data.motion; } renderSettings(); }
-                if (input.id === 'uml-scale' || input.id === 'uml-facing') {
+                if (input.id === 'uml-scale' || input.dataset.umlAxis!==undefined) {
                     const number = Number(input.value); if (!Number.isFinite(number) || input.id === 'uml-scale' && (number <= 0 || number > 10000)) throw Error('请输入有效校正值');
-                    if (input.id === 'uml-scale') m.data.unitScale = number; else m.data.orientation[1] = number * Math.PI / 180; startPreview();
+                    if (input.id === 'uml-scale') m.data.unitScale = number; else m.data.orientation[Number(input.dataset.umlAxis)] = number * Math.PI / 180;
                 }
-            } catch (e) { error(e); renderSettings(); }
+                assertUserMotion(m);assertRigBindings(m.data.rig,m.data.referencePose,info.bones);
+                if(!['uml-name','uml-source','uml-license'].includes(input.id)){renderSettings();startPreview(false,true);}
+            } catch (e) { motion=before;error(e); renderSettings();startPreview(); }
         };
     }
     async function apply() {
@@ -154,7 +187,12 @@ export function createUserMotionPanel(ctx: AppContext) {
             await ctx.engine.externalModels.prepare(after);
             if (ctx.project !== before || ctx.scenes.context.revision !== context.revision || ctx.history.pending) throw Error('工程已变化，请重新应用');
             ctx.busy = false;
-            if (ctx.change(() => { ctx.project = after; ctx.inspectorTab = 'retarget'; })) { ctx.closeModal(); ctx.toast('动作已添加，可在时间轴调整，源素材随工程保存'); }
+            if (ctx.change(() => { ctx.project = after; ctx.inspectorTab = 'retarget'; })) {
+                const oldIds=new Set(before.entities.find(e=>e.id===id)!.clips.map(c=>c.id));
+                const added=after.entities.find(e=>e.id===id)!.clips.find(c=>!oldIds.has(c.id))!;
+                selectClip({kind:'action',entityId:id,id:added.id});ctx.renderInspector();ctx.renderTimeline();
+                ctx.closeModal(); ctx.toast('动作已添加');
+            }
         });
         ctx.engine.externalModels.retain([ctx.project, ...ctx.history.undoStack, ...ctx.history.redoStack]);
     }

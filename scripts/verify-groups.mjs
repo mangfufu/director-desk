@@ -22,6 +22,12 @@ try {
     await page.locator('#group-name').fill('组合测试'); await page.locator('#inspector-content [data-act="group-create"]').click();
     const project = () => page.evaluate(() => window.__director.getProject());
     let p = await project(); assert.deepEqual(p.groups[0].entityIds.sort(), ['a', 'b']);
+    // Names apply on edit; pending transform values survive the rename.
+    await page.locator('#group-move-0').fill('2');
+    await page.locator('#group-name').fill('新组名');await page.locator('#group-name').press('Tab');
+    assert.equal((await project()).groups[0].name,'新组名');
+    assert.equal(await page.locator('#group-move-0').inputValue(),'2');
+    assert.equal(await page.locator('[data-act="group-rename"]').count(),0);
     await page.locator('#group-move-0').fill('3'); await page.locator('#group-rotate-1').fill('90');
     await page.locator('[data-act="group-transform"]').click();
     p = await project(); assert.ok(Math.abs(p.entities.find(e => e.id === 'a').position[0] - 3) < 1e-8);
@@ -29,8 +35,9 @@ try {
     await page.locator('#group-name').blur(); await page.keyboard.press('Control+z');
     assert.deepEqual((await project()).entities.find(e => e.id === 'a').position, [-1, 0, 0]);
     await page.locator('#scene-group-select').selectOption(p.groups[0].id);
+    await page.locator('#group-name').fill('复制前改名');
     await page.locator('[data-act="group-copy"]').click(); p = await project(); assert.equal(p.groups.length, 2);
-    await page.locator('#group-member').selectOption(p.groups[1].entityIds[0]); await page.locator('[data-act="group-edit-member"]').click();
+    await page.locator('#group-member').selectOption(p.groups[1].entityIds[0]);
     assert.equal(await page.locator('.group-panel').count(), 0);
     await page.locator('#scene-group-select').selectOption(p.groups[0].id);
     await page.locator('[data-view="stage"]').click();

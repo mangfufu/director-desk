@@ -44,6 +44,10 @@ try {
     await call('director_settings', { scope: 'files', action: 'set', patch: { projects: directory, exports: directory }, requestId: 'locations' });
     await call('director_settings', { scope: 'editor', action: 'set', patch: { navigationSpeed: 4 }, requestId: 'editor' });
     assert.equal((await call('director_settings', { scope: 'editor', action: 'read' })).values.navigationSpeed, 4);
+    await call('director_settings',{scope:'editor',action:'set',patch:{guideThirds:true,guideCenter:true,guideSafe:true,adaptivePreview:true},requestId:'preview-tools'});
+    for(const key of ['guideThirds','guideCenter','guideSafe'])assert.equal(await page.locator(`[data-guide-setting="${key}"]`).isChecked(),true);
+    const guides=await page.locator('.composition-guides').boundingBox(),canvas=await page.locator('#shot-canvas canvas').boundingBox();
+    assert.ok(guides&&canvas&&Math.max(...['x','y','width','height'].map(k=>Math.abs(guides[k]-canvas[k])))<=1);
     const exported = await finish(await call('director_export', { kind: 'project', filename: 'original.director', requestId: 'original' }));
     assert.equal(exported.files[0].saved, true);
     const original = JSON.parse(await fs.readFile(exported.files[0].path, 'utf8'));
@@ -75,6 +79,20 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--stage-share')), '60');
     const grounded = await call('director_place', { action: 'ground', entityId: model.entityId, revision: read.revision, requestId: 'ground' });
     read = await call('director_read', { sections: [] }); assert.equal(read.revision, grounded.revision);
+    await call('director_apply',{revision:read.revision,requestId:'visibility',operations:[{operation:'update',id:model.entityId,patch:{visibility:[{id:'shown',start:.1,end:.2}]}}]});
+    await call('director_view',{entityId:model.entityId,time:.15});
+    assert.equal(await page.locator(`[data-track-key="visibility:${model.entityId}"] [data-visibility-id="shown"]`).count(),1);
+    const visibilityFile=await finish(await call('director_export',{kind:'project',filename:'visibility.director',requestId:'save-visibility'}));
+    read=await call('director_read',{sections:[]});
+    await finish(await call('director_import',{kind:'project',path:visibilityFile.files[0].path,revision:read.revision,requestId:'reopen-visibility'}));
+    for(const [time,expected] of [[0,false],[.1,true],[.2,false]]){
+        await call('director_view',{time});
+        const entity=(await call('director_read',{ids:[model.entityId],details:true})).entities[0];
+        assert.deepEqual(entity.visibility,[{id:'shown',start:.1,end:.2}]);
+        const report=await call('director_spatial',{time});
+        assert.equal(report.objects.find(e=>e.entityId===model.entityId).enabled,expected);
+    }
+    read=await call('director_read',{sections:[]});
     const staging = await call('director_staging', { action: 'save', entityIds: [model.entityId], name: 'Portable block', revision: read.revision, requestId: 'save-block' });
     const blockFile = await call('director_staging', { action: 'export', id: staging.id, filename: 'block.staging', revision: read.revision, requestId: 'export-block' });
     assert.equal(blockFile.saved, true);
@@ -108,6 +126,20 @@ try {
     const batch = await finish(await call('director_export', { kind: 'depth-video', scenes: [{ sceneId: sceneA, filename: 'depth-a' }, { sceneId: sceneB, filename: 'depth-b' }], size: 640 }));
     assert.equal(batch.files.length, 2); for (const file of batch.files) assert.ok((await fs.stat(file.path)).size > 100);
     assert.equal((await call('director_read', { sections: [] })).sceneContext.sceneId, sceneB, 'batch restored active scene');
+    const contactBefore=await finish(await call('director_export',{kind:'project',filename:'before-contact.director'}));
+    const contact=await finish(await call('director_export',{kind:'contact-sheet',sceneId:sceneA,filename:'contact.html',requestId:'contact'}));
+    assert.equal(contact.files[0].saved,true);
+    const contactHtml=await fs.readFile(contact.files[0].path,'utf8');
+    assert.match(contactHtml,/data:image\/jpeg;base64,/);assert.match(contactHtml,/class="contact-card"/);
+    assert.equal((await call('director_read',{sections:[]})).sceneContext.sceneId,sceneB,'contact restored active scene');
+    const contactAfter=await finish(await call('director_export',{kind:'project',filename:'after-contact.director'}));
+    assert.equal(await fs.readFile(contactAfter.files[0].path,'utf8'),await fs.readFile(contactBefore.files[0].path,'utf8'),'contact did not mutate document');
+    const cached=await finish(await call('director_preview',{action:'build',start:0,end:.125,size:640,requestId:'cache-desktop'}));
+    assert.equal(cached.frames,3);assert.equal(cached.ready,true);
+    await call('director_preview',{action:'open'});await page.waitForSelector('#cached-play:not([disabled])');
+    await page.locator('#cached-play').click();await page.waitForTimeout(200);await page.locator('#cached-play').click();
+    await page.locator('.preview-cache-modal [data-act="close-modal"]').click();
+    await call('director_preview',{action:'clear',requestId:'cache-desktop-clear'});assert.equal((await call('director_preview',{action:'state'})).bytes,0);
     const prompt = await finish(await call('director_export', { kind: 'prompt', promptMode: 'text-only', filename: 'prompt.txt' }));
     assert.match(await fs.readFile(prompt.files[0].path, 'utf8'), /Text-only prompt/);
     const skillDir = path.join(profile, 'test-skill'); await fs.mkdir(skillDir); await fs.writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: automation-test\ndescription: Temporary test\n---\n# Test\nRead only.\n');

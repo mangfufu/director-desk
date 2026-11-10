@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const invoke = (action, data) => ipcRenderer.invoke('director-host', { action, data });
 contextBridge.exposeInMainWorld('directorDesktop', {
+    windowChrome: 'custom',
+    appMetrics: () => invoke('app-metrics'),
+    reconstruction: (action, data) => invoke('reconstruction', {action, data}),
+    windowControl: command => invoke('window-control', command),
+    onWindowState: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('director-window-state', listener); return () => ipcRenderer.removeListener('director-window-state', listener); },
     wslPointerInput: process.argv.includes('--director-wsl-pointer'),
     setLanguage: language => ipcRenderer.send('director-language', language),
     extensions: data => ipcRenderer.invoke('director-extensions', data),
@@ -25,6 +30,7 @@ contextBridge.exposeInMainWorld('directorDesktop', {
     copyMcp: (client, useLan) => invoke('copy-mcp', typeof client === 'object' ? client : { client, useLan }),
     resetMcp: () => invoke('reset-mcp'),
     copyText: text => invoke('copy-text', text),
+    editText: command => invoke('edit-text', command),
     onEvent: callback => { const fn = (_event, data) => callback(data); ipcRenderer.on('director-ai-event', fn); return () => ipcRenderer.removeListener('director-ai-event', fn); },
     onTool: callback => { const fn = async (_event, data) => { let result; try { result = await callback(data.name, data.args); } catch { result = { ok: false, error: '工具执行失败' }; } ipcRenderer.send('director-tool-result', { id: data.id, result }); };
         ipcRenderer.on('director-tool-call', fn); ipcRenderer.send('director-tools-ready'); return () => ipcRenderer.removeListener('director-tool-call', fn); },

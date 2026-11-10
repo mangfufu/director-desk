@@ -1,8 +1,9 @@
 import type { CameraConfig, Entity, Project } from '../model.ts';
+import { entityVisibleAt } from './visibility.ts';
 
 /** Shot visibility is independent of editor hiding and is also used by spatial queries. */
-export function shotEntityVisible(project: Project, entity: Entity, camera?: CameraConfig | null) {
-    const shown = (e: Entity) => e.visible && !camera?.hiddenEntityIds?.includes(e.id);
+export function shotEntityVisible(project: Project, entity: Entity, camera?: CameraConfig | null, time=0) {
+    const shown = (e: Entity) => entityVisibleAt(e,time) && !camera?.hiddenEntityIds?.includes(e.id);
     if (!shown(entity)) return false;
     if (entity.handBinding) {
         const actor = project.entities.find(e => e.id === entity.handBinding!.actorId);

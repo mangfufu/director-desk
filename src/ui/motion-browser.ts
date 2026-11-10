@@ -6,13 +6,15 @@ import { canRetarget } from '../resources/retarget-animation.ts';
 import { addLibraryMotion } from './motion-insertion.ts';
 import { escape, options } from './common.ts';
 import './motion-browser.css';
-import { englishText } from '../i18n/locale.ts';
+import { englishText,t } from '../i18n/locale.ts';
+import { bindMotionLibraryHover } from './motion-library-hover.ts';
 
 export interface MotionLibraryItem { id: string; name: string; duration: number; group: string; ready: boolean }
 export function createMotionBrowser(ctx: AppContext) {
     let users: MotionLibraryItem[] = [], host: HTMLElement | undefined, observer: ResizeObserver | undefined;
     let generation = 0, category = '全部', page = 0, pageSize = 8, query = '', chosen = '', loading = false, failed = false;
     let listKey = '', groupKey = '', libraryRevision = 0;
+    let stopPreview: (() => void) | undefined;
     const builtins: MotionLibraryItem[] = motionPresets().map(p => ({ id: p.id, name: p.name, duration: p.defaultDuration, group: p.group, ready: true }));
     const items = () => [...builtins, ...users];
     async function reload() {
@@ -30,6 +32,7 @@ export function createMotionBrowser(ctx: AppContext) {
         listKey = ''; groupKey = '';
         content.innerHTML = `<div class="motion-browser"><div class="motion-library-tools"><label class="library-category">分类<select aria-label="动作分类"></select></label><button data-act="user-motion-library">导入 / 管理</button></div><div class="motion-library-list" role="list" aria-label="动作库"></div><div class="library-pager"><button data-motion-page="-1" aria-label="上一页动作">‹ 上页</button><span class="motion-library-page"></span><button data-motion-page="1" aria-label="下一页动作">下页 ›</button></div><button class="motion-library-add">添加到当前人物</button></div>`;
         const browser = content.firstElementChild as HTMLElement;
+        stopPreview?.(); stopPreview = bindMotionLibraryHover(browser);
         browser.querySelector('select')!.onchange = event => { category = (event.target as HTMLSelectElement).value; page = 0; render(content); };
         browser.addEventListener('click', event => {
             const target = event.target as HTMLElement;
@@ -41,7 +44,7 @@ export function createMotionBrowser(ctx: AppContext) {
         });
         const list = browser.querySelector<HTMLElement>('.motion-library-list')!;
         observer = new ResizeObserver(() => {
-            const count = Math.max(1, Math.floor(list.clientHeight / 54));
+            const count = Math.max(1, Math.floor(list.clientHeight / 44));
             if (count !== pageSize) { pageSize = count; render(content); }
         });
         observer.observe(list);
@@ -61,7 +64,7 @@ export function createMotionBrowser(ctx: AppContext) {
         const nextList = JSON.stringify([search, category, page, pageSize, libraryRevision, loading, failed]);
         if (listKey !== nextList) {
             listKey = nextList;
-            content.querySelector('.motion-library-list')!.innerHTML = filtered.slice(page * pageSize, (page + 1) * pageSize).map(m => `<button type="button" class="motion-library-item" draggable="${m.ready}" data-library-motion="${escape(m.id)}" data-motion-name="${escape(m.name)}" data-motion-duration="${m.duration}" aria-pressed="${chosen === m.id}" title="${escape(m.name)}${m.ready ? ' · 拖入人物轨道' : ' · 请先完善骨架映射'}"><span class="motion-library-grip" aria-hidden="true">⠿</span><span><strong ${m.group === '用户收藏' ? 'data-i18n-ignore' : ''}>${escape(m.name)}</strong><small>${escape(m.group)} · ${Number(m.duration.toFixed(2))} 秒${m.ready ? '' : ' · 待映射'}</small></span></button>`).join('') || `<div class="library-empty">${loading ? '正在加载…' : failed && category === '用户收藏' ? '动作库读取失败' : '没有匹配的动作'}${failed ? '<button data-motion-reload>重试</button>' : ''}</div>`;
+            content.querySelector('.motion-library-list')!.innerHTML = filtered.slice(page * pageSize, (page + 1) * pageSize).map(m => `<button type="button" class="motion-library-item" draggable="${m.ready}" data-library-motion="${escape(m.id)}" data-motion-name="${escape(m.name)}" data-motion-duration="${m.duration}" aria-pressed="${chosen === m.id}" title="${escape(m.name)}${m.ready ? ' · 拖入人物轨道' : ' · 请先完善骨架映射'}"><span class="motion-library-grip" aria-hidden="true">⠿</span><span><strong ${m.group === '用户收藏' ? 'data-i18n-ignore' : ''}>${escape(m.name)}</strong></span><small>${m.ready ? `${Number(m.duration.toFixed(2))} s` : '待映射'}</small></button>`).join('') || `<div class="library-empty">${loading ? '正在加载…' : failed && category === '用户收藏' ? '动作库读取失败' : '没有匹配的动作'}${failed ? '<button data-motion-reload>重试</button>' : ''}</div>`;
             content.querySelector('[data-motion-reload]')?.addEventListener('click', () => void reload());
         }
         content.querySelectorAll<HTMLElement>('[data-library-motion]').forEach(item => {
@@ -72,8 +75,10 @@ export function createMotionBrowser(ctx: AppContext) {
         content.querySelector<HTMLButtonElement>('[data-motion-page="-1"]')!.disabled = page === 0;
         content.querySelector<HTMLButtonElement>('[data-motion-page="1"]')!.disabled = page === pages - 1;
         const target = ctx.current(), add = content.querySelector<HTMLButtonElement>('.motion-library-add')!;
-        add.disabled = ctx.busy || !target || target.locked || !canRetarget(target) || !all.find(m => m.id === chosen)?.ready;
+        const motion=all.find(m=>m.id===chosen);
+        const reason=ctx.busy?'请等待当前操作完成':!target||!canRetarget(target)?'先选择人物':target.locked?'人物已锁定':!motion?'先选择动作':!motion.ready?'请先完善骨架映射':'';
+        add.disabled=!!reason;add.textContent=t(reason||`添加到「${target!.name}」`);add.title=t(reason||`在播放头处添加动作`);
     }
     window.addEventListener('director-motion-library-changed', () => { if (host?.isConnected) void reload(); });
-    return { render, leave() { generation++; observer?.disconnect(); observer = undefined; host = undefined; } };
+    return { render, leave() { generation++; observer?.disconnect(); observer = undefined; host = undefined; stopPreview?.(); stopPreview = undefined; } };
 }

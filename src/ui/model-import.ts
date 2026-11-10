@@ -15,9 +15,9 @@ export function createModelImport(ctx: AppContext) {
     function open(library = false) {
         libraryOnly = library;
         pending = null; files = [];
-        ctx.showModal('导入模型', `<p class="panel-help">支持 GLB、glTF、FBX、OBJ。请同时选择关联 BIN、MTL 和贴图，或选择包含它们的文件夹。</p>
+        if (!ctx.showModal('导入模型', `<p class="panel-help">支持 GLB、glTF、FBX、OBJ。请同时选择关联 BIN、MTL 和贴图，或选择包含它们的文件夹。</p>
             <div class="field-pair"><label class="field">选择文件<input id="model-files" type="file" multiple accept=".glb,.gltf,.fbx,.obj,.mtl,.bin,.png,.jpg,.jpeg,.webp,.avif,.bmp,.gif"/></label><label class="field">选择文件夹<input id="model-folder" type="file" webkitdirectory multiple/></label></div>
-            <label class="field">模型主文件<select id="model-entry" aria-label="模型主文件"><option value="">先选择文件</option></select></label><p id="model-import-status" class="panel-help" role="status"></p>`, button('model-cancel', '取消', '', 'subtle') + button('model-load', '读取模型', '', 'primary'), library);
+            <label class="field">模型主文件<select id="model-entry" aria-label="模型主文件"><option value="">先选择文件</option></select></label><p id="model-import-status" class="panel-help" role="status"></p>`, button('model-cancel', '取消', '', 'subtle') + button('model-load', '读取模型', '', 'primary'), library)) return;
         for (const id of ['model-files', 'model-folder']) $<HTMLInputElement>('#' + id).addEventListener('change', event => {
             files = [...((event.target as HTMLInputElement).files ?? [])];
             const entries = files.map(file => file.webkitRelativePath || file.name).filter(path => /\.(glb|gltf|fbx|obj)$/i.test(path));
@@ -52,7 +52,7 @@ export function createModelImport(ctx: AppContext) {
             if (!info.meshes && !libraryOnly) throw Error('这是独立动作文件，请从“用户动作库 → 导入动作”添加');
             if (libraryOnly) {
                 pending = clone(ctx.project.resources?.find(r => r.id === resource.id) ?? resource);
-                ctx.showModal('加入工程资源', `<label class="field"><span>资源名称</span><input id="model-name" maxlength="80" value="${escape(pending.name)}"/></label><p class="panel-help">${info.meshes} 个网格 · ${info.nodes.length} 个节点 · ${info.animations.length} 段动画。</p><label class="field"><span>许可备注</span><input id="model-license" maxlength="1000" value="${escape(pending.license)}"/></label><label class="field"><span>来源备注</span><input id="model-source" maxlength="1000" value="${escape(pending.source)}"/></label>`, button('model-cancel', '取消', '', 'subtle') + button('model-place', '加入工程资源', '', 'primary'), true);
+                if (!ctx.showModal('加入工程资源', `<label class="field"><span>资源名称</span><input id="model-name" maxlength="80" value="${escape(pending.name)}"/></label><p class="panel-help">${info.meshes} 个网格 · ${info.nodes.length} 个节点 · ${info.animations.length} 段动画。</p><label class="field"><span>许可备注</span><input id="model-license" maxlength="1000" value="${escape(pending.license)}"/></label><label class="field"><span>来源备注</span><input id="model-source" maxlength="1000" value="${escape(pending.source)}"/></label>`, button('model-cancel', '取消', '', 'subtle') + button('model-place', '加入工程资源', '', 'primary'), true)) return;
                 document.querySelector('.modal')!.addEventListener('director-before-close', () => { pending = null; prune(); }, { once: true });
                 return;
             }
@@ -60,11 +60,11 @@ export function createModelImport(ctx: AppContext) {
                 ? `${info.meshes} 个网格。OBJ 不含骨骼动画。`
                 : !info.bones.length ? `${info.meshes} 个网格，${info.animations.length} 段原生动画，无可调骨骼。`
                 : `${info.meshes} 个网格，${info.bones.length} 个骨骼，${info.animations.length} 段原生动画。`;
-            ctx.showModal('放置导入模型', `<div class="button-row" role="tablist"><button id="model-tab-settings" role="tab" aria-selected="true">模型设置</button><button id="model-tab-origin" role="tab" aria-selected="false">来源与说明</button></div><div id="model-import-settings"><label class="field">名称<input id="model-name" value="${escape(resource.name)}" maxlength="80"/></label>
+            if (!ctx.showModal('放置导入模型', `<div class="button-row" role="tablist"><button id="model-tab-settings" role="tab" aria-selected="true">模型设置</button><button id="model-tab-origin" role="tab" aria-selected="false">来源与说明</button></div><div id="model-import-settings"><label class="field">名称<input id="model-name" value="${escape(resource.name)}" maxlength="80"/></label>
                 <div class="field-pair"><label class="field">用途<select id="model-kind"><option value="prop">家具／道具／建筑</option><option value="actor" ${info.skins ? 'selected' : ''}>人物</option></select></label><label class="field">显示方式<select id="model-appearance"><option value="original">原材质</option><option value="white">白模</option><option value="color">识别色</option></select></label></div>
                 <div class="field-pair"><label class="field">校正单位<select id="model-units"><option value="1">${data.format === 'fbx' ? '米（FBX 已换算）' : '米'}</option><option value="0.01">厘米</option><option value="0.001">毫米</option><option value="0.0254">英寸</option></select></label><label class="field">校正向上轴<select id="model-up"><option value="0">+Y</option><option value="-90">+Z</option><option value="90">−Z</option><option value="180">−Y</option></select></label></div>
                 <label class="field">朝向校正／度<input id="model-facing" type="number" value="0" step="90"/></label><p id="model-size" class="panel-help"></p>
-                </div><div id="model-import-origin" hidden><p class="panel-help">${escape(description)}</p><p class="panel-help">${escape(info.copyright || '未提供许可信息')}</p><label class="field">许可备注<input id="model-license" maxlength="1000"/></label><label class="field">来源备注<input id="model-source" maxlength="1000"/></label></div>`, button('model-cancel', '取消', '', 'subtle') + button('model-place', '放入场景', '', 'primary'), true);
+                </div><div id="model-import-origin" hidden><p class="panel-help">${escape(description)}</p><p class="panel-help">${escape(info.copyright || '未提供许可信息')}</p><label class="field">许可备注<input id="model-license" maxlength="1000"/></label><label class="field">来源备注<input id="model-source" maxlength="1000"/></label></div>`, button('model-cancel', '取消', '', 'subtle') + button('model-place', '放入场景', '', 'primary'), true)) return;
             document.querySelector('.modal')!.addEventListener('director-before-close', () => { pending = null; prune(); }, { once: true });
             for (const tab of ['settings', 'origin']) $('#model-tab-' + tab).addEventListener('click', () => {
                 for (const name of ['settings', 'origin']) { $('#model-import-' + name).hidden = name !== tab; $('#model-tab-' + name).setAttribute('aria-selected', String(name === tab)); }

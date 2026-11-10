@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { demoProject, assertProject, clone } from '../src/model.ts';
 import { createTimelineInsertDrag } from '../src/editor/timeline-insert-drag.ts';
-import { insertionPoint, planMotionInsertion } from '../src/editor/timeline-insertion.ts';
+import { insertionPoint, makeInsertionRoom, planMotionInsertion } from '../src/editor/timeline-insertion.ts';
 import { splitClip } from '../src/clip-editing.ts';
 
 test('library insertion chooses the pointed half, preserving durations and consuming gaps',()=>{
@@ -73,4 +73,32 @@ test('grabbing the middle of a long clip still inserts into the pointed gap',()=
     assert.deepEqual(e.clips.map(c=>[c.start,c.end]),[[10.5,13.5],[9.5,10.5],[13.5,17.5]]);assertProject(p);
     assert.equal(insertionPoint([{start:0,end:8},{start:9,end:12}],8.5,6).start,8,'free gap clamps the leading edge past the previous action');
     assert.equal(insertionPoint([{start:0,end:8},{start:8,end:9}],7.94,6,.1).start,8,'boundary has a usable pointer target');
+});
+
+test('edge snap chooses nearest edge with stable ties, including unsorted tracks and gaps',()=>{
+    const ranges=[{start:6,end:9},{start:0,end:3},{start:3,end:5}];
+    assert.deepEqual(insertionPoint(ranges,3,1,.2),{start:3,side:'after'});
+    assert.deepEqual(insertionPoint(ranges,5.8,4,.3),{start:6,side:'before'});
+    assert.deepEqual(insertionPoint(ranges,5.5,4),{start:5,side:undefined});
+    assert.deepEqual(insertionPoint(ranges,7,4),{start:6,side:'before'});
+    assert.deepEqual(insertionPoint(ranges,8,4),{start:9,side:'after'});
+    assert.deepEqual(insertionPoint([],0,-5),{start:0,side:undefined});
+});
+
+test('ripple insertion handles nested barriers, preserves gaps and leaves inputs unchanged',()=>{
+    const stationary=[{id:'last',start:25,end:27},{id:'first',start:0,end:2},{id:'next',start:2,end:4}];
+    const inserted=[{start:4,end:10},{start:1,end:5},{start:2,end:3},{start:12,end:13}];
+    const before=structuredClone({stationary,inserted});
+    assert.deepEqual(makeInsertionRoom(stationary,inserted),[
+        {id:'first',start:10,end:12},{id:'next',start:13,end:15},{id:'last',start:25,end:27},
+    ]);
+    assert.deepEqual({stationary,inserted},before);
+    assert.deepEqual(makeInsertionRoom(stationary,[]),[stationary[1],stationary[2],stationary[0]]);
+});
+
+test('large alternating groups keep every clip duration and order without overlapping',()=>{
+    const stationary=Array.from({length:4000},(_,i)=>({id:i,start:i*4,end:i*4+1}));
+    const inserted=stationary.map(c=>({start:c.start,end:c.start+2}));
+    const result=makeInsertionRoom(stationary,inserted);
+    for(let i=0;i<result.length;i++)assert.deepEqual(result[i],{id:i,start:i*4+2,end:i*4+3});
 });

@@ -4,6 +4,7 @@ import type { AppContext } from '../app-context.ts';
 export function createModalPages(ctx:AppContext) {
     const root=document.querySelector<HTMLElement>('#modal-root')!;
     const parents:{node:HTMLElement;title:string;focus:HTMLElement|null;scroll:number}[]=[];
+    let opener:HTMLElement|null=null;
     const active=()=>root.firstElementChild as HTMLElement|null;
     const allowed=()=>{ if (ctx.busy) { ctx.toast('请先完成或取消当前操作'); return false; } return root.querySelector('.modal')?.dispatchEvent(new Event('director-before-close',{cancelable:true}))??true; };
     const close=()=>{
@@ -11,6 +12,12 @@ export function createModalPages(ctx:AppContext) {
         // Close hooks belong to their own mounted form, including any saved parent draft.
         while(parents.length){const parent=parents.pop()!;root.replaceChildren(parent.node);if(!allowed()){decorate();return;}}
         root.replaceChildren();
+        const focus=opener;opener=null;
+        if(focus?.isConnected){
+            const menu=focus.closest<HTMLElement>('.application-dropdown');
+            const target=menu&&!menu.matches(':popover-open')?document.querySelector<HTMLElement>(`[popovertarget="${menu.id}"]`):focus;
+            target?.focus({preventScroll:true});
+        }
     };
     const back=()=>{
         if(!parents.length){close();return;}
@@ -32,17 +39,20 @@ export function createModalPages(ctx:AppContext) {
     return {close, show(title:string,node:HTMLElement, child = false){
         title=node.querySelector('.modal')?.getAttribute('aria-label')??title;
         const current=active(),modal=current?.querySelector('.modal'),oldTitle=modal?.getAttribute('aria-label')??'';
+        if(!current)opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
         if(current && oldTitle!==title) {
             if (child) {
                 const existing=parents.findIndex(p=>p.title===title);
                 if(existing>=0)parents.splice(existing);
                 else parents.push({node:current,title:oldTitle,focus:document.activeElement as HTMLElement,scroll:root.querySelector('.modal-body')?.scrollTop??0});
             } else {
-                if (!ctx.busy) { close(); if (active()) return; }
+                const previousOpener=opener;
+                if (!ctx.busy) { close(); if (active()) return false; }
+                opener=previousOpener;
                 parents.length = 0;
             }
         }
-        root.replaceChildren(node);decorate();
+        root.replaceChildren(node);decorate();return true;
     }};
 }
 

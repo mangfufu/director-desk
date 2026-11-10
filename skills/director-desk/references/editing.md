@@ -1,6 +1,10 @@
 # 编辑、空间与交付
 
-- 每批携带 revision/requestId。id/kind/asset 不直接改写；锁定用 lock 操作，替换道具用 replace-prop。
+- 每批携带 revision/requestId。id/kind/asset 不直接改写；锁定用 lock 操作，替换道具用 replace-prop，更换人物外形用 replace-actor。
+
+### 更换人物外形
+
+`{"operation":"replace-actor","id":"人物ID","asset":"human-adult"}` 将人物换成指定内置人形。可选 `patch:{"height":1.75}` 指定身高，省略则保留原身高。保留身份、名称、颜色、站位、走位、显示时段和动作片段时间；识别或导入人物的原生动画转成适配动作，原动作资源继续留在工程中，不重新识别视频。来源人物需要完整骨骼映射；已有接拍姿态时先按任务需要清除该姿态。换完的动作仍可用 timeline 分割、移动和裁剪，也可修改 speed、offset 或替换动作。后续再次更换外形继续沿用同一动作来源。
 - add 使用真实 asset ID 并省略 kind；kind 只用于已有导入资源的 actor/prop。显式指定新 ID，可被同批后续动作、机位和切镜引用。目录的 parameters 是定义，尺寸值写入 parameterPatchField，通常为 assetParameters，旧 stairs/road/wall/ground 为 parameters。
 - `patch.camera` 合并提供的顶层字段，例如 `{focal:50,target:[0,1.2,0]}`；内部数组和其他嵌套对象整体替换，修改前读取原值。targetId:"" 解除跟随目标。
 - 坐姿、走路、出拳等常用动作优先查询 basic 预设：23 个默认人形动作采用手工编排的关节关键姿态，不需给工程附加动作资源。`motion` 操作用 time/duration 安排，省略 duration 使用各动作推荐时长，例如出拳 1 秒、踢腿 1.1 秒、翻滚 1.5 秒；单次动作片段加长会放慢表演，不用统一 3 秒。循环动作按 speed 控制节奏；整场坐姿覆盖实际导出区间。插入会寻找空闲区间。人形 `pose/poseKeys` 支持每关节 XYZ 度数数组，可按需修正肩、肘、骨盆、髋、膝、踝；`headYaw` 的 Y 保持绝对转头角度，`head` 则是 XYZ 叠加偏移；数组和关键帧仍完整替换，未知旧数据先定向读。无需手 K 面部、手指，也不用默认安排脚部校正。
@@ -13,6 +17,7 @@
 - 局部更新制作资料用 `{operation:"production",patch:{promptText:"新成稿"}}`；只改提供的顶层字段，可写 fixedPrompt、sceneReferenceIds、notes、promptText、textOnlyPrompt、promptMode。数组完整替换，未提供字段保持原值。单改成稿不用先读另一份；旧 notes.value 完整替换仍支持。
 - 同版本的多个普通请求可传 `director_apply({revision,requestId,requests:[{revision,requestId,operations},...]})`，总计最多 100 项操作；一次提交、一次撤销，任一失败整批回退。子请求 ID 不同，提交后可用原请求重试取回结果。不可混用 operations、preview 或 previewId。连续内置 AI 普通编辑会自动合批；锁定、预检和不同版本请求保持独立。
 - preview 不写入对象。预检成功后用 previewId、未变化的 revision 和新 requestId 提交，省略 operations；修改批次或预检失效时重新提供 operations。明确的小修改无需先预检。
+- 参数失败时按返回的对象 ID、字段位置和允许范围修正；数组下标指提交后工程中的位置，不是操作序号。失败批次未写入，保留已知数据重发修正批次，不用拆成逐项预检。
 
 ## 对象编组
 
@@ -69,6 +74,8 @@ execution:"unknown" 表示结果未确认，not-started 表示未执行。previe
 
 ## 连接与旧版软件
 
+本机预览设置使用 `director_settings({scope:"editor",action:"read"})` 查询。`adaptivePreview` 控制交互期间的自动流畅预览；`guideThirds`、`guideCenter`、`guideSafe` 分别控制三分线、中心线、安全框，均为布尔值。通过 `action:"set",patch:{...},requestId` 修改，不写入工程，不影响截图或视频；离线工程不携带这些本机偏好。
+
 外部客户端从软件「AI → 本机 MCP」复制配置，内置助手无需另配。连接地址和令牌可跨重启复用；旧版持久连接升级或用户重置凭据后重新复制。凭据只留本机，不写入工程或提示词。在线工具不可用时可用离线文件流程；离线不使用 revision、requestId 或运行中任务 ID。
 
 
@@ -79,3 +86,9 @@ execution:"unknown" 表示结果未确认，not-started 表示未执行。previe
 ## 通用物理
 
 启用物理、受力事件、布娃娃与扩展人形动作时，按需查 [物理参数](physics.md)；在线使用 `director_skill({path:"references/physics.md"})`，离线使用相同工程字段。
+
+## 显示时段与时间轴
+
+对象 `visibility` 为 `[{id,start,end}]`，按秒使用 `[start,end)` 区间；省略或 `null` 表示全程，空数组表示全程隐藏，`visible:false` 仍是总隐藏开关。保留对象、动作和物理运动；隐藏灯光或场域时，其照明或场域影响也停用。片段 ID 在对象内唯一，时段不可重叠。修改数组前定向读取对象详情，保留其他时段；只查摘要时返回 `visibleAtTime` 和已编排片段数量。
+
+时间轴选择为 `{kind:"visibility",entityId:"对象ID",id:"片段ID"}`；未编排时的默认全程片段 ID 为 `all`。`timeline` 操作的 `split/remove/move/extend/range` 共用已有片段规则；`range` 提供 start/end 可调整两端，锁定及撤销保持一致。`director_view` 和 `director_read(sections:["selection"])` 同样支持显示片段。离线工程使用同一字段。接拍把末帧显隐继承为新段总开关；合并保留调度时同步偏移显示时间。摄影机的显示时段只控制布景中的机位辅助外观，不会关闭切镜选用的摄影机。

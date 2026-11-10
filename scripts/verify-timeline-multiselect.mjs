@@ -31,9 +31,15 @@ try {
     assert.equal(await page.evaluate(() => !!document.documentElement.dataset.timelineDrag), false);
     await page.keyboard.press('Control+z'); assert.deepEqual(await timings(), [[[2, 4], [10, 12]], [[3, 5], [10, 12]]]);
     await bar(0).click({ modifiers: ['Control'] }); await bar(1).click({ modifiers: ['Control'] });
-    const h = await bar(0).locator('[data-resize]').boundingBox();
+    const h = await bar(0).locator('[data-resize="true"]').boundingBox();
     await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2); await page.mouse.down(); await page.mouse.move(h.x + h.width / 2 + 60, h.y + h.height / 2); await page.mouse.up();
     assert.deepEqual(await timings(), [[[2, 5], [10, 12]], [[3, 6], [10, 12]]]);
+    const left = await bar(0).locator('[data-resize="start"]').boundingBox();
+    await page.mouse.move(left.x + left.width / 2,left.y + 10);await page.mouse.down();
+    await page.mouse.move(left.x + left.width / 2 - 60,left.y + 10);await page.mouse.up();
+    assert.deepEqual(await timings(), [[[1, 5], [10, 12]], [[2, 6], [10, 12]]]);
+    await page.keyboard.press('Control+z');assert.deepEqual(await timings(), [[[2, 5], [10, 12]], [[3, 6], [10, 12]]]);
+    await bar(0).click({modifiers:['Control']});await bar(1).click({modifiers:['Control']});
     await page.locator('#timeline-to-ai').click();
     assert.match(await page.locator('#ai-scope-summary').textContent(), /2 个片段/);
     assert.equal(await page.locator('#ai-scope-toggle').getAttribute('aria-pressed'), 'true');

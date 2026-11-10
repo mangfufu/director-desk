@@ -22,7 +22,7 @@ try {
     await page.mouse.move(ruler.x+100,ruler.y+10);await page.mouse.down();await page.mouse.move(right,ruler.y+10);
     await page.waitForTimeout(350);
     let state=await page.evaluate(x=>{
-        const r=document.querySelector('.ruler').getBoundingClientRect();return {scroll:document.querySelector('#timeline-content').scrollLeft,error:Math.abs(r.left+Number(document.querySelector('#timeline-content').style.getPropertyValue('--timeline-playhead'))*60-x)};
+        const r=document.querySelector('.timeline-playhead-overlay .playhead-line').getBoundingClientRect();return {scroll:document.querySelector('#timeline-content').scrollLeft,error:Math.abs(r.left-x)};
     },right);
     assert(state.scroll>70,'edge gesture scrolls the content');assert(state.error<3,'playhead remains under pointer while content scrolls: '+JSON.stringify(state));
     await page.mouse.move(box.x+box.width/2,ruler.y+10);await page.waitForTimeout(50);
@@ -31,7 +31,7 @@ try {
     await root.evaluate(e=>e.scrollLeft=0);
     const clip=page.locator('[data-clip-id="edge-test"]'),c=await clip.boundingBox(),grab=30;
     await page.mouse.move(c.x+grab,c.y+10);await page.mouse.down();await page.mouse.move(right,c.y+10);await page.waitForTimeout(300);
-    const dragged=await clip.boundingBox();assert(Math.abs(dragged.x+grab-right)<3,'clip grab point stays attached to pointer');
+    const dragged=await page.locator('.timeline-drag-floating').boundingBox();assert(Math.abs(dragged.x+grab-right)<3,'floating clip grab point stays attached to pointer');
     await page.mouse.up();const released=await root.evaluate(e=>e.scrollLeft);await page.waitForTimeout(140);assert.equal(await root.evaluate(e=>e.scrollLeft),released);
     // Permission denial must retain settings and permit a successful retry.
     await page.evaluate(()=>{
@@ -42,9 +42,9 @@ try {
     await page.locator('[data-menu=file]').click();await page.locator('.header-actions [data-act=export]').click();
     await page.locator('#export-name').fill('保留文件名');await page.locator('#export-end').fill('.25');await page.locator('#export-size').selectOption('640');await page.locator('#export-save').selectOption('disk');
     await page.locator('[data-act=export-start]').click();
-    await page.waitForFunction(()=>document.querySelector('[data-act=export-start]')?.textContent.includes('重试'));
+    await page.waitForFunction(()=>document.querySelector('#toasts')?.textContent.includes('无法写入') && document.querySelector('[data-act=export-start]')?.disabled===false);
     assert.equal(await page.locator('#export-name').inputValue(),'保留文件名');assert(await page.evaluate(()=>window.__pickerActivated));
-    assert.match(await page.locator('#toasts').textContent(),/写入权限/);
+    assert.match(await page.locator('#toasts').textContent(),/无法写入/);
     await page.locator('[data-act=export-start]').click();await page.waitForSelector('.export-modal',{state:'detached',timeout:60000});
     assert(await page.evaluate(()=>window.__writeClosed));assert.deepEqual(errors,[]);
     console.log('Stable scrollbar range, anchored playhead/clip edge scrolling, release cleanup, export permission failure and successful retry passed.');

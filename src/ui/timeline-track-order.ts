@@ -39,7 +39,6 @@ export function bindTrackOrder(ctx: AppContext) {
         ghost.append(copy); ghost.style.left=marker.style.left=bounds.left+'px';
         ghost.style.width=marker.style.width=host.clientWidth+'px'; ghost.style.height=rowBounds.height+'px';
         ghost.style.setProperty('--timeline-pps',getComputedStyle(host).getPropertyValue('--timeline-pps'));
-        ghost.style.setProperty('--timeline-playhead',getComputedStyle(host).getPropertyValue('--timeline-playhead'));
         ghost.hidden=marker.hidden=true; document.body.append(ghost,marker);
         let y = startY, moved = false, frame = 0, finished = false, previous = performance.now(), destination=0;
         const top = bounds.top + 62, bottom = bounds.top + host.clientHeight;

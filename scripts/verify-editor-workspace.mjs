@@ -16,7 +16,7 @@ try {
  assert((await page.title()).includes('编辑工作区验证'));
  assert.equal(await page.locator('.project-title,.timeline-footer').count(),0);
  assert(await page.locator('.transport #timeline-zoom-in').isVisible());
- await page.locator('[data-side=assets]').click();await page.waitForFunction(()=>document.querySelector('#library-count')?.textContent==='16 项');
+ await page.locator('#resource-home').click(); await page.locator('[data-side=assets]').click();await page.waitForFunction(()=>document.querySelector('#library-count')?.textContent==='16 项');
  await page.locator('[data-library-view=list]').click();assert.equal(await page.locator('.library-grid img').count(),0);
  assert(await page.locator('.asset-list-item').count()>0);
  await page.locator('[data-library-view=grid]').click();await page.waitForFunction(()=>document.querySelector('.library-grid img:not([hidden])'));

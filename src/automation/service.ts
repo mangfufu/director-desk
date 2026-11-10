@@ -27,7 +27,7 @@ import { createZip } from '../production/zip.ts';
 import { safeFilename } from '../production/notes.ts';
 import { validateToolInput } from './validate.ts';
 import { toolHelp } from './contract.ts';
-import { continueScene, continuitySummary } from '../scenes/continue-scene.ts';
+import { continueScene, readContinuity } from '../scenes/continue-scene.ts';
 import { editIndependentScene } from './scene-tools.ts';
 import { readBuiltinSkill } from './skill.ts';
 import { editLocations } from './edit-locations.ts';
@@ -66,6 +66,28 @@ export function createToolService(ctx: AppContext): ToolService {
     }
     async function execute(name: string, args: Record<string, unknown>): Promise<unknown> {
         validateToolInput(name, args);
+        if(name==='director_reconstruct'){
+            if(args.action==='open'){idle();await (await import('../ui/video-reconstruction-panel.ts')).openVideoReconstruction(ctx);}
+            if(['start','download'].includes(String(args.action))&&(typeof args.requestId!=='string'||!args.requestId||args.requestId.length>180))throw Error('需要唯一 requestId');
+            const {reconstruction}=await import('../reconstruction/client.ts');
+            const state=await reconstruction(args.action==='open'?'state':String(args.action),args);
+            // Keep the repeated status response small; the full license is available in the UI.
+            if(args.action==='preview')return state?{jobId:state.jobId,sequence:state.sequence,frameIndex:state.frameIndex,frameCount:state.frameCount,time:state.time,people:state.actors?.length??0,scenePoints:(state.points?.length??0)/3,...(args.history?{frames:state.frames}:{} )}:null;
+            if(state?.model){const {licenseText,...model}=state.model;return {...state,model};}
+            return state;
+        }
+        if(name==='director_preview'){
+            const runtime=await import('../editor/preview-cache-runtime.ts');
+            if(args.action!=='build'&&['start','end','size','cameraId'].some(key=>args[key]!==undefined))throw Error('范围和画面参数仅用于生成预览');
+            if(args.action==='state')return runtime.previewCacheState(ctx);
+            if(args.action==='open'){idle();const {openPreviewCache}=await import('../ui/preview-cache-panel.ts');await openPreviewCache(ctx);return runtime.previewCacheState(ctx);}
+            if(typeof args.requestId!=='string'||!args.requestId||args.requestId.length>180)throw Error('需要唯一 requestId');
+            const key=name+':'+args.requestId,encoded=JSON.stringify(args),receipt=receipts.get(key);
+            if(receipt){if(receipt.args!==encoded)throw Error('requestId 已用于不同操作');return receipt.result;}
+            idle();
+            const result=args.action==='build'?job((signal,progress)=>runtime.buildPreviewCache(ctx,args as any,signal,progress)):(runtime.clearPreviewCache(ctx),await runtime.previewCacheState(ctx));
+            receipts.set(key,{args:encoded,result});if(receipts.size>200)receipts.delete(receipts.keys().next().value!);return result;
+        }
         if (name === 'director_versions' || name === 'director_plugins' || name === 'director_navigate') {
             const read = ['list','read'].includes(String(args.action));
             const run = () => name === 'director_versions' ? versionAction(ctx,args) : pluginAction(ctx,args,execute);
@@ -261,13 +283,7 @@ export function createToolService(ctx: AppContext): ToolService {
         }
         if (name === 'director_continuity') {
             const revision = currentRevision(), document = ctx.scenes.document();
-            const data = await continuitySummary(document, args.sceneId as string | undefined);
-            if (!data.origin) return { revision, ...data };
-            const offset = Number(args.offset ?? 0), limit = Number(args.limit ?? 50);
-            if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw Error('前情查询分页范围无效');
-            const objects = data.origin.objects.filter(o => !args.entityId || o.entityId === args.entityId);
-            return { revision, ...data, origin: { ...data.origin, objects: objects.slice(offset, offset + limit), total: objects.length, offset,
-                nextOffset: offset + limit < objects.length ? offset + limit : null } };
+            return { revision, ...await readContinuity(document, args) };
         }
         if (name === 'director_read') return readScene(ctx, currentRevision(), args as SceneReadOptions);
         if (name === 'director_nodes') {
@@ -364,7 +380,17 @@ export function createToolService(ctx: AppContext): ToolService {
         }
         if (name === 'director_export') {
             if (['path','directory','filename','overwrite','scenes','fps','format','monochrome','cameraId','time'].some(k => args[k] !== undefined)) throw Error('这些导出参数需要桌面版');
-            const kind = String(args.kind); if (!['project', 'screenshot', 'video', 'depth-video', 'bundle'].includes(kind)) throw new Error('未知导出格式');
+            const kind = String(args.kind); if (!['project', 'screenshot', 'video', 'depth-video', 'bundle', 'contact-sheet'].includes(kind)) throw new Error('未知导出格式');
+            if(kind==='contact-sheet'){
+                if(['size','start','end','promptMode'].some(key=>args[key]!==undefined))throw Error('联系表不支持这些导出参数');
+                const doc=ctx.scenes.document(),id=String(args.sceneId??doc.activeSceneId),scene=doc.scenes.find(s=>s.id===id);if(!scene)throw Error('戏段不存在');
+                return job(async(signal,progress)=>{
+                    const {contactSheetBlob}=await import('../production/contact-render.ts');
+                    const {projectForScene}=await import('../scenes/sequence-project.ts');
+                    const blob=await contactSheetBlob(ctx.engine,projectForScene(doc,id),scene.name,signal,progress);
+                    signal.throwIfAborted();download(blob,safeFilename(doc.name+'-'+scene.name)+'-联系表.html');return {status:'save-requested'};
+                });
+            }
             if (kind === 'project') { ctx.saveProject(); return { status: 'save-requested' }; }
             if (kind === 'screenshot') { await ctx.snapshot(); return { status: 'save-requested' }; }
             const project = clone(ctx.project);

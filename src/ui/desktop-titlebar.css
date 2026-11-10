@@ -1,0 +1,23 @@
+/* Caption controls share the editor's flat surface and fill the window edge. */
+html[data-window-chrome] .window-menu-row {
+    padding-right:0;
+    box-sizing:border-box; background:var(--background,#111);
+    -webkit-app-region:drag; app-region:drag;
+}
+.window-menu-row .application-menu,
+.window-menu-row button,.window-menu-row input,.window-menu-row select {
+    -webkit-app-region:no-drag; app-region:no-drag;
+}
+.window-menu-row #window-project-title {
+    flex:1; min-width:80px; padding-inline:12px; overflow:hidden;
+    white-space:nowrap; text-overflow:ellipsis; text-align:center;
+    font-size:12px; font-weight:400; color:#aaa;
+}
+html[data-window-chrome] .window-menu-row .logo { width:20px; height:20px; line-height:20px; font-size:17px; }
+html[data-window-chrome] .window-menu-row .application-menu>button { min-height:26px; padding-block:3px; }
+.window-controls { display:flex; align-self:stretch; flex:none; gap:0; -webkit-app-region:no-drag; app-region:no-drag; }
+.window-menu-row .window-controls button { display:grid; place-items:center; width:44px; height:34px; min-height:34px; margin:0; padding:0; border:0; border-radius:0; background:transparent; color:#bdbdbd; }
+.window-menu-row .window-controls button:hover { background:#303030; color:#fff; }
+.window-menu-row .window-controls button:active { background:#454545; }
+.window-menu-row .window-controls button:focus-visible { outline:1px solid #eee; outline-offset:-3px; }
+.window-controls svg { width:14px; height:14px; pointer-events:none; }

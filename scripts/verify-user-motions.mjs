@@ -27,10 +27,23 @@ try {
         await api.callTool('director_view', { time: 0, entityId: actor.id });
         window.__motionBefore = JSON.stringify(api.getDocument()); return actor.id;
     });
-    await page.locator('.sidebar-tools-trigger').click(); await page.locator('[data-act="user-motion-library"]').click();
+    await page.locator('#resource-home').click(); await page.locator('[data-side="motions"]').click(); await page.locator('.motion-browser [data-act="user-motion-library"]').click();
     await page.locator('#user-motion-files').setInputFiles(`${folder}/skeleton-only.glb`);
     await page.waitForSelector('#uml-clip', { timeout: 30000 });
     assert.match(await page.locator('#user-motion-status').innerText(), /映射完整/);
+    await page.locator('#user-motion-view').selectOption('human');
+    await page.locator('#user-motion-time').evaluate(el=>{el.value='.5';el.dispatchEvent(new Event('input',{bubbles:true}));});
+    await page.waitForFunction(()=>document.querySelector('#user-motion-clock').textContent==='0.50 s');
+    assert.equal(await page.locator('#user-motion-play').innerText(),'播放预览');
+    await page.locator('[data-user-motion-tab="rig"]').click();
+    await page.locator('#uml-scale').fill('0.000000001');await page.locator('#uml-scale').press('Tab');
+    assert.equal(await page.locator('#uml-scale').inputValue(),'1','failed retarget calibration rolls back');
+    await page.waitForFunction(()=>document.querySelector('#user-motion-clock').textContent==='0.50 s');
+    await page.locator('#uml-facing-Y').fill('90');await page.locator('#uml-facing-Y').press('Tab');
+    assert.equal(await page.locator('#uml-facing-Y').inputValue(),'90');
+    await page.screenshot({path:`${folder}/calibration-human.png`});
+    await page.locator('#user-motion-view').selectOption('source');
+    await page.locator('[data-user-motion-tab="action"]').click();
     for (let i = 0; i < indices.length; i++) {
         await page.locator('#uml-clip').selectOption(String(indices[i]));
         await page.locator('#uml-name').fill(['公开素材 · 投掷', '公开素材 · 勾拳', '公开素材 · 攀爬', '公开素材 · 滑行'][i]);
@@ -48,6 +61,24 @@ try {
     await page.screenshot({ path: `${folder}/library.png` });
     await page.locator('#uml-duration').fill('3'); await page.locator('#user-motion-apply').click();
     await page.waitForSelector('.user-motion-modal', { state: 'detached', timeout: 30000 });
+    // Existing placed clips expose calibration without rewriting their source library entry.
+    await page.locator('[data-retarget-action="panel"][data-panel="correction"]').click();
+    await page.locator('[data-retarget-axis="1"]').fill('45');await page.locator('[data-retarget-axis="1"]').press('Tab');
+    let orientation=await page.evaluate(id=>window.__director.getProject().entities.find(e=>e.id===id).clips.find(c=>c.retarget).retarget.orientation[1],actorId);
+    assert.ok(Math.abs(orientation-Math.PI/4)<1e-6);
+    await page.locator('#timeline-content').focus();await page.keyboard.press('Control+z');
+    orientation=await page.evaluate(id=>window.__director.getProject().entities.find(e=>e.id===id).clips.find(c=>c.retarget).retarget.orientation[1],actorId);
+    assert.equal(orientation,0);
+    await page.screenshot({path:`${folder}/placed-correction.png`});
+    await page.evaluate(async()=>{const {setLanguage}=await import('/src/i18n/locale.ts');setLanguage('en');});
+    await page.waitForFunction(()=>document.querySelector('[data-panel="correction"]').textContent==='Motion Calibration');
+    assert.equal(await page.locator('[data-retarget-axis="1"]').getAttribute('aria-label'),'Motion Orientation Y');
+    await page.evaluate(async()=>{const {setLanguage}=await import('/src/i18n/locale.ts');setLanguage('zh-CN');});
+    const correctionBounds=await page.locator('.retarget-correction').evaluate(root=>{
+        const bounds=document.querySelector('#inspector-content').getBoundingClientRect();
+        return [...root.querySelectorAll('input,select')].filter(e=>{const r=e.getBoundingClientRect();return r.bottom>bounds.bottom+1||r.right>bounds.right+1;}).map(e=>({html:e.outerHTML,rect:e.getBoundingClientRect().toJSON(),bounds:bounds.toJSON()}));
+    });assert.deepEqual(correctionBounds,[],'calibration controls fit inspector');
+    await page.screenshot({path:`${folder}/placed-correction.png`});
     const result = await page.evaluate(async actorId => {
         const api = window.__director, p = api.getProject(), actor = p.entities.find(e => e.id === actorId), clip = actor.clips.find(c => c.action === 'retarget');
         if (!clip) throw Error('User motion not applied');
@@ -83,7 +114,7 @@ try {
     });
     assert.ok(fbx.animations > 1 && fbx.bones > 10 && fbx.complete && fbx.duration > 0);
     await page.setViewportSize({ width: 1000, height: 680 });
-    await page.locator('.sidebar-tools-trigger').click(); await page.locator('[data-act="user-motion-library"]').click();
+    await page.locator('#resource-home').click(); await page.locator('[data-side="motions"]').click(); await page.locator('.motion-browser [data-act="user-motion-library"]').click();
     await page.locator('[data-user-motion-id]').first().click();
     await page.waitForSelector('#uml-name');
     for (const tab of ['action', 'rig', 'source']) {

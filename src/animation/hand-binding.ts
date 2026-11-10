@@ -31,6 +31,14 @@ export function editBoundTransform(e: Entity, hand: HandFrame, position?: Vec3, 
         e.handBinding.rotation = [angles.x, angles.y, angles.z];
     }
 }
+/** Attach at the hand while preserving the evaluated world orientation and authored grip offset. */
+export function attachHandBinding(e: Entity, actor: Entity, hand: 'left' | 'right', root: Object3D, frame: HandFrame) {
+    if (e.locked) throw Error('道具已锁定');
+    if (e.kind !== 'prop' || !['left', 'right'].includes(hand) || !canBindHand(actor, hand)) throw Error('请先选择可用的人物手部');
+    e.handBinding = { actorId: actor.id, hand, offset: [...(e.handBinding?.offset ?? [0, 0, 0])], rotation: [0, 0, 0] };
+    editBoundTransform(e, frame, undefined, [root.rotation.x, root.rotation.y, root.rotation.z]);
+    e.path = null;
+}
 /** Explicitly freeze the evaluated current frame; no hidden attachment survives in the file. */
 export function detachHandBinding(e: Entity, root: Object3D) {
     if (e.locked) throw Error('道具已锁定');

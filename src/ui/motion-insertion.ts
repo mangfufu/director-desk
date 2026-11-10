@@ -5,7 +5,7 @@ import { getUserMotion } from '../animation/user-motion-store.ts';
 import { isUserMotion, type UserMotionAsset } from '../animation/user-motion.ts';
 import { selectClip } from './clip-controls.ts';
 import { refreshTimelineSelection } from './timeline-selection-view.ts';
-import { planMotionInsertion } from '../editor/timeline-insertion.ts';
+import { finishMotionInsertion } from '../animation/motion-insertion.ts';
 
 export async function addLibraryMotion(ctx: AppContext, asset: string, entityId: string, time: number, insert = false) {
     if (ctx.busy || ctx.draft || ctx.history.pending) return;
@@ -23,15 +23,7 @@ export async function addLibraryMotion(ctx: AppContext, asset: string, entityId:
         // Basic actions need no new source resources. Commit synchronously instead
         // of entering the asynchronous model preparation queue for the whole scene.
         const after = basic ? applyOperations(original, operations) : await applyOperationsWithResources(original, operations, motions);
-        const previous = new Set(original.entities.find(e => e.id === entityId)!.clips.map(c => c.id));
-        const added = after.entities.find(e => e.id === entityId)!.clips.find(c => !previous.has(c.id))!;
-        if(insert){
-            const target=after.entities.find(e=>e.id===entityId)!;
-            const plan=planMotionInsertion(target.clips.filter(c=>c.id!==added.id),time,added.end-added.start,after.fps);
-            Object.assign(added,{start:plan.start,end:plan.end});
-            target.clips=[...plan.clips,added].sort((a,b)=>a.start-b.start);
-            after.duration=Math.max(original.duration,...target.clips.map(c=>c.end));
-        }
+        const added = finishMotionInsertion(original, after, entityId, time, insert);
         if (!basic) await ctx.engine.externalModels.prepare(after);
         if (ctx.project !== original || ctx.revision !== revision || ctx.scenes.context.revision !== scene.revision || ctx.draft || ctx.history.pending) throw Error('工程已变化，请重新添加动作');
         ctx.busy = false;

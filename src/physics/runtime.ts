@@ -4,6 +4,7 @@ import type { Entity,Project } from '../model.ts';
 import { canUsePhysics,defaultPhysicsBody,type PhysicsBody } from './model.ts';
 import { addCollider,cv,cq } from './colliders.ts';
 import { RigidBody } from './rigid-body.ts';
+import { entityVisibleAt } from '../scenes/visibility.ts';
 import { makeRagdoll,type BoneBody,type PhysicsBones } from './ragdoll.ts';
 
 const STEP=1/120, CACHE_BYTES=32*1024*1024;
@@ -18,7 +19,7 @@ export class PhysicsRuntime {
     restore(){for(const [node,pose]of this.restored){node.position.copy(pose.position);node.quaternion.copy(pose.quaternion);node.scale.copy(pose.scale);node.updateMatrix();}this.restored.clear();}
     invalidate(){this.restore();this.key='';this.world=undefined;this.frames.clear();this.participants=[];this.tracked=[];}
     dispose(){this.invalidate();}
-    private signature(p:Project){return JSON.stringify([p.physics,p.room,p.entities.map(e=>[e.id,e.asset,e.kind,e.visible,e.height,e.build,e.scale,e.position,e.rotation,e.path,e.face,e.faceTarget,
+    private signature(p:Project){return JSON.stringify([p.physics,p.room,p.entities.map(e=>[e.id,e.asset,e.kind,e.visible,e.visibility,e.height,e.build,e.scale,e.position,e.rotation,e.path,e.face,e.faceTarget,
         e.physics,e.external,e.clips,e.pose,e.poseKeys,e.initialPose,e.parameters,e.assetParameters,e.handBinding,e.structureLink,e.deform,e.field,e.visual,e.warp]),p.resources?.map(r=>r.id)]);}
     private init(p:Project,baseline:(time:number)=>void){
         this.frames.clear();this.participants=[];this.tracked=[];this.step=0;baseline(0);
@@ -67,7 +68,10 @@ export class PhysicsRuntime {
     }
     private update(time:number,baseline:(time:number)=>void){
         baseline(time);
+        let collisionChanged=false;
         for(const part of this.participants){const config=part.config;
+            const mask=entityVisibleAt(part.entity,time)&&config?.collisions!==false?-1:0;
+            for(const body of part.bodies)if(body.collisionFilterMask!==mask){body.collisionFilterMask=mask;collisionChanged=true;}
             if(!config)continue;
             if(config.mode!=='dynamic'||time+1e-9<config.start){
                 if(config.mode!=='static')part.bodies.forEach((body,index)=>{
@@ -93,6 +97,8 @@ export class PhysicsRuntime {
                 for(const body of part.bodies)body.applyImpulse(new C.Vec3(...event.impulse).scale(body.mass/total),new C.Vec3(...event.point));
             }
         }
+        // A resting body must resume falling when its visible support disappears.
+        if(collisionChanged)for(const body of this.tracked)body.wakeUp();
     }
     private save(){const frame=new Float64Array(this.tracked.length*7);this.tracked.forEach((b,i)=>frame.set([b.position.x,b.position.y,b.position.z,b.quaternion.x,b.quaternion.y,b.quaternion.z,b.quaternion.w],i*7));this.frames.set(this.step,frame);
         while(this.frames.size>this.maxFrames){const oldest=this.frames.keys().next().value!;this.frames.delete(oldest);}}

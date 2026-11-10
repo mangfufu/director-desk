@@ -7,13 +7,15 @@ import { englishText } from '../i18n/locale.ts';
 
 export function createAssetBrowser(ctx: AppContext) {
     let view = localStorage.getItem('director-asset-view') === 'list' ? 'list' : 'grid';
+    const storedSize = Number(localStorage.getItem('director-asset-size'));
+    let tileSize = [72,104,144].includes(storedSize) ? storedSize : 72;
     let layoutGrid = () => {};
     let creationMode = ctx.project.creationMode ?? 'full';
     let scope = 'all', page = 0, pageSize = 6, generation = 0, signature = '', host: HTMLElement | undefined;
     let observer: ResizeObserver | undefined;
     function mount(content: HTMLElement) {
         observer?.disconnect(); host = content;
-        content.innerHTML = '<div class="asset-browser"><div class="library-tools"><div class="library-top"><label class="library-category">分类<select id="asset-category" aria-label="白模分类"></select></label><div class="library-view" role="group" aria-label="资产视图"><button data-library-view="list" title="列表：仅名称">列表</button><button data-library-view="grid" title="宫格：预览与名称">宫格</button></div></div><div class="library-scopes"><button data-library-scope="all">全部</button><button data-library-scope="favorites">收藏</button><button data-library-scope="recent">最近</button><span id="library-count"></span></div></div><div class="library-grid" aria-label="白模资源"></div><div class="library-pager"><button data-library-page="-1" aria-label="上一页白模">‹ <span class="pager-label">上页</span></button><span id="library-page" aria-live="polite"></span><button data-library-page="1" aria-label="下一页白模"><span class="pager-label">下页</span> ›</button></div></div>';
+        content.innerHTML = '<div class="asset-browser"><div class="library-tools"><div class="library-top"><label class="library-category"><select id="asset-category" aria-label="白模分类"></select></label><div class="library-view" role="group" aria-label="资产视图"><button data-library-view="list" title="列表：仅名称">列表</button><button data-library-view="grid" title="宫格：预览与名称">宫格</button></div></div><div class="library-scopes"><button data-library-scope="all">全部</button><button data-library-scope="favorites">收藏</button><button data-library-scope="recent">最近</button><span id="library-count"></span></div></div><div class="library-grid" aria-label="白模资源"></div><div class="library-footer"><div class="library-size"><label>缩略图<select id="asset-tile-size" aria-label="缩略图大小"><option value="72">小</option><option value="104">中</option><option value="144">大</option></select></label></div><div class="library-pager"><button data-library-page="-1" aria-label="上一页白模">‹ <span class="pager-label">上页</span></button><span id="library-page" aria-live="polite"></span><button data-library-page="1" aria-label="下一页白模"><span class="pager-label">下页</span> ›</button></div><div class="resource-actions"><button data-act="model-import">导入模型</button><button data-act="resource-open">工程资源</button><button data-act="resource-statistics">资源统计</button></div></div></div>';
         const browser = content.firstElementChild as HTMLElement, grid = browser.querySelector<HTMLElement>('.library-grid')!;
         browser.addEventListener('click', event => {
             const target = (event.target as HTMLElement).closest<HTMLElement>('[data-library-view],[data-library-scope],[data-library-page],[data-favorite],[data-library-all]');
@@ -31,15 +33,18 @@ export function createAssetBrowser(ctx: AppContext) {
         });
         browser.addEventListener('change', event => {
             const select = event.target as HTMLSelectElement;
+            if (select.id === 'asset-tile-size') { event.stopPropagation(); tileSize = Number(select.value); localStorage.setItem('director-asset-size', String(tileSize)); layoutGrid(); return; }
             if (select.id === 'asset-category') { event.stopPropagation(); ctx.assetFilter = select.value; page = 0; render(content); }
         });
         layoutGrid = () => {
             if (!browser.isConnected) return;
             const width = grid.clientWidth, height = grid.clientHeight;
-            const cols = view === 'list' ? 1 : Math.max(1, Math.min(4, Math.floor((width + 8) / 145))), rows = Math.max(1, Math.floor((height + 8) / (view === 'list' ? 36 : 170)));
+            const gap = 6, cardHeight = Math.round(tileSize * .7) + 32;
+            const cols = view === 'list' ? 1 : Math.max(1, Math.floor((width + gap) / (tileSize + gap))), rows = Math.max(1, Math.floor((height + gap) / (view === 'list' ? 32 : cardHeight + gap)));
+            browser.style.setProperty('--asset-tile-height', cardHeight + 'px');
             browser.classList.toggle('list-view',view === 'list');
             grid.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
-            grid.style.gridTemplateRows = `repeat(${rows},minmax(0,1fr))`;
+            grid.style.gridTemplateRows = `repeat(${rows},${view === 'list' ? '32px' : cardHeight + 'px'})`;
             browser.classList.toggle('compact', height < 105);
             if (pageSize !== cols * rows) { const start = page * pageSize; pageSize = cols * rows; page = Math.floor(start / pageSize); render(content); }
         }; observer = new ResizeObserver(layoutGrid); observer.observe(grid);
@@ -55,6 +60,7 @@ export function createAssetBrowser(ctx: AppContext) {
         const next = ctx.query + '\u0000' + ctx.assetFilter + '\u0000' + scope + '\u0000' + mode;
         if (next !== signature) { signature = next; page = 0; }
         const grid = content.querySelector<HTMLElement>('.library-grid')!;
+        content.querySelector<HTMLSelectElement>('#asset-tile-size')!.value = String(tileSize);
         content.querySelectorAll<HTMLElement>('[data-library-view]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.libraryView===view)));
         const favorites = new Set(libraryPreferences.favorites), recent = libraryPreferences.recent;
         let list = searchAssets(ctx.query, ctx.assetFilter);
@@ -73,7 +79,7 @@ export function createAssetBrowser(ctx: AppContext) {
         content.querySelector<HTMLButtonElement>('[data-library-page="-1"]')!.disabled = page === 0;
         content.querySelector<HTMLButtonElement>('[data-library-page="1"]')!.disabled = page === pages - 1;
         const visible = list.slice(page * pageSize, (page + 1) * pageSize);
-        grid.innerHTML = visible.map(a => view === 'list' ? `<button class="asset-list-item" draggable="true" data-asset="${a.id}" title="${escape(a.name)}">${escape(a.name)}</button>` : `<article class="library-card"><button class="asset-card" draggable="true" data-asset="${a.id}" title="${escape(a.name)} · 点击添加，或拖入布景"><span class="asset-preview"><span class="asset-symbol">${a.icon}</span><img alt="${escape(a.name)}白模预览" data-thumbnail="${a.id}" hidden/></span><strong>${escape(a.name)}</strong><span class="asset-caption">${a.kind === 'actor' ? `${a.defaults?.height ?? (a.id === 'woman' ? 1.65 : 1.75)} m · 姿态可调` : escape(a.group)}</span></button><button class="asset-favorite" data-favorite="${a.id}" aria-pressed="${favorites.has(a.id)}" aria-label="${favorites.has(a.id) ? '取消收藏' : '收藏'}${escape(a.name)}">${favorites.has(a.id) ? '★' : '☆'}</button></article>`).join('') || `<div class="library-empty">${scope === 'favorites' ? '还没有匹配的收藏' : scope === 'recent' ? '还没有匹配的使用记录' : '没有匹配的白模'}<small>按名称、类别或别名搜索</small><button data-library-all>${scope === 'all' && ctx.assetFilter === '全部' ? '清空搜索' : '搜索全部资源'}</button></div>`;
+        grid.innerHTML = visible.map(a => view === 'list' ? `<button class="asset-list-item" draggable="true" data-asset="${a.id}" title="${escape(a.name)}">${escape(a.name)}</button>` : `<article class="library-card"><button class="asset-card" draggable="true" data-asset="${a.id}" title="${escape(a.name)} · 点击添加，或拖入布景"><span class="asset-preview"><span class="asset-symbol">${a.icon}</span><img alt="${escape(a.name)}白模预览" data-thumbnail="${a.id}" hidden/></span><strong>${escape(a.name)}</strong></button><button class="asset-favorite" data-favorite="${a.id}" aria-pressed="${favorites.has(a.id)}" aria-label="${favorites.has(a.id) ? '取消收藏' : '收藏'}${escape(a.name)}">${favorites.has(a.id) ? '★' : '☆'}</button></article>`).join('') || `<div class="library-empty">${scope === 'favorites' ? '还没有匹配的收藏' : scope === 'recent' ? '还没有匹配的使用记录' : '没有匹配的白模'}<small>按名称、类别或别名搜索</small><button data-library-all>${scope === 'all' && ctx.assetFilter === '全部' ? '清空搜索' : '搜索全部资源'}</button></div>`;
         if (focusedFavorite) (content.querySelector<HTMLElement>(`[data-favorite="${focusedFavorite}"]`) ?? content.querySelector<HTMLElement>(`[data-library-scope="${scope}"]`))?.focus({ preventScroll: true });
         const current = ++generation;
         if (view === 'list') return;

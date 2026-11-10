@@ -21,7 +21,7 @@ try {
     });
     const project = () => page.evaluate(() => window.__director.getProject());
     const count = () => page.evaluate(() => window.__director.getProject().entities.find(e => e.id === 'motion-target').clips.length);
-    await page.locator('[data-side="motions"]').click();
+    await page.locator('#resource-home').click(); await page.locator('[data-side="motions"]').click();
     await page.locator('#search').fill('basic-wave');
     const source = page.locator('[data-library-motion="basic-wave"]');
     await source.waitFor();

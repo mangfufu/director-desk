@@ -42,7 +42,7 @@ export function createVideoPanel(ctx: AppContext) {
         const depth = ctx.project.depthVideo ?? DEFAULT_DEPTH_VIDEO;
         const prefs = readExportPreferences(), desktop = !!window.directorDesktop?.files;
         outputDirectory = prefs.directory;
-        ctx.showModal('导出参考视频', `<div class="export-layout"><div class="export-fields">
+        if (!ctx.showModal('导出参考视频', `<div class="export-layout"><div class="export-fields">
             <label class="field"><span>导出范围</span><select id="export-scope"><option value="single">当前戏段</option><option value="batch">批量戏段 · 独立视频</option></select></label>
             <div id="export-single">
                 <label class="field"><span>文件名</span><input id="export-name" maxlength="100" value="${escape(current.name)}"/></label>
@@ -67,7 +67,7 @@ export function createVideoPanel(ctx: AppContext) {
             <div id="export-depth" ${depth.enabled?'':'hidden'}><div class="field-pair"><label class="field"><span>深度近端 / 米</span><input id="export-depth-near" type="number" min="0" step=".1" value="${depth.near}"></label><label class="field"><span>深度远端 / 米</span><input id="export-depth-far" type="number" max="2000" step="1" value="${depth.far}"></label></div><div class="field-pair"><label class="field"><span>深度曲线</span><input id="export-depth-curve" type="number" min=".25" max="4" step=".25" value="${depth.curve ?? 1}"></label><label class="check"><input id="export-depth-invert" type="checkbox" ${depth.invert?'checked':''}>黑白反转</label></div><div class="range-shortcuts"><button type="button" data-export-depth-fit="selection">取选中范围</button><button type="button" data-export-depth-fit="frame">取画面范围</button></div></div>
 
             <div id="export-progress" hidden><div class="progress-top"><strong id="progress-title">正在生成视频</strong><span id="progress-percent">0%</span></div><progress value="0" max="1"></progress><p id="progress-detail">准备导出</p></div>
-        </div></div>`, button('close-modal', '取消', '', 'subtle') + button('export-start', '导出视频', 'download', 'primary'));
+        </div></div>`, button('close-modal', '取消', '', 'subtle') + button('export-start', '导出视频', 'download', 'primary'))) return;
         $('.modal').classList.add('export-modal');
         $('#export-size').value = prefs.size; $('#export-format').value = prefs.format; $('#export-fps').value = prefs.fps;
         if (desktop) {

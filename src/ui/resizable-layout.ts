@@ -1,6 +1,6 @@
 type Boundary = 'sidebar' | 'inspector' | 'timeline' | 'split';
 type Layout = Record<Boundary, number>;
-const defaults: Layout = { sidebar: 228, inspector: 320, timeline: 210, split: 51.2 };
+const defaults: Layout = { sidebar: 260, inspector: 340, timeline: 240, split: 51.2 };
 const storageKey = 'director-layout-v1';
 export const layoutControls: { read?: () => Layout; set?: (patch: Partial<Layout>) => Layout; reset?: () => Layout } = {};
 

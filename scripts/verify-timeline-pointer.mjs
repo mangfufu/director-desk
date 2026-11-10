@@ -8,6 +8,9 @@ export async function verifyTimelinePointer(page) {
     await root.evaluate(el=>{el.scrollLeft=0;});
     const r=await page.locator('.ruler').boundingBox();
     await page.evaluate(()=>{
+        window.__pointerTrace=[];
+        window.__tracePointer=e=>{window.__pointerTrace.push({type:e.type,id:e.pointerId,kind:e.pointerType,buttons:e.buttons,primary:e.isPrimary,x:e.clientX,y:e.clientY,focus:document.hasFocus(),drag:document.documentElement.dataset.timelineDrag,time:document.querySelector('#timecode').textContent});if(window.__pointerTrace.length>100)window.__pointerTrace.shift();};
+        for(const type of ['pointerdown','pointermove','pointerup','lostpointercapture','blur'])window.addEventListener(type,window.__tracePointer,true);
         const proto=WebGL2RenderingContext.prototype,original=proto.drawElements;
         window.__pointerDraws=0;
         proto.drawElements=function(...args){window.__pointerDraws++;return original.apply(this,args);};
@@ -31,7 +34,7 @@ export async function verifyTimelinePointer(page) {
             const draws=await page.evaluate(()=>window.__pointerDraws);
             await page.mouse.move(r.x+60+i*24,r.y+8);
             const next=await time();
-            assert.notEqual(next,previous,'timecode must update before mouse release despite changed pointer ID');
+            assert.notEqual(next,previous,'timecode must update before mouse release despite changed pointer ID: '+(next===previous?JSON.stringify(await page.evaluate(()=>({trace:window.__pointerTrace,wsl:window.directorDesktop?.wslPointerInput}))):''));
             previous=next;
             await page.waitForFunction(before=>window.__pointerDraws>before,draws,{timeout:2000});
         }
@@ -52,7 +55,7 @@ export async function verifyTimelinePointer(page) {
         assert.equal(await time(),cancelled,'blur must end the drag');await page.mouse.up();
     } finally {
         await page.mouse.up();
-        await page.evaluate(()=>{document.removeEventListener('pointermove',window.__splitMouseMove,true);delete window.__splitMouseMove;window.__restorePointerDraws();delete window.__restorePointerDraws;});
+        await page.evaluate(()=>{for(const type of ['pointerdown','pointermove','pointerup','lostpointercapture','blur'])window.removeEventListener(type,window.__tracePointer,true);delete window.__tracePointer;delete window.__pointerTrace;document.removeEventListener('pointermove',window.__splitMouseMove,true);delete window.__splitMouseMove;window.__restorePointerDraws();delete window.__restorePointerDraws;});
     }
     console.log('PASS: split mouse IDs update timecode and 3D before release; pen/touch isolation, release and blur cleanup');
 }

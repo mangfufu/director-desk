@@ -57,6 +57,32 @@ test('static obstacles and driven moving obstacles transfer collision response',
     const h=harness([a,wall]);assert.ok(h.sample(1)[0][0]<1.6,'box cannot cross the obstacle');
     wall.physics!.collisions=false;assert.ok(h.sample(1)[0][0]>4);
 });
+
+test('display intervals control collisions across boundaries, edits and random seeks',()=>{
+    const moving=body([0,2,0]),wall=entity('prop','cube','障碍',[2,2,0]);
+    moving.physics!.gravity=false;moving.physics!.damping=0;moving.physics!.velocity=[5,0,0];
+    wall.visibility=[{id:'shown',start:5,end:6}];
+    const h=harness([moving,wall]);
+    assert.ok(Math.abs(h.sample(1)[0][0]-5)<.01,'not-yet-visible obstacle does not collide');
+    wall.visibility=[{id:'shown',start:0,end:1}];
+    const blocked=h.sample(1)[0][0];assert.ok(blocked<1.6,'schedule edits invalidate cached simulation');
+    h.sample(.1);assert.equal(h.sample(1)[0][0],blocked,'random seek matches sequential simulation');
+    wall.visibility=[{id:'shown',start:0,end:.1}];
+    assert.ok(Math.abs(h.sample(1)[0][0]-5)<.01,'disappeared obstacle no longer collides');
+    wall.visibility=[{id:'shown',start:.1,end:1}];
+    assert.ok(h.sample(1)[0][0]<1.6,'appearing obstacle starts colliding');
+    wall.physics={...defaultPhysicsBody(),mode:'static',collisions:false};
+    assert.ok(Math.abs(h.sample(1)[0][0]-5)<.01,'display does not override explicit collision opt-out');
+    h.runtime.dispose();
+});
+
+test('a sleeping body falls when its support disappears',()=>{
+    const falling=body([0,1,0]),support=entity('prop','cube','平台',[0,0,0]);support.scale=[8,1,8];
+    support.visibility=[{id:'platform',start:0,end:4}];
+    const h=harness([falling,support]);h.p.physics!.ground=false;
+    assert.ok(h.sample(3.9)[0][1]>.4);
+    assert.ok(h.sample(5)[0][1]<-1,'removed support wakes the resting body');h.runtime.dispose();
+});
 test('ragdoll limbs remain finite, constrained and deterministic after falling',()=>{
     const e=entity('actor','human-adult','人物',[0,2,0]);e.physics={...defaultPhysicsBody(),mass:60,ragdoll:true,impulses:[{time:.2,impulse:[30,20,5],point:[0,.1,0]}]};
     const h=harness([e],true);h.sample(4);const rig=h.rigs.get(e.id)!,state=()=>Object.values(rigPhysicsBones(rig)).filter(Boolean).flatMap(node=>node!.matrixWorld.toArray());

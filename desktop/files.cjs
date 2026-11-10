@@ -6,7 +6,7 @@ const { createFileHost } = require('./file-host.cjs');
 const { installFilePermissions } = require('./file-permissions.cjs');
 const { createAutomationFiles } = require('./automation-files.cjs');
 
-function attachFiles(window) {
+function attachFiles(window, { isBusy = () => false } = {}) {
     const session = window.webContents.session;
     installFilePermissions(session, window.webContents);
     const trusted = event => event.sender === window.webContents && event.senderFrame?.url === 'director://app/';
@@ -22,8 +22,8 @@ function attachFiles(window) {
     } });
     const automation = createAutomationFiles({ ready: host.ready, locations: () => host.read() });
     let closeRequest = '', allowClose = false;
-    let closeBusy = false;
-    const closingState = (event, state) => { if (trusted(event)) closeBusy = state?.busy === true; event.returnValue = null; };
+    let closeBusy = false, closeDirty = true;
+    const closingState = (event, state) => { if (trusted(event)) { closeBusy = state?.busy === true; closeDirty = state?.dirty !== false; } event.returnValue = null; };
     ipcMain.on('director-close-state', closingState);
     ipcMain.handle('director-files', async (event, input) => {
         if (!trusted(event)) return { ok: false, error: '拒绝未知页面' };
@@ -63,10 +63,16 @@ function attachFiles(window) {
     return { ready: host.ready, preventUnload(event) {
         if (allowClose) { event.preventDefault(); return; }
         if (closeRequest) return;
-        if (closeBusy) { dialog.showMessageBoxSync(window, { type: 'info', title: text(window, '退出导演台'), message: text(window, '请先完成或取消当前操作'), buttons: [text(window, '返回编辑')] }); return; }
+        if (closeBusy || isBusy()) { dialog.showMessageBoxSync(window, { type: 'info', title: text(window, '退出导演台'), message: text(window, '请先完成或取消当前操作'), buttons: [text(window, '取消')] }); return; }
+        if (!closeDirty) {
+            const choice = dialog.showMessageBoxSync(window, { type: 'question', title: text(window, '退出导演台'),
+                message: text(window, '确定要退出吗'), buttons: [text(window, '确认'), text(window, '取消')], defaultId: 0, cancelId: 1, noLink: true });
+            if (choice === 0) { allowClose = true; event.preventDefault(); }
+            return;
+        }
         const choice = dialog.showMessageBoxSync(window, { type: 'question', title: text(window, '退出导演台'),
-            message: text(window, '是否保存当前工程后退出？'),
-            buttons: [text(window, '保存并退出'), text(window, '不保存退出'), text(window, '取消')], defaultId: 0, cancelId: 2, noLink: true });
+            message: text(window, '检测到未保存更改'),
+            buttons: [text(window, '保存并退出'), text(window, '不保存并退出'), text(window, '取消')], defaultId: 0, cancelId: 2, noLink: true });
         if (choice === 1) { allowClose = true; event.preventDefault(); }
         if (choice === 0) { closeRequest = randomUUID(); window.webContents.send('director-save-before-close', { id: closeRequest }); }
     } };

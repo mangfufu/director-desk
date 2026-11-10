@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { readModelFiles } = require('./model-files.ts');
-const allowed = new Set(['.director', '.staging', '.txt', '.mp4', '.webm', '.png', '.zip', '.json', '.csv', '.svg', '.xml']);
+const allowed = new Set(['.director', '.staging', '.txt', '.mp4', '.webm', '.png', '.zip', '.json', '.csv', '.svg', '.xml', '.html']);
 function safeName(value) {
     if (typeof value !== 'string' || !value || value.length > 180 || /[<>:"/\\|?*\x00-\x1f]/.test(value)
         || /^[. ]|[. ]$/.test(value) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value)) throw Error('文件名无效');
@@ -40,7 +40,7 @@ function createAutomationFiles({ ready, locations }) {
                 let destination = data.path ? absolute(data.path) : path.join(data.directory ? absolute(data.directory) : locations()[data.kind === 'project' ? 'projects' : 'exports'], safeName(data.name));
                 safeName(path.basename(destination));
                 if (!allowed.has(path.extname(destination).toLowerCase())) throw Error('不支持的输出扩展名');
-                const extensions = { project: ['.director'], staging: ['.staging'], prompt: ['.txt'], screenshot: ['.png'], bundle: ['.zip'], video: ['.mp4', '.webm'], 'depth-video': ['.mp4', '.webm'] };
+                const extensions = { project: ['.director'], staging: ['.staging'], prompt: ['.txt'], screenshot: ['.png'], bundle: ['.zip'], video: ['.mp4', '.webm'], 'depth-video': ['.mp4', '.webm'], 'contact-sheet':['.html'] };
                 if (!extensions[data.kind]?.includes(path.extname(destination).toLowerCase())) throw Error('输出扩展名与导出类型不符');
                 await fs.mkdir(path.dirname(destination), { recursive: true });
                 if (!data.overwrite) {

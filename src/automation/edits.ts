@@ -9,6 +9,7 @@ import { syncStructureLinks } from '../building/structure-links.ts';
 import { syncFloorElevations } from '../building/floors.ts';
 import { removeCameraVisibilityReference } from '../scenes/camera-visibility.ts';
 import { replaceProp, type ReplacePropOptions } from '../resources/replace-prop.ts';
+import { replaceActor, type ReplaceActorOptions } from '../resources/replace-actor.ts';
 import { editResourceMetadata, removeUnusedResource } from '../resources/resource-usage.ts';
 import { parameterDefaults } from '../parametric-props.ts';
 import { assertProductionShape } from '../production/validation.ts';
@@ -22,7 +23,7 @@ import { arrangeEntities, type Arrangement } from '../building/arrangement.ts';
 import { editTimeline } from './timeline-edit.ts';
 import { editRoute } from './route-edit.ts';
 export interface EditOperation { operation: string; id?: string; asset?: string; kind?: 'actor' | 'prop'; name?: string; position?: Vec3; time?: number; duration?: number; patch?: Record<string, unknown>; value?: unknown }
-const editable = new Set(['memberPaths','physics','warp','visual','field','deform','surface', 'light', 'floorId', 'structureLink', 'handBinding', 'contactAnchors', 'external', 'name', 'color', 'position', 'rotation', 'scale', 'visible', 'height', 'build', 'gender', 'path', 'face', 'faceTarget', 'clips', 'pose', 'poseKeys', 'camera', 'count', 'spacing', 'seed', 'reference', 'parameters', 'assetParameters', 'actionBlend', 'footContact']);
+const editable = new Set(['memberPaths','physics','warp','visual','field','deform','surface', 'light', 'floorId', 'structureLink', 'handBinding', 'contactAnchors', 'external', 'name', 'color', 'position', 'rotation', 'scale', 'visible', 'visibility', 'height', 'build', 'gender', 'path', 'face', 'faceTarget', 'clips', 'pose', 'poseKeys', 'camera', 'count', 'spacing', 'seed', 'reference', 'parameters', 'assetParameters', 'actionBlend', 'footContact']);
 function patch(target: object, value: Record<string, unknown> | undefined, allowed: Set<string>) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('patch 必须是对象');
     for (const key of Object.keys(value)) { if (!allowed.has(key)) throw new Error('不允许修改字段：' + key); Object.assign(target, { [key]: clone(value[key]) }); }
@@ -92,6 +93,7 @@ export function applyOperations(original: Project, operations: EditOperation[], 
         else if (op.operation === 'timeline') editTimeline(project, op.patch);
         else if (op.operation === 'draw-path' || op.operation === 'record-motion') editRoute(project, op.id ?? '', op.operation, op.patch);
         else if (op.operation === 'replace-prop') replaceProp(project, op.id ?? '', op.asset ?? '', op.patch as ReplacePropOptions | undefined);
+        else if (op.operation === 'replace-actor') replaceActor(project, op.id ?? '', op.asset ?? '', op.patch as ReplaceActorOptions | undefined);
         else if (op.operation === 'resource') editResourceMetadata(project, op.id ?? '', op.patch);
         else if (op.operation === 'resource-remove') removeUnusedResource(project, op.id ?? '');
         else if (op.operation === 'motion') {

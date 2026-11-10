@@ -1,0 +1,4 @@
+.timeline-playhead-overlay{position:absolute;overflow:hidden;pointer-events:none;z-index:12;contain:strict}
+.timeline-playhead-overlay .playhead-line{left:0;top:0;bottom:0;width:1px;background:#e7e7e7;pointer-events:none}
+.timeline-playhead-overlay .playhead-line:before{content:'';position:absolute;left:-4px;top:0;height:10px;width:9px;background:#eaeaea;clip-path:polygon(0 0,100% 0,100% 65%,50% 100%,0 65%)}
+html[data-timeline-drag=seek] .timeline-playhead-overlay .playhead-line{will-change:transform}

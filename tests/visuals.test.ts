@@ -9,8 +9,8 @@ import {VISUAL_PRESETS,FIELD_TYPES} from '../src/visuals/model.ts';
 import {WARP_TYPES} from '../src/visuals/warps.ts';
 import {writeChannel} from '../src/animation/write-channel.ts';
 import {numberAt} from '../src/animation/channels.ts';
-import {freezeVisualState} from '../src/visuals/continuity.ts';
-import {sampleFields} from '../src/visuals/fields.ts';
+import {freezeVisualState,receivesRootField} from '../src/visuals/continuity.ts';
+import {sampleFields,sampleParticleFields} from '../src/visuals/fields.ts';
 import {SceneSession} from '../src/scenes/sequence-session.ts';
 import {readSceneDocument,duplicateDocumentScene,projectForScene,updateDocumentScene} from '../src/scenes/sequence-project.ts';
 import {mergeScene} from '../src/scenes/merge-project.ts';
@@ -46,6 +46,22 @@ test('field evaluation does not accumulate across random seeks and respects targ
     const roots=new Map([e,other,field].map(e=>[e.id,new T.Group()]));
     const sample=(time:number)=>{for(const item of [e,other,field])roots.get(item.id)!.position.fromArray(item.position);sampleFields([e,other,field],roots,time);return roots.get(e.id)!.position.toArray();};
     const first=sample(2);sample(8);assert.deepEqual(sample(2),first);assert.notDeepEqual(first,[0,0,0]);assert.deepEqual(roots.get(other.id)!.position.toArray(),[0,0,0]);
+});
+
+test('display intervals gate visual and field effects on the same random-access clock',()=>{
+    const e=entity('prop','visual-snow','粒子'),prop=entity('prop','cube','物体'),field=entity('prop','field-wind','风');
+    e.visibility=field.visibility=[{id:'show',start:2,end:4}];field.field!.targets=[e.id,prop.id];
+    const root=makeVisual(e),roots=new Map([[e.id,root],[prop.id,new T.Group()],[field.id,new T.Group()]]);
+    for(const time of [1,2,4,3,1]){
+        sampleVisual(e,root,time,false);roots.get(prop.id)!.position.set(0,0,0);
+        sampleFields([e,prop,field],roots,time);sampleParticleFields([e,prop,field],roots,time);
+        const active=time>=2&&time<4;
+        assert.equal(root.visible,active);assert.equal(root.userData.visualMaterial.uniforms.fieldCount.value,active?1:0);
+        assert.equal(roots.get(prop.id)!.position.length()>0,active);
+        const p=createScene('blank');p.entities.push(prop,field);
+        assert.equal(receivesRootField(prop,p,time),active);p.entities.reverse();assert.equal(receivesRootField(prop,p,time),active);
+    }
+    root.traverse(o=>{if(o instanceof T.Points){o.geometry.dispose();(o.material as T.Material).dispose();}});
 });
 
 test('procedural membrane animation composes with deformation and restores on removal',()=>{

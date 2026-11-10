@@ -3,6 +3,8 @@ import type { Project } from '../model.ts';
 export interface PluginFrame {time:number;project:Project;exporting:boolean}
 export interface PluginRender extends PluginFrame {renderer:WebGLRenderer;scene:Scene;camera:Camera;view:'stage'|'shot';depth:boolean}
 export class PluginRenderHooks {
+    revision=0;
+    invalidate(){this.revision++;}
     samples=new Set<(frame:PluginFrame)=>void>();
     passes=new Set<(frame:PluginRender,next:()=>void)=>void>();
     sample(frame:PluginFrame){for(const fn of this.samples)fn(frame);}

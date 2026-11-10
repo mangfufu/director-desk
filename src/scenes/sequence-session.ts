@@ -38,7 +38,10 @@ export class SceneSession {
         this.#dirtyCache = { current, saved, value };
         return value;
     }
-    markSaved(path = this.#file.path) { this.#file.path = path; this.#file.saved = this.#document; }
+    markSaved(path = this.#file.path, document?: SceneDocument) {
+        if (document && document.projectId !== this.#document.projectId) return;
+        this.#file.path = path; this.#file.saved = document ? clone(document) : this.#document;
+    }
     /** File identity is local history metadata; never serialized into a shared project. */
     setFile(path = '', saved = false) { this.#file = { path, saved: saved ? this.#document : null }; }
     get context(): SceneContext { return { sessionId: this.#sessionId, sceneId: this.#document.activeSceneId, revision: this.#revision }; }

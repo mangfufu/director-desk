@@ -33,6 +33,7 @@ release/
 /docs/*
 !/docs/images/
 !/docs/development.md
+!/docs/制作效率与扩展开发计划.md
 !/docs/staging-workflow.md
 !/docs/physics.md
 !/docs/plugins.md
@@ -97,6 +98,8 @@ file-locations.json
 !/scripts/verify-workspace-controls.mjs
 
 !/scripts/verify-timeline-performance.mjs
+!/scripts/verify-preview-tools.mjs
+!/scripts/benchmark-complex-preview.mjs
 !/scripts/verify-editor-maintenance.mjs
 !/scripts/verify-feature-scenes.mjs
 !/scripts/verify-inspector-layout.mjs
@@ -152,3 +155,15 @@ file-locations.json
 !/scripts/prepare-linux-update.mjs
 !/scripts/test-linux-update.mjs
 !/scripts/verify-timeline-pointer.mjs
+!/scripts/verify-visibility-timeline.mjs
+!/scripts/verify-motion-calibration.mjs
+!/scripts/verify-contact-sheet.mjs
+!/scripts/verify-preview-cache.mjs
+!/scripts/verify-workbench.mjs
+!/scripts/verify-workbench-desktop.mjs
+!/scripts/test-reconstruction-desktop.mjs
+!/scripts/test-interaction-regressions.mjs
+!/scripts/verify-usability.mjs
+!/scripts/verify-human-silhouettes.mjs
+!/docs/video-reconstruction.md
+!/docs/human-models.md

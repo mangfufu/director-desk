@@ -26,7 +26,7 @@ export function bindLiveFields(ctx: AppContext, mutate: (key: string, value: str
         const target=event.target;
         if (!(target instanceof HTMLInputElement) || !target.closest('#inspector-content') || target.type!=='number') return;
         const key=target.dataset.field;
-        if (!key || !/^(pos\.|rot\.|scale\.|target\.|offset\.|handOffset\.|handRotation\.|camera\.(focal|targetHeight)$|height$)/.test(key)) return;
+        if (!key || !/^(pos\.|rot\.|scale\.|target\.|offset\.|handOffset\.|handRotation\.|camera\.(focal|targetHeight|focusDistance|blur)$|height$)/.test(key)) return;
         if(key==='height' && ctx.current()?.kind==='crowd')return;
         completed.delete(target);
         if(ctx.busy || ctx.draft || ctx.current()?.locked || !target.value || !target.checkValidity())return;

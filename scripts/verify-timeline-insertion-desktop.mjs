@@ -15,13 +15,22 @@ try{
     const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.waitForFunction(()=>window.directorDesktop);
     await page.locator('#timeline-content .track-lane').first().waitFor();
-    await verifyTimelinePointer(page);
-    const started=await page.evaluate(()=>window.directorDesktop.mcp(true));assert.equal(started.ok,true);
+    const started=await page.evaluate(()=>window.directorDesktop.mcp(true));assert.equal(started.ok,true,started.error);
     const connection=JSON.parse(await fs.readFile(path.join(profile,'mcp-connection.json'),'utf8'));
     const token=await app.evaluate(({safeStorage},secret)=>safeStorage.decryptString(Buffer.from(secret,'base64')),connection.secret);
     await client.connect(new StreamableHTTPClientTransport(new URL(started.data.url),{requestInit:{headers:{Authorization:`Bearer ${token}`}}}));
-    const call=async(name,args)=>{const raw=await client.callTool({name,arguments:args});const r=JSON.parse(raw.content.find(c=>c.type==='text').text);assert.equal(r.ok,true,r.error);return r.data;};
-    const read=await call('director_read',{sections:[]});
+    const rawCall=async(name,args)=>JSON.parse((await client.callTool({name,arguments:args})).content.find(c=>c.type==='text').text);
+    const call=async(name,args)=>{const r=await rawCall(name,args);assert.equal(r.ok,true,r.error);return r.data;};
+    let read;
+    for(let i=0;i<150;i++){
+        const r=await rawCall('director_read',{sections:[]});if(r.ok){read=r.data;break;}
+        assert.match(r.error,/尚未连接或正在重新载入/);await page.waitForTimeout(100);
+    }
+    assert.ok(read,'renderer connected to MCP');
+    // Let the window manager deliver its initial native pointer before CDP starts a held drag.
+    await page.bringToFront();await page.waitForFunction(()=>document.hasFocus());
+    if(process.platform==='linux')await page.waitForTimeout(300);
+    await verifyTimelinePointer(page);
     await call('director_apply',{revision:read.revision,requestId:'insertion-fixture',operations:[{operation:'add',asset:'human-adult',id:'insert-desktop-target',patch:{clips:[{id:'desktop-a',action:'walk',start:0,end:2,speed:1},{id:'desktop-b',action:'run',start:2,end:5,speed:1},{id:'desktop-c',action:'wave',start:5,end:7,speed:1}]}}]});
     const timings=async()=>{const r=await call('director_read',{ids:['insert-desktop-target'],sections:['entities'],details:true});return r.entities[0].clips.map(c=>[c.start,c.end]);};
     const bar=page.locator('[data-clip-id="desktop-c"]');await bar.scrollIntoViewIfNeeded();
@@ -30,7 +39,7 @@ try{
     assert.match(await page.locator('.motion-drop-status').innerText(),/插在前面/);await page.mouse.up();
     assert.deepEqual(await timings(),[[0,2],[4,7],[2,4]]);
     await page.keyboard.press('Control+z');assert.deepEqual(await timings(),[[0,2],[2,5],[5,7]]);
-    await page.locator('[data-side="motions"]').click();await page.locator('#search').fill('basic-wave');
+    await page.locator('#resource-home').click(); await page.locator('[data-side="motions"]').click();await page.locator('#search').fill('basic-wave');
     await page.locator('[data-library-motion="basic-wave"]').dragTo(page.locator('[data-track-key="entity:insert-desktop-target"] .track-lane'),{targetPosition:{x:270,y:18}});
     assert.deepEqual(await timings(),[[0,2],[2,5],[5,8],[8,10]]);
     const play=page.locator('[data-act="play"]');assert.equal(await play.isEnabled(),true);assert.equal(await play.getAttribute('aria-label'),'播放');

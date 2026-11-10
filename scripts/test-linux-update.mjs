@@ -138,7 +138,19 @@ try {
         const result = await raw('director_read', { sections: ['entities'] });
         if (result.ok) { after = result.data; break; } await sleep(100);
     }
-    assert.equal(after.name, before.name); assert.deepEqual(after.entities, before.entities);
+    assert.equal(after.name, before.name);
+    // Derived query fields may be added by a new release; compare saved entity fields separately.
+    const savedSummary=entities=>entities.map(({visibleAtTime,...entity})=>entity);
+    assert.deepEqual(savedSummary(after.entities),savedSummary(before.entities));
+    const restoredJob=await call('director_export',{kind:'project',filename:'upgrade-restored.director',requestId:'save-restored'});
+    let restoredFile;
+    for(let i=0;i<100;i++){
+        const progress=await call('director_job',{id:restoredJob.jobId});
+        if(progress.status!=='running'){assert.equal(progress.status,'completed',progress.error);restoredFile=progress.result.files[0].path;break;}
+        await sleep(100);
+    }
+    assert.ok(restoredFile,'Restored live project exported');
+    assert.deepEqual(JSON.parse(await fs.readFile(restoredFile,'utf8')),JSON.parse(savedBytes.toString()),'Whole live document survives replacement and restart');
     assert.equal((await call('director_settings', { scope: 'editor', action: 'read' })).values.navigationSpeed, 4);
     assert.deepEqual(await fs.readFile(savedFile), savedBytes);
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(profile, 'ai-conversation.json'), 'utf8')), conversation);

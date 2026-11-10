@@ -1,0 +1,13 @@
+.camera-lens-dials { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:12px 0; }
+.numeric-dial { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+.inspector .numeric-dial .field { margin:0; display:flex; flex-direction:column; width:100%; align-items:stretch; gap:4px; }
+.numeric-dial .field>span { min-height:30px; text-align:center; display:flex; align-items:center; justify-content:center; }
+.numeric-dial .field input { width:100%; min-width:0; height:30px; text-align:right; }
+.numeric-dial-face { position:relative; width:48px; height:48px; }
+.numeric-dial-face svg { width:100%; height:100%; fill:none; stroke:#555; stroke-width:1; }
+.numeric-dial-face circle { fill:#242424; stroke:#777; }
+.numeric-dial-needle { stroke:#eee; stroke-width:2; transform-origin:24px 24px; transform:rotate(var(--dial-angle)); }
+.numeric-dial .numeric-dial-face input[type=range] { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:ns-resize; touch-action:none; }
+.numeric-dial-face:focus-within { outline:1px solid #eee; outline-offset:2px; border-radius:3px; }
+.numeric-dial:has(input:disabled) { opacity:.45; }
+.numeric-dial input:disabled { cursor:default; }

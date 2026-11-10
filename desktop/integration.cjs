@@ -1,16 +1,33 @@
 const { prepareMediaImport } = require('./media-import.cjs');
-const { ipcMain, app, safeStorage, clipboard } = require('electron');
+const { ipcMain, app, safeStorage, clipboard, dialog, net, shell } = require('electron');
+const { createReconstructionHost } = require('./video-reconstruction/host.cjs');
+const { createVideoSource } = require('./video-reconstruction/video-source.cjs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { createAIHost } = require('./ai-host.cjs');
 const { createMcpHost } = require('./mcp-host.cjs');
 const { releaseVersion } = require('./release-version.cjs');
+const { createAppMetrics } = require('./app-metrics.cjs');
 const { createSkillStore } = require('./skills/store.cjs');
 const { createSkillHost } = require('./skills/host.cjs');
 const { createOfficialSkill } = require('./skills/official.cjs');
 const { TOOL_DEFINITIONS, MCP_TOOL_DEFINITIONS, DISCUSSION_TOOLS, isDiscussionToolCall, BUILTIN_SKILL } = require('./tools-contract.cjs');
 function attachIntegration(window) {
+    const videoSource=createVideoSource();
+    let reconstruction, reconstructionRuntime;
+    const getReconstruction = () => reconstruction ??= createReconstructionHost({
+        directory: path.join(app.getPath('userData'), 'video-reconstruction'),
+        assetsDirectory: app.isPackaged ? path.join(process.resourcesPath, 'video-reconstruction') : path.join(app.getAppPath(), 'desktop/video-reconstruction'),
+        buildProject: async (directory,options) => (await import(pathToFileURL(path.join(app.isPackaged ? path.join(process.resourcesPath, 'video-reconstruction') : path.join(app.getAppPath(), 'desktop/video-reconstruction'), 'build-project.mjs')).href)).buildProject(directory,options),
+        fetch: (url, options) => net.fetch(url, options),
+    }).then(runtime => reconstructionRuntime = runtime);
+    const appMetrics = createAppMetrics(() => app.getAppMetrics());
     const pending = new Map(); let ready = false;
+    const windowState = () => ({ maximized: window.isMaximized(), fullscreen: window.isFullScreen() });
+    const windowEvents = ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'];
+    const notifyWindowState = () => { if (!window.isDestroyed()) window.webContents.send('director-window-state', windowState()); };
+    windowEvents.forEach(name => window.on(name, notifyWindowState));
     const officialSkill = createOfficialSkill({ directory: app.getPath('userData'), builtin: BUILTIN_SKILL,
         onChange: data => { if (!window.isDestroyed()) window.webContents.send('director-skill-changed', data); } });
     const skills = createSkillStore({ directory: app.getPath('userData'), builtin: BUILTIN_SKILL, getBuiltin: officialSkill.current });
@@ -40,7 +57,36 @@ function attachIntegration(window) {
         if (!trusted(event)) throw new Error('拒绝未知页面');
         try {
             const { action, data } = input || {}; let result;
-            if (action === 'profiles') result = await host.list();
+            if (action === 'window-control') {
+                if (!['state', 'minimize', 'maximize', 'close'].includes(data)) throw new Error('未知窗口操作');
+                if (data === 'minimize') window.minimize();
+                if (data === 'maximize') {
+                    if (window.isFullScreen()) window.setFullScreen(false);
+                    else if (window.isMaximized()) window.unmaximize();
+                    else window.maximize();
+                }
+                result = windowState();
+                // Use the existing close/save flow, never destroy the window directly.
+                if (data === 'close') setImmediate(() => { if (!window.isDestroyed()) window.close(); });
+            }
+            else if (action === 'reconstruction') {
+                const runtime = await getReconstruction();
+                if (data?.action === 'choose-video' || data?.action === 'choose-directory') {
+                    const directory = data.action === 'choose-directory';
+                    const chosen = await dialog.showOpenDialog(window, directory ? {title:'模型目录',properties:['openDirectory','createDirectory']} : {title:'选择视频',properties:['openFile'],filters:[{name:'视频',extensions:['mp4','mov','mkv','avi','webm','m4v']}]});
+                    result = {path:chosen.canceled ? undefined : chosen.filePaths[0]};
+                } else if (data?.action === 'source-video') {
+                    result=await videoSource.select(data.data?.path);
+                } else if (data?.action === 'release-video') {
+                    videoSource.clear();result=true;
+                } else if (data?.action === 'license-page') {
+                    await shell.openExternal(runtime.state().model.licenseUrl);result=true;
+                } else if (data?.action === 'project-page') {
+                    await shell.openExternal(runtime.state().model.sourceUrl);result=true;
+                } else result = await runtime.handle(data?.action, data?.data, true);
+            }
+            else if (action === 'app-metrics') result = appMetrics();
+            else if (action === 'profiles') result = await host.list();
             else if (action === 'conversation') result = await host.conversation();
             else if (action === 'new-conversation') result = await host.newConversation();
             else if (action === 'configure') result = await host.configure(data);
@@ -62,13 +108,17 @@ function attachIntegration(window) {
             } else if (action === 'copy-text') {
                 if (typeof data !== 'string' || data.length > 100000) throw new Error('复制内容无效或超过 100000 字');
                 clipboard.writeText(data); result = true;
+            } else if (action === 'edit-text') {
+                if (!['cut', 'copy', 'paste', 'selectAll'].includes(data)) throw new Error('未知文本操作');
+                window.webContents[data](); result = true;
             } else throw new Error('未知桌面操作');
             return { ok: true, data: result };
         } catch (e) { return { ok: false, error: e.message }; }
     });
     window.webContents.on('did-start-navigation', details => { if (!details.isMainFrame || details.isSameDocument) return; ready = false; host.stop(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '页面重新载入，调用结果未确认；请重新读取工程，不要直接重复写入' }); } pending.clear(); });
-    window.on('closed', () => { host.stop(); void mcp.close(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '软件已关闭，调用结果未确认；请重新读取工程，不要直接重复写入' }); }
+    window.on('closed', () => { host.stop(); void reconstruction?.then(runtime=>runtime.dispose()).catch(()=>{}); void mcp.close(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '软件已关闭，调用结果未确认；请重新读取工程，不要直接重复写入' }); }
+        windowEvents.forEach(name => window.removeListener(name, notifyWindowState));
         ipcMain.removeHandler('director-host'); ipcMain.removeListener('director-tool-result', resultHandler); ipcMain.removeListener('director-tools-ready', readyHandler); });
-    return { isBusy: () => host.isRunning() || skillHost.isBusy() || pending.size > 0 };
+    return { videoResponse:request=>videoSource.respond(request), isBusy: () => host.isRunning() || skillHost.isBusy() || pending.size > 0 || !!reconstructionRuntime?.isBusy() };
 }
 module.exports = { attachIntegration };

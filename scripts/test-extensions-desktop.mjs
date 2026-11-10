@@ -41,7 +41,7 @@ try{
     async function storedSourceCount(){return page.evaluate(()=>new Promise((resolve,reject)=>{const request=indexedDB.open('director-project-versions-v1',1);request.onsuccess=()=>{const db=request.result,tx=db.transaction('sources'),r=tx.objectStore('sources').count();r.onsuccess=()=>resolve(r.result);tx.oncomplete=()=>db.close();};request.onerror=()=>reject(request.error);}));}
     assert.equal(await storedSourceCount(),1,'version source packages are deduplicated');
     await call('director_view',{entityId:'extras',time:0});
-    await page.locator('[data-menu="scene"]').click();await page.locator('[data-act="navigate-open"]').first().click();
+    await page.locator('[data-menu="production"]').click();await page.locator('[data-act="navigate-open"]').first().click();
     await page.locator('.navigation-panel').waitFor();
     await page.locator('#nav-0').fill('4');await page.locator('#nav-1').fill('0');await page.locator('#nav-2').fill('0');await page.locator('#nav-end').fill('25');
     await page.screenshot({path:path.join(profile,'navigation.png')});

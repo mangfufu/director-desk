@@ -9,16 +9,20 @@ const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
 const app = await electron.launch({ executablePath: createRequire(import.meta.url)('electron'), args: [path.resolve('.audit/desktop-app'), `--director-test-profile=${profile}`], env });
 const findings = {};
 try {
-  await app.evaluate(({ dialog }, filename) => {
+  await app.evaluate(({ dialog, ipcMain }, filename) => {
     globalThis.auditSaveCount = 0; globalThis.auditExit = [];
     dialog.showSaveDialog = async () => { globalThis.auditSaveCount++; return { canceled: false, filePath: filename }; };
-    dialog.showMessageBoxSync = (_window, options) => { globalThis.auditExit.push(options); return 2; };
+    dialog.showMessageBoxSync = (_window, options) => { globalThis.auditExit.push(options); return options.message==='确定要退出吗'?0:2; };
+    ipcMain.on('director-close-state',(_event,state)=>{globalThis.auditClosing=state;});
   }, filename);
   const page = await app.firstWindow();
+  // Electron handles beforeunload through its native quit dialog; prevent
+  // Playwright from trying to dismiss a Chromium dialog that no longer exists.
+  page.on('dialog', dialog => { if (dialog.type() !== 'beforeunload') void dialog.dismiss(); });
   await page.waitForSelector('.header-actions [data-act="save"]');
   const act = action => page.evaluate(action => document.querySelector(`[data-act="${action}"]`).click(), action);
   const save = async () => { await page.evaluate(()=>document.querySelector('#toasts').replaceChildren()); await act('save'); await page.waitForFunction(()=>[...document.querySelectorAll('.toast')].some(e=>e.textContent === '项目已保存')); };
-  const dirty = () => page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; });
+  const dirty = async () => {await page.evaluate(() => window.dispatchEvent(new Event('beforeunload', { cancelable: true })));return app.evaluate(()=>globalThis.auditClosing.dirty);};
   await save();
   findings.savedDirty = await dirty();
   await save();
@@ -33,9 +37,10 @@ try {
   await page.locator('#rename-input').fill(oldName + ' test'); await act('rename-project'); await act('undo');
   findings.undoneBackToSavedDirty = await dirty();
   assert.equal(findings.undoneBackToSavedDirty, false);
-  await act('project'); await act('resource-open'); await act('model-library');
+  await act('project'); assert.equal(await page.locator('#rename-input').inputValue(),oldName); await act('close-modal');
+  await page.locator('#resource-home').click(); await act('resource-open'); await act('model-library');
   await page.locator('.modal-back').click(); assert.equal(await page.locator('#resource-choice').count(),1);
-  await page.locator('.modal-back').click(); assert.equal(await page.locator('#rename-input').inputValue(),oldName); await act('close-modal');
+  await act('close-modal');
   await act('spatial-open'); await act('range-open'); await page.locator('.modal-back').click();
   assert.equal(await page.locator('.modal-header h2').textContent(),'空间检查'); await act('close-modal');
   await act('export');
@@ -72,12 +77,12 @@ try {
   assert.equal(await dirty(),false,'saved recovery is clean after restarting renderer');
   await save(); assert.equal(await app.evaluate(()=>globalThis.auditSaveCount), dialogsBeforeReload,'recovery remembers the current file');
   // Native quit protection distinguishes an active task from unsaved changes.
-  await page.evaluate(()=>window.directorDesktop.closingState({busy:true}));
+  await page.evaluate(()=>window.directorDesktop.closingState({busy:true,dirty:true}));
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.emit('will-prevent-unload',{preventDefault(){}}));
   assert.equal(await app.evaluate(()=>globalThis.auditExit.at(-1).message),'请先完成或取消当前操作');
-  await page.evaluate(()=>window.directorDesktop.closingState({busy:false}));
+  await page.evaluate(()=>window.directorDesktop.closingState({busy:false,dirty:true}));
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.emit('will-prevent-unload',{preventDefault(){}}));
-  assert.deepEqual(await app.evaluate(()=>globalThis.auditExit.at(-1).buttons),['保存并退出','不保存退出','取消']);
+  assert.deepEqual(await app.evaluate(()=>globalThis.auditExit.at(-1).buttons),['保存并退出','不保存并退出','取消']);
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setContentSize(1000,720));
   await act('export'); await page.evaluate(()=>document.querySelector('#toasts').replaceChildren());
   await page.screenshot({path:path.join(profile,'export-small.png')});

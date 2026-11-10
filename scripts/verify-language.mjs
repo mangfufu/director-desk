@@ -41,11 +41,11 @@ try {
         console.log(tab,await collect());
     }
     for(const side of ['assets','motions']) {
-        await page.locator(`[data-side="${side}"]`).click();console.log(side,await collect());
+        if(side!=='scene')await page.locator('#resource-home').click(); await page.locator(`[data-side="${side}"]`).click();console.log(side,await collect());
     }
     await page.locator('#search').fill('walk');
     assert.ok(await page.locator('[data-library-motion="basic-walk"]').count());
-    await page.locator('[data-side="assets"]').click();await page.locator('#search').fill('coffee table');
+    await page.locator('#resource-home').click(); await page.locator('[data-side="assets"]').click();await page.locator('#search').fill('coffee table');
     assert.ok(await page.locator('[data-asset="furniture-coffeetable"]').count());
     await page.locator('#search').fill('');await page.locator('[data-side="scene"]').click();
     const cameraId=await page.evaluate(()=>window.__director.getProject().entities.find(e=>e.kind==='camera').id);

@@ -1,6 +1,6 @@
 import type { AppContext } from '../app-context.ts';
 import type { Entity } from '../model.ts';
-import { HUMAN_BONES, rigStatus, type HumanBone } from '../resources/rig-definition.ts';
+import { assertRigBindings, HUMAN_BONES, rigStatus, type HumanBone, type HumanoidRig } from '../resources/rig-definition.ts';
 import { escape, options } from './common.ts';
 import './rig-editor.css';
 import { nativeSample } from '../resources/native-animation.ts';
@@ -10,6 +10,12 @@ export function createRigEditor(ctx: AppContext, refresh: () => void) {
     const content = document.querySelector<HTMLElement>('#inspector-content')!;
     let view = 'mapping', part: HumanBone = 'hips', bonePath = '', owner = '';
     const infoFor = (e: Entity) => ctx.engine.externalModels.inspection(ctx.project.resources!.find(r => r.id === e.external!.resourceId)!);
+    const mappingFor = (e: Entity, path: string) => {
+        const rig: HumanoidRig = { version: 1, family: 'humanoid', bones: { ...e.external!.rig?.bones } };
+        if (path) rig.bones[part] = path; else delete rig.bones[part];
+        assertRigBindings(rig, undefined, infoFor(e).bones);
+        return rig;
+    };
     content.addEventListener('change', event => {
         const target = event.target as HTMLInputElement | HTMLSelectElement;
         if (!target.closest('.rig-editor')) return;
@@ -18,10 +24,16 @@ export function createRigEditor(ctx: AppContext, refresh: () => void) {
         if (target.id === 'rig-part') { part = target.value as HumanBone; refresh(); return; }
         if (target.id === 'rig-bone' && view === 'pose') { bonePath = target.value; refresh(); return; }
         if (e.locked) return;
-        if (target.id === 'rig-bone') ctx.change(() => {
-            e.external!.rig ??= { version: 1, family: 'humanoid', bones: {} };
-            if (target.value) e.external!.rig.bones[part] = target.value; else delete e.external!.rig.bones[part];
-        });
+        if (target.id === 'rig-bone') {
+            // Validate before touching the project, including stale/programmatic selections.
+            try {
+                const rig = mappingFor(e, target.value);
+                ctx.change(() => { e.external!.rig = rig; });
+            } catch (error) {
+                ctx.toast(error instanceof Error ? error.message : String(error));
+                refresh();
+            }
+        }
         else if (target.dataset.rigAxis !== undefined) {
             const changed = ctx.change(() => {
                 const pose = e.external!.defaultPose ??= {}, angles = pose[bonePath] ??= [0, 0, 0];
@@ -68,7 +80,15 @@ export function createRigEditor(ctx: AppContext, refresh: () => void) {
         const button = (action: string, label: string) => `<button data-rig-action="${action}" class="subtle">${label}</button>`;
         const mode = select('rig-view', '骨架编辑方式', modes, view);
         if (view === 'mapping') {
-            return `<div class="rig-editor" title="${escape(missing ? '待映射：' + missing : '骨骼对应已设置')}"><div class="rig-pair">${mode}${select('rig-part', '人体部位', Object.entries(HUMAN_BONES), part)}</div>${select('rig-bone', '对应源骨骼', [['', '未映射'], ...bones], rig?.bones[part] ?? '')}<div class="rig-buttons">${button('auto', '自动识别')}${button('clear', '清除映射')}${button('focus', '定位')}</div></div>`;
+            const choices: [string, string][] = [['', '未映射'], ...bones];
+            const source = `<select id="rig-bone" aria-label="对应源骨骼">${choices.map(([path, label]) => {
+                let issue = '';
+                try { mappingFor(e, path); } catch (error) { issue = error instanceof Error ? error.message : String(error); }
+                const mapped = Object.entries(rig?.bones ?? {}).find(([key, value]) => key !== part && value === path)?.[0] as HumanBone | undefined;
+                const suffix = mapped ? `（已用于${HUMAN_BONES[mapped]}）` : issue ? '（层级不符）' : '';
+                return `<option value="${escape(path)}" ${path === (rig?.bones[part] ?? '') ? 'selected' : ''} ${issue ? `disabled title="${escape(issue)}"` : ''}>${escape(label + suffix)}</option>`;
+            }).join('')}</select>`;
+            return `<div class="rig-editor" title="${escape(missing ? '待映射：' + missing : '骨骼对应已设置')}"><div class="rig-pair">${mode}${select('rig-part', '人体部位', Object.entries(HUMAN_BONES), part)}</div>${source}<div class="rig-buttons">${button('auto', '自动识别')}${button('clear', '清除映射')}${button('focus', '定位')}</div></div>`;
         }
         const angles = e.external!.defaultPose?.[bonePath] ?? [0, 0, 0];
         return `<div class="rig-editor" title="调整骨骼的默认旋转角度"><div class="rig-pair">${mode}${select('rig-bone', '调整源骨骼', bones, bonePath)}</div><div class="rig-angles">${['X', 'Y', 'Z'].map((axis, i) => `<label>${axis}<input type="number" data-rig-axis="${i}" aria-label="局部 ${axis} 旋转／度" min="-360" max="360" step="1" value="${Number((angles[i] * 180 / Math.PI).toFixed(4))}"/></label>`).join('')}</div><div class="rig-buttons">${button('reset-one', '此骨骼复位')}${button('reset-all', '全部复位')}${button('focus', '定位')}</div></div>`;

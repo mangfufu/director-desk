@@ -12,6 +12,7 @@ import { freezeEndingCamera } from '../cinematography/continuity.ts';
 import { numberAt } from '../animation/channels.ts';
 import { lightIntensity } from '../lighting/model.ts';
 import { lightColor } from '../lighting/runtime.ts';
+import { entityVisibleAt } from './visibility.ts';
 
 export async function sceneContentHash(value: unknown) {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableSceneJson(value)));
@@ -31,6 +32,7 @@ export async function continueScene(engine: Engine, document: SceneDocument, nam
         objects = report.objects.map(o => ({ key: o.key, entityId: o.entityId, memberIndex: o.memberIndex, name: o.name, kind: o.kind,
             position: o.origin, forward: o.forward, action: o.action, enabled: o.enabled, bounds: o.bounds ? { min: o.bounds.min, max: o.bounds.max } : null }));
         for (const entity of project.entities) {
+            entity.visible=entityVisibleAt(entity,time);delete entity.visibility;
             const root = engine.models.get(entity.id)!;
             entity.position = receivesRootField(entity,project,time)?entityPosition(entity,time).toArray():root.position.toArray(); entity.rotation = [root.rotation.x, root.rotation.y, root.rotation.z];
             entity.path = null; entity.face = 'fixed'; entity.faceTarget = ''; entity.clips = []; entity.pose = {}; entity.poseKeys = [];
@@ -79,4 +81,15 @@ export async function continuitySummary(document: SceneDocument, id = document.a
         cameraId: origin.cameraId, notes: clone(origin.notes.filter(note => note.start <= origin.time)).map(note => ({ ...note, timing: note.end <= origin.duration ? 'within-source' : 'continues-beyond-source' })),
         notStartedNotes: clone(origin.notes.filter(note => note.start > origin.time)), objects: clone(origin.objects),
         description: '以下为接拍当时保存的来源末帧，不随前段之后的编辑或删除改变。notStartedNotes 尚未到开始时间，不算已发生前情；跨出场景时长的备注保留完整文字并单独标记。位置以米计，世界 +Y 向上；enabled 按来源成片机位的显示状态记录。' } };
+}
+
+/** Shared pagination for native and automation callers; omitted fields retain the existing query defaults. */
+export async function readContinuity(document: SceneDocument, args: { sceneId?: string; entityId?: string; offset?: unknown; limit?: unknown } = {}) {
+    const data = await continuitySummary(document, args.sceneId);
+    if (!data.origin) return data;
+    const offset = Number(args.offset ?? 0), limit = Number(args.limit ?? 50);
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw Error('前情查询分页范围无效');
+    const objects = data.origin.objects.filter(o => !args.entityId || o.entityId === args.entityId);
+    return { ...data, origin: { ...data.origin, objects: objects.slice(offset, offset + limit), total: objects.length, offset,
+        nextOffset: offset + limit < objects.length ? offset + limit : null } };
 }

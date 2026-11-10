@@ -51,7 +51,7 @@ try {
     await page.mouse.up();assert.deepEqual(await ranges(),[['a',2,4],['b',4,7],['c',7,9]]);await page.keyboard.press('Control+z');
     assert.deepEqual(await ranges(),[['a',0,2],['b',2,5],['c',5,7]]);
     // Native library drop uses the same left/right insertion preview.
-    await page.locator('[data-side="motions"]').click();await page.locator('#search').fill('basic-wave');
+    await page.locator('#resource-home').click(); await page.locator('[data-side="motions"]').click();await page.locator('#search').fill('basic-wave');
     const source=page.locator('[data-library-motion="basic-wave"]'),s=await source.boundingBox(),target=await lane.boundingBox();
     await page.mouse.move(s.x+35,s.y+20);await page.mouse.down();await page.mouse.move(s.x+50,s.y+23,{steps:5});
     await page.mouse.move(target.x+150,target.y+18,{steps:10});await page.mouse.move(target.x+151,target.y+18);

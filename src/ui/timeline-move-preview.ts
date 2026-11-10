@@ -1,14 +1,15 @@
 import type { TimelineSelection } from '../clip-editing.ts';
 import { selectionKey } from '../editor/timeline-selection.ts';
 import type { createTimelineInsertDrag } from '../editor/timeline-insert-drag.ts';
+import { clipFromBar } from './clip-controls.ts';
 
 type Plan=ReturnType<ReturnType<typeof createTimelineInsertDrag>['preview']>;
 
 /** Solid pointer follower and translucent destinations; existing clips stay still. */
 export function createTimelineMovePreview(selections:TimelineSelection[],anchor:HTMLElement,startX:number,startY:number,pps:number){
     const picked=new Set(selections.map(selectionKey));
-    const items=[...document.querySelectorAll<HTMLElement>('#timeline-content [data-clip-id],#timeline-content [data-path-id]')].flatMap(bar=>{
-        const s:TimelineSelection=bar.dataset.clipId?{kind:'action',entityId:bar.dataset.entity!,id:bar.dataset.clipId}:{kind:'path',entityId:bar.dataset.pathId!,index:Number(bar.dataset.section)};
+    const items=[...document.querySelectorAll<HTMLElement>('#timeline-content [data-clip-id],#timeline-content [data-path-id],#timeline-content [data-visibility-id]')].flatMap(bar=>{
+        const s=clipFromBar(bar);
         const key=selectionKey(s);if(!picked.has(key))return [];
         const rect=bar.getBoundingClientRect(),ghost=document.createElement('div'),marker=document.createElement('div');
         ghost.className='motion-drop-ghost';ghost.textContent=bar.querySelector('span')?.textContent??'';

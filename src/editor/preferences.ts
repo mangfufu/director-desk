@@ -1,6 +1,7 @@
 export const preferenceDefaults = {
     navigationSpeed: 3, navigationBoost: 3.333333, rotationSpeed: 1, zoomSpeed: 1, panSpeed: 1,
     viewDamping: true, gizmoSize: .78, showNavigationHint: true,
+    adaptivePreview: true, guideThirds: false, guideCenter: false, guideSafe: false,
 };
 export type EditorPreferences = typeof preferenceDefaults;
 export type PreferenceKey = keyof EditorPreferences;

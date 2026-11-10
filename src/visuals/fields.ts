@@ -2,9 +2,10 @@ import * as T from 'three';
 import type { Entity } from '../model.ts';
 import { FIELD_TYPES } from './model.ts';
 import { numberAt } from '../animation/channels.ts';
+import { entityVisibleAt } from '../scenes/visibility.ts';
 /** Directed displacement, analytically sampled from project time; never cumulative physics integration. */
 export function sampleFields(entities:Entity[],models:Map<string,T.Group>,time:number){
-    const fields=entities.filter(e=>e.field&&e.visible&&time>=e.field.start&&(!e.field.end||time<e.field.end));if(!fields.length)return;
+    const fields=entities.filter(e=>e.field&&entityVisibleAt(e,time)&&time>=e.field.start&&(!e.field.end||time<e.field.end));if(!fields.length)return;
     const centers=fields.map(e=>models.get(e.id)!.position.clone());const delta=new T.Vector3();
     for(const e of entities){if(e.field||e.warp||e.kind==='camera'||!e.visible)continue;const root=models.get(e.id)!;if(root.userData.visualPoints)continue;const base=root.position.clone();
         for(const [i,source]of fields.entries()){const f=source.field!;if(f.targets.length?!f.targets.includes(e.id):!e.visual)continue;delta.subVectors(base,centers[i]);const distance=delta.length();if(distance>=f.radius)continue;
@@ -19,7 +20,7 @@ export function sampleFields(entities:Entity[],models:Map<string,T.Group>,time:n
 }
 
 export function sampleParticleFields(entities:Entity[],models:Map<string,T.Group>,time:number){
- const fields=entities.filter(e=>e.field&&e.visible&&time>=e.field.start&&(!e.field.end||time<e.field.end));
+ const fields=entities.filter(e=>e.field&&entityVisibleAt(e,time)&&time>=e.field.start&&(!e.field.end||time<e.field.end));
  for(const e of entities){const material=models.get(e.id)?.userData.visualMaterial as T.ShaderMaterial|undefined;if(!material)continue;const selected=fields.filter(f=>!f.field!.targets.length||f.field!.targets.includes(e.id)).slice(0,8),u=material.uniforms;u.fieldCount.value=selected.length;
  selected.forEach((f,i)=>{const config=f.field!,pos=models.get(f.id)!.position,dir=new T.Vector3(0,0,1).applyEuler(new T.Euler(...f.rotation));u.fieldCenters.value[i].set(pos.x,pos.y,pos.z,config.radius);u.fieldSettings.value[i].set(Object.keys(FIELD_TYPES).indexOf(config.type),numberAt(config.strength,time),config.falloff,time-config.start+(config.timeOffset??0));u.fieldDirections.value[i].set(dir.x,dir.y,dir.z,0);});}
 }

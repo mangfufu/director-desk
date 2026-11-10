@@ -22,6 +22,14 @@ try {
     // Electron's native will-prevent-unload handler owns this dialog, not CDP.
     page.on('dialog', () => {});
     await page.waitForSelector('.application-menu');
+    await page.locator('#resource-home').click();
+    await app.evaluate(({BrowserWindow})=>{globalThis.fileTest.choice=1;BrowserWindow.getAllWindows()[0].close();});
+    await page.waitForTimeout(250);
+    const cleanDialog=await app.evaluate(()=>globalThis.fileTest.dialogs.at(-1));
+    assert.equal(cleanDialog.title,'退出导演台');assert.equal(cleanDialog.message,'确定要退出吗');
+    assert.deepEqual(cleanDialog.buttons,['确认','取消']);assert.equal(cleanDialog.cancelId,1);
+    assert.equal(await page.locator('.application-menu').isVisible(),true,'cancel keeps clean project open');
+    await app.evaluate(()=>{globalThis.fileTest.choice=2;});
     await page.locator('[data-menu="edit"]').click();await page.locator('#settings-toggle').click(); await page.locator('[data-settings-category="files"]').click(); await page.locator('[data-setting="files"]').click();
     assert.equal(await page.locator('#location-projects').inputValue(), projects);
     assert.equal(await page.locator('#location-exports').inputValue(), exports);
@@ -54,7 +62,8 @@ try {
     };
     await attemptClose();
     let state = await app.evaluate(() => globalThis.fileTest);
-    assert.deepEqual(state.dialogs.at(-1).buttons, ['保存并退出','不保存退出','取消']);
+    assert.deepEqual(state.dialogs.at(-1).buttons, ['保存并退出','不保存并退出','取消']);
+    assert.equal(state.dialogs.at(-1).title,'退出导演台');assert.equal(state.dialogs.at(-1).message,'检测到未保存更改');
     assert.equal(state.dialogs.at(-1).cancelId, 2); assert.equal(state.saves.length, 0);
     await app.evaluate(() => { globalThis.fileTest.choice = 0; });
     await attemptClose();
@@ -77,9 +86,13 @@ try {
     assert.equal(saved.scenes.find(s => s.id === saved.activeSceneId).state.duration, 36);
     const second = await electron.launch({ executablePath: createRequire(import.meta.url)('electron'), args: [path.resolve(process.env.DIRECTOR_TEST_APP || '.audit/desktop-app'), `--director-test-profile=${profile}`], env });
     try {
-        await second.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
+        await second.evaluate(({ dialog }) => {globalThis.reopenedExit=[];dialog.showMessageBoxSync = (_,options) => {globalThis.reopenedExit.push(options);return 1;}; });
         const reopened = await second.firstWindow(); reopened.on('dialog', () => {});
         await reopened.waitForSelector('.application-menu');
+        await reopened.waitForFunction(()=>document.querySelector('#duration')?.value==='36');
+        await reopened.locator('#resource-home').click();
+        await second.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await reopened.waitForTimeout(250);
+        assert.equal(await second.evaluate(()=>globalThis.reopenedExit.at(-1).message),'确定要退出吗','saved recovered project has no unsaved changes');
         const locations = await reopened.evaluate(() => window.directorDesktop.files('locations'));
         assert.equal(locations.data.projects, chosen); assert.equal(locations.data.exports, exports);
         await reopened.locator('#duration').fill('37'); await reopened.locator('#duration').press('Tab');
@@ -87,6 +100,18 @@ try {
         await second.evaluate(({ BrowserWindow }) => { setTimeout(() => BrowserWindow.getAllWindows()[0].close(), 0); });
         await discarded;
         assert.equal(JSON.parse(await fs.readFile(path.join(root, 'saved.director'))).scenes[0].state.duration, 36);
-    } finally { await second.close().catch(() => {}); }
+    } finally { await second.evaluate(({app})=>app.exit(0)).catch(()=>{});await second.close().catch(() => {}); }
+    const cleanProfile=path.join(root,'clean-profile');await fs.mkdir(cleanProfile);
+    const third=await electron.launch({executablePath:createRequire(import.meta.url)('electron'),args:[path.resolve(process.env.DIRECTOR_TEST_APP||'.audit/desktop-app'),`--director-test-profile=${cleanProfile}`],env});
+    try {
+        await third.evaluate(({dialog})=>{globalThis.cleanExit=[];dialog.showMessageBoxSync=(_,options)=>{globalThis.cleanExit.push(options);return 1;};});
+        const p=await third.firstWindow();p.on('dialog',()=>{});await p.waitForSelector('.application-menu');
+        await p.locator('#resource-home').click();
+        await third.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await p.waitForTimeout(250);
+        assert.deepEqual(await third.evaluate(()=>globalThis.cleanExit.at(-1).buttons),['确认','取消']);
+        await third.evaluate(({dialog})=>{dialog.showMessageBoxSync=()=>0;});
+        const ended=third.waitForEvent('close',{timeout:30000});
+        await third.evaluate(({BrowserWindow})=>setTimeout(()=>BrowserWindow.getAllWindows()[0].close(),0));await ended;
+    } finally {await third.evaluate(({app})=>app.exit(0)).catch(()=>{});await third.close().catch(()=>{});}
     console.log(JSON.stringify({ ok: true, checks: ['native directory settings', 'restart preserves folders', 'cancel exit', 'cancel save stays open', 'write failure stays open', 'actual named video export to default directory', 'IPC preserves existing files and rejects paths', 'save finishes before exit', 'discard leaves saved file unchanged'] }));
-} finally { if (!closed) await app.close().catch(() => {}); }
+} finally { if (!closed) {await app.evaluate(({app})=>app.exit(0)).catch(()=>{});await app.close().catch(() => {});} }

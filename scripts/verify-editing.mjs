@@ -57,7 +57,7 @@ export async function verifyEditing(page, baseline) {
 
     await page.locator('#placement-snap').selectOption('0.5');
     await page.evaluate(() => window.__director.getEngine().orbit.target.set(.26, .8, .74));
-    await page.locator('[data-side="assets"]').click(); await page.locator('#asset-category').selectOption('搭建'); await page.locator('#search').fill('cube'); await page.locator('[data-asset="cube"]').click();
+    await page.locator('#resource-home').click(); await page.locator('[data-side="assets"]').click(); await page.locator('#asset-category').selectOption('搭建'); await page.locator('#search').fill('cube'); await page.locator('[data-asset="cube"]').click();
     const cube = (await project()).entities.find(e => e.asset === 'cube'); assert.deepEqual(cube.position, [.5, 0, .5]);
     await field('pos.1', 2); await page.locator('[data-act="ground-selected"]').click();
     assert.ok(Math.abs((await project()).entities.find(e => e.id === cube.id).position[1]) < .00001);

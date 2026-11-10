@@ -8,12 +8,17 @@ export interface SkillRequest { action: 'list' | 'read' | 'enable' | 'remove' | 
 export interface AgentEvent { type: string; text?: string; name?: string; status?: string; model?: string; channel?: string; sessionId: string; summary?: unknown; usage?: unknown; timing?: { rounds: number; modelMs: number; toolMs: number; toolCalls: number; totalMs: number; firstTextMs?: number } }
 declare global {
     interface Window { directorDesktop?: {
+        windowChrome?: 'custom';
+        reconstruction?(action: string, data?: Record<string, unknown>): Promise<DesktopResult<any>>;
+        appMetrics?(): Promise<DesktopResult<{ cpu: number | null; memoryBytes: number | null }>>;
+        windowControl?(command: 'state' | 'minimize' | 'maximize' | 'close'): Promise<DesktopResult<{ maximized: boolean; fullscreen: boolean }>>;
+        onWindowState?(callback: (state: { maximized: boolean; fullscreen: boolean }) => void): () => void;
         wslPointerInput?: boolean;
         setLanguage?(language: 'zh-CN' | 'en'): void;
         extensions?(args:Record<string,unknown>):Promise<DesktopResult<any>>;
         onExtensionRequest?(callback:(request:{id:string;plugin:string;method:string;args:any})=>Promise<unknown>):()=>void;
         pathForFile?(file: File): string;
-        closingState?(data: { busy: boolean }): void;
+        closingState?(data: { busy: boolean; dirty: boolean }): void;
         skills?(data: SkillRequest): Promise<DesktopResult<SkillResult>>;
         builtinSkill?(): Promise<DesktopResult<typeof import('./skill.ts').BUILTIN_SKILL>>;
         onBuiltinSkill?(callback: (data: typeof import('./skill.ts').BUILTIN_SKILL) => void): () => void;
@@ -32,6 +37,7 @@ declare global {
         mcpLan(enabled?: boolean): Promise<DesktopResult<{ enabled: boolean; url?: string; lanEnabled?: boolean; lanUrl?: string; lanIp?: string; lanPort?: number }>>;
         copyMcp(client?: 'http' | 'claude-code' | 'claude-desktop' | 'stdio' | { client: string; useLan?: boolean }, useLan?: boolean): Promise<DesktopResult>;
         copyText?(text: string): Promise<DesktopResult>;
+        editText?(command: 'cut' | 'copy' | 'paste' | 'selectAll'): Promise<DesktopResult>;
         resetMcp(): Promise<DesktopResult<{ enabled: boolean; url?: string; lanEnabled?: boolean; lanUrl?: string; lanIp?: string; lanPort?: number }>>;
         onEvent(callback: (event: AgentEvent) => void): () => void;
         onTool(callback: (name: string, args: Record<string, unknown>) => Promise<unknown>): () => void;

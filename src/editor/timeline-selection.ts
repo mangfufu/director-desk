@@ -5,7 +5,7 @@ import type { Project } from '../model.ts';
 let clips: TimelineSelection[] = [], entities: string[] = [];
 let keys = new Set<string>();
 let timeRange: { start: number; end: number } | null = null;
-export const selectionKey = (s: TimelineSelection) => JSON.stringify(s.kind === 'cut' ? [s.kind, s.index] : [s.kind, s.entityId, s.kind === 'action' ? s.id : s.index]);
+export const selectionKey = (s: TimelineSelection) => JSON.stringify(s.kind === 'cut' ? [s.kind, s.index] : [s.kind, s.entityId, s.kind !== 'path' ? s.id : s.index]);
 export const selectedClips = () => clips.map(s => ({ ...s }));
 export const selectedEntities = () => [...entities];
 export const selectedTimeRange = () => timeRange && { ...timeRange };

@@ -3,7 +3,7 @@ import type { Entity } from '../model.ts';
 /** These values are consumed by sampling, helpers or labels, not by model construction.
  * Keep geometry, initial poses and animation registration data in the key. */
 export function modelConstructionKey(entity: Entity) {
-    const { surface, deform, warp, name, locked, reference, position, rotation, visible, floorId, structureLink,
+    const { surface, deform, warp, name, locked, reference, position, rotation, visible, visibility, floorId, structureLink,
         contactAnchors, handBinding, path, memberPaths, face, faceTarget, pose, poseKeys, camera,
         actionBlend, footContact, physics, ...construction } = entity;
     const runtimeColor = entity.kind === 'actor' || entity.kind === 'crowd' || !!entity.external;

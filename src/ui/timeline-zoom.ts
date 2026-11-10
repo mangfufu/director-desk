@@ -1,5 +1,6 @@
 import type { AppContext } from '../app-context.ts';
 import { $ } from './common.ts';
+import { layoutTimelinePlayhead, scrollTimelinePlayhead } from './timeline-playhead.ts';
 let extent = 60;
 let tickRuler:HTMLElement|null=null,tickKey='';
 export const pixelsPerSecond = () => 60 * Number($<HTMLSelectElement>('#timeline-zoom').value);
@@ -19,6 +20,7 @@ export function sizeTimeline() {
     container.style.setProperty('--timeline-pps', pixelsPerSecond() + 'px');
     tracks.style.width = label + Number(ruler.dataset.duration) * pixelsPerSecond() + 'px';
     drawTicks();
+    layoutTimelinePlayhead();
 }
 function drawTicks() {
     const container = $('#timeline-content'), ruler = container.querySelector<HTMLElement>('.ruler'); if (!ruler) return;
@@ -68,6 +70,7 @@ export function bindTimelineZoom(ctx: AppContext) {
         }
     }, { passive:false });
     container.addEventListener('scroll', () => {
+        scrollTimelinePlayhead(container.scrollLeft);
         drawTicks();
         // Native thumb dragging must keep a fixed range. Extending here changes
         // the thumb geometry under the pointer and causes a page-sized jump.

@@ -1,3 +1,4 @@
+import { entityVisibleAt } from './scenes/visibility.ts';
 import { PluginRenderHooks } from './plugins/render-hooks.ts';
 import {collectWarps} from './visuals/warps.ts';
 import {sampleVisual,disposeVisual} from './visuals/runtime.ts';
@@ -8,15 +9,16 @@ import { SceneLighting } from './lighting/runtime.ts';
 import { installWallTransmission, isWallEntity } from './lighting/wall-transmission.ts';
 import { fitFeetToSurface } from './editor/foot-contact.ts';
 import { SceneRenderCache } from './editor/scene-render-cache.ts';
+import { InteractionPreview } from './editor/interaction-preview.ts';
 import type { DepthRange } from './cinematography/depth-video.ts';
 import { DepthRangeSampler } from './cinematography/depth-range-sampler.ts';
 import { FreehandPathInput } from './editor/freehand-path-input.ts';
 import { memberSample } from './navigation/member-paths.ts';
 import { pathDrawingPosition } from './editor/path-drawing-position.ts';
 import { ReferenceLabels } from './production/reference-labels.ts';
-import { cameraLookAt } from './animation/camera-look.ts';
-import { applyCameraEffects, cameraFocal, cameraFocusDistance } from './cinematography/camera-effects.ts';
-import { cameraAimResponseQuaternion } from './cinematography/aim-response.ts';
+import { cameraFocusDistance } from './cinematography/camera-effects.ts';
+import { sampleCamera, cameraTargetPosition } from './cinematography/sample-camera.ts';
+export { configureCamera } from './cinematography/sample-camera.ts';
 import { ShotEffects } from './cinematography/shot-effects.ts';
 import { addZoneHelpers } from './editor/zone-helpers.ts';
 import { InitialPoseRuntime } from './scenes/initial-pose-runtime.ts';
@@ -53,14 +55,6 @@ import { jointAngles } from './assets/joint-schema.ts';
 import type { Joint } from './model.ts';
 import { samplePose } from './timeline.ts';
 import { isAnimalAsset } from './asset-catalog.ts';
-export function configureCamera(camera: T.PerspectiveCamera, focal: number, aspect: number) {
-    camera.aspect = aspect;
-    camera.filmGauge = 36;
-    camera.setFocalLength(focal);
-    camera.near = .025;
-    camera.far = 2000;
-    camera.updateProjectionMatrix();
-}
 interface Callbacks {
     select: (id: string) => void;
     joint?: (joint: Joint) => void;
@@ -150,6 +144,15 @@ export class Engine {
     exporting = false;
     monochrome = false;
     previewQuality: 'full' | 'draft' = 'full';
+    adaptivePreview = true;
+    private interactionPreview = new InteractionPreview();
+    private sampleCost = 0;
+    get draftPreview() { return !this.exporting && (this.previewQuality === 'draft' || this.interactionPreview.draft); }
+    updateInteractionPreview(active: boolean) {
+        if (this.interactionPreview.update(active, this.adaptivePreview && this.previewQuality === 'full')) {
+            this.resizeNeeded = true; this.requestSample();
+        }
+    }
     setPreviewQuality(value: 'full' | 'draft') { this.previewQuality = value; this.resizeNeeded = true; this.sample(this.time); this.render(); }
     private cb: Callbacks;
     private pointerDown = [0, 0];
@@ -158,6 +161,9 @@ export class Engine {
     private resizeObserver: ResizeObserver;
     private resizeNeeded = true;
     private needsRender = true;
+    needsSample = false;
+    /** Timing edits schedule one evaluation; holding a pointer is not a change. */
+    requestSample() { this.needsSample = true; }
     private renderedView = '';
     private events = new AbortController();
     constructor(project: Project, stage: HTMLElement, shot: HTMLElement, callbacks: Callbacks) {
@@ -309,13 +315,15 @@ export class Engine {
         this.cb.transformEnd(cancel);
     }
     sample(time: number, physicsBaseline = false) {
+        const sampleStarted = performance.now();
+        this.needsSample = false;
         this.physics.restore();
         this.needsRender = true;
         this.time = time;
         for (const e of this.project.entities) {
             const root = this.models.get(e.id)!;
             this.initialPoses.restore(e);
-            root.visible = e.visible;
+            root.visible = entityVisibleAt(e,time);
             root.position.copy(entityPosition(e, time));
             root.rotation.set(e.rotation[0], e.kind === 'actor' || e.kind === 'crowd' ? entityYaw(e, time, this.project) : e.rotation[1], e.rotation[2]);
             if (isExternalModel(e)) this.externalModels.sample(e, this.monochrome, time);
@@ -342,7 +350,7 @@ export class Engine {
             }
         }
         this.deformations.prepareVisuals();
-        for(const e of this.project.entities)if(e.visual||e.field||e.warp)sampleVisual(e,this.models.get(e.id)!,time,this.previewQuality==='draft'&&!this.exporting);
+        for(const e of this.project.entities)if(e.visual||e.field||e.warp)sampleVisual(e,this.models.get(e.id)!,time,this.draftPreview);
         for(const e of this.project.entities)if(e.visual?.preset==='portal'){const mesh=this.models.get(e.id)?.children[0];if(mesh)mesh.userData.portalCamera=this.cameras.get(e.visual.cameraId??'');}
         sampleFields(this.project.entities,this.models,time);sampleParticleFields(this.project.entities,this.models,time);
         this.deformations.sample(this.project.entities,this.models,time);
@@ -394,61 +402,26 @@ export class Engine {
         for (const e of this.project.entities) if (e.handBinding) {
             const root = this.models.get(e.id)!;
             applyHandBinding(root, e.handBinding, this.handFrame(e.handBinding));
-            root.visible = e.visible && !!this.project.entities.find(a => a.id === e.handBinding!.actorId)?.visible;
+            root.visible = shotEntityVisible(this.project,e,null,time);
         }
         this.contactMarker.update(this.project.entities, this.models);
         this.surfaces.textures.maxEdge=this.previewQuality==='draft'&&!this.exporting?1024:2048;
         this.surfaces.sample(this.project,this.models,time);
         this.lighting.sample(this.scene, this.project.lighting, this.project.entities, this.models, time, [this.editorRenderer, this.shotRenderer]);
         for (const e of this.project.entities.filter(x => x.kind === 'camera')) {
-            const c = e.camera!, camera = this.cameras.get(e.id)!;
-            camera.position.copy(entityPosition(e, time));
-            const target = c.targetId ? this.project.entities.find(x => x.id === c.targetId) : null;
-            if ((c.mode === 'follow' || c.mode === 'pov') && target) {
-                const targetRoot = this.models.get(target.id)!;
-                const offset = new T.Vector3(...c.offset);
-                if (c.mode === 'pov') {
-                    const rig = this.rigs.get(target.id);
-                    if (rig && c.inheritRotation) {
-                        offset.y -= rig.headRestHeight ?? 1.53;
-                        camera.position.copy(rig.head.localToWorld(offset));
-                        const q = rig.head.getWorldQuaternion(new T.Quaternion());
-                        camera.lookAt(camera.position.clone().add(new T.Vector3(0, 0, 1).applyQuaternion(q)));
-                    }
-                    else {
-                        camera.position.copy(targetRoot.localToWorld(offset));
-                        const q = targetRoot.getWorldQuaternion(new T.Quaternion());
-                        camera.lookAt(camera.position.clone().add(new T.Vector3(0, 0, 1).applyQuaternion(q)));
-                    }
-                }
-                else {
-                    const lagTime = Math.max(0, time - (c.effects?.followLag ?? 0));
-                    const physical = this.physics.rootAt(target.id, lagTime);
-                    if (c.inheritRotation)
-                        offset.applyAxisAngle(new T.Vector3(0, 1, 0), physical?.rotation.y ?? (c.effects?.followLag ? entityYaw(target, lagTime, this.project) : targetRoot.rotation.y));
-                    camera.position.copy(physical?.position ?? (c.effects?.followLag && !target.handBinding ? entityPosition(target, lagTime) : targetRoot.position)).add(offset);
-                    camera.lookAt(this.targetPosition(e));
-                }
-            }
-            else if (c.aim === 'manual')
-                camera.rotation.set(...e.rotation);
-            else
-                camera.lookAt(this.targetPosition(e));
-            const aimResponse = cameraAimResponseQuaternion(e, this.project, time, target ? this.models.get(target.id) : undefined, target ? at=>this.physics.rootAt(target.id,at) : undefined);
-            if (aimResponse) camera.quaternion.copy(aimResponse);
-            configureCamera(camera, cameraFocal(c.effects, time, c.focal, camera.position.distanceTo(this.targetPosition(e))), aspectNumber(this.project.aspect));
-            applyCameraEffects(camera, c.effects, time);
-            camera.updateMatrixWorld(true);
+            const camera = this.cameras.get(e.id)!;
+            sampleCamera(camera, e, this.project, time, {models: this.models, rigs: this.rigs, rootAt: (id, at) => this.physics.rootAt(id, at)});
             const visual = this.cameraVisuals.get(e.id)!;
             visual.position.copy(camera.position);
             visual.quaternion.copy(camera.quaternion);
-            visual.visible = e.visible;
+            visual.visible = entityVisibleAt(e,this.time);
         }
         if (!this.dragging)
             this.syncProxy();
         this.selectionBox?.update();
+        this.sampleCost = performance.now() - sampleStarted;
     }
-    targetPosition(e: Entity) { const c = e.camera!; if (c.targetPath) return cameraLookAt(c.targetPath, this.time); const target = this.project.entities.find(x => x.id === c.targetId); return target ? (this.models.get(target.id)?.position.clone()??entityPosition(target, this.time)).add(new T.Vector3(0, c.targetHeight, 0)) : new T.Vector3(...c.target); }
+    targetPosition(e: Entity) { return cameraTargetPosition(e, this.project, this.time, this.models); }
     cameraEntity(id = this.previewId) { const realId = id === 'program' ? activeCameraId(this.project, this.time) : id; return this.project.entities.find(e => e.id === realId && e.kind === 'camera') ?? this.project.entities.find(e => e.kind === 'camera')!; }
     getShotCamera(id = this.previewId) { return this.cameras.get(this.cameraEntity(id).id)!; }
     spatialReport(options: SpatialOptions = {}) {
@@ -460,7 +433,7 @@ export class Engine {
         try { this.sample(at); return collectSpatialReport(this, cameraId, options.includeCrowdMembers ?? true, options.occlusionKeys); }
         finally { this.sample(previous); }
     }
-    select(id: string, point = -1) { if(this.selectedJoint&&(id!==this.jointOwner||point>=0))this.selectJoint(''); this.selected = id; this.selectedPoint = point; this.setPlacementSnap(this.placementSnap); this.refreshHelpers(); this.syncProxy(); const e = this.project.entities.find(e => e.id === id); if (e && !e.locked && !this.drawingPath && editorEntityVisible(this.project, e) && !this.jointEditingBlocked())
+    select(id: string, point = -1) { if(this.selectedJoint&&(id!==this.jointOwner||point>=0))this.selectJoint(''); this.selected = id; this.selectedPoint = point; this.setPlacementSnap(this.placementSnap); this.refreshHelpers(); this.syncProxy(); const e = this.project.entities.find(e => e.id === id); if (e && !e.locked && !this.drawingPath && editorEntityVisible(this.project, e,this.time) && !this.jointEditingBlocked())
         this.gizmo.attach(this.proxy);
     else
         this.gizmo.detach(); }
@@ -471,8 +444,6 @@ export class Engine {
         if(!this.selectedJoint&&joint)this.previousTransformMode=this.gizmo.getMode();
         this.selectedJoint=joint;this.jointOwner=joint?this.selected:'';this.jointNodes.select(joint);this.gizmo.setMode(joint?'rotate':this.previousTransformMode);
         this.gizmo.setSpace(joint?'local':'world');this.jointBase=undefined;this.syncProxy();this.needsRender=true;
-        const e=this.project.entities.find(e=>e.id===this.selected);
-        if(e&&!e.locked&&!this.jointEditingBlocked())this.gizmo.attach(this.proxy);else this.gizmo.detach();
     }
     private captureJointBase() {
         const rig=this.rigs.get(this.selected),e=this.project.entities.find(e=>e.id===this.selected);
@@ -493,13 +464,17 @@ export class Engine {
         if (this.dragging)
             return;
         const e = this.project.entities.find(x => x.id === this.selected);
-        if (!e)
-            return;
+        if (!e) { this.gizmo.detach(); return; }
+        const shown=editorEntityVisible(this.project,e,this.time);
+        if(e.locked||this.drawingPath||!shown||this.jointEditingBlocked())this.gizmo.detach();
+        else if(this.gizmo.object!==this.proxy)this.gizmo.attach(this.proxy);
+        if(!this.selectionBox && shown && e.kind!=='camera') {
+            const root=this.models.get(e.id);if(root){this.selectionBox=new T.BoxHelper(root,'#a6c5e5');this.helpers.add(this.selectionBox);}
+        }
+        if(this.selectionBox)this.selectionBox.visible=shown;
         if(this.selectedJoint){
             const rig=this.rigs.get(e.id),bone=rig&&humanJointNode(rig,this.selectedJoint);
             if(!bone||e.kind!=='actor'||e.external||isAnimalAsset(e.asset)){this.selectJoint('');return;}
-            if(e.locked||this.drawingPath||!editorEntityVisible(this.project,e)||this.jointEditingBlocked())this.gizmo.detach();
-            else if(this.gizmo.object!==this.proxy)this.gizmo.attach(this.proxy);
             bone.getWorldPosition(this.proxy.position);bone.getWorldQuaternion(this.proxy.quaternion);this.proxy.scale.set(1,1,1);return;
         }
         const selection = this.selectionIds;
@@ -526,7 +501,7 @@ export class Engine {
     private collectSnapTargets(exclude: string) {
         const targets: SnapBounds[] = [];
         for (const entity of this.project.entities) {
-            if (entity.id === exclude || entity.kind !== 'prop' || entity.light || !editorEntityVisible(this.project, entity)) continue;
+            if (entity.id === exclude || entity.kind !== 'prop' || entity.light || !editorEntityVisible(this.project, entity,this.time)) continue;
             const root = this.models.get(entity.id);
             const bounds = root ? objectBounds(root, entity.id, entity.name) : null;
             if (bounds) targets.push(bounds);
@@ -580,7 +555,7 @@ export class Engine {
         this.helpers.add(grid);
         addZoneHelpers(this.helpers, this.project.zones ?? []);
         const e = this.project.entities.find(x => x.id === this.selected);
-        if (e && editorEntityVisible(this.project, e)) {
+        if (e && editorEntityVisible(this.project, e,this.time)) {
             const root = this.models.get(e.id);
             if (root && e.kind !== 'camera') {
                 this.selectionBox = new T.BoxHelper(root, '#a6c5e5');
@@ -615,12 +590,12 @@ export class Engine {
     private prepareView(editor: boolean, id = this.previewId) {
         const rig=this.rigs.get(this.selected),selected=this.project.entities.find(e=>e.id===this.selected);
         this.jointNodes.bind(rig&&selected?.kind==='actor'&&!selected.external&&!isAnimalAsset(selected.asset)?rig:undefined);
-        this.jointNodes.root.visible=editor&&this.jointNodesVisible&&!!rig&&!!selected&&editorEntityVisible(this.project,selected)&&!this.drawingPath;
+        this.jointNodes.root.visible=editor&&this.jointNodesVisible&&!!rig&&!!selected&&editorEntityVisible(this.project,selected,this.time)&&!this.drawingPath;
         if(editor&&this.jointNodes.root.visible)this.jointNodes.update(this.editorCamera,this.stage.clientHeight);
         const cameraEntity = this.cameraEntity(id);
         for (const e of this.project.entities) {
             const root = this.models.get(e.id); if (!root) continue;
-            root.visible = (editor ? editorEntityVisible(this.project, e) : shotEntityVisible(this.project, e, cameraEntity.camera)) && (!e.visual || this.time>=e.visual.start&&(!e.visual.end||this.time<e.visual.end));
+            root.visible = (editor ? editorEntityVisible(this.project, e,this.time) : shotEntityVisible(this.project, e, cameraEntity.camera,this.time)) && (!e.visual || this.time>=e.visual.start&&(!e.visual.end||this.time<e.visual.end));
         }
         this.contactMarker.update(this.project.entities, this.models);
         const room = this.project.room;
@@ -637,7 +612,7 @@ export class Engine {
         this.scene.background = new T.Color(editor ? '#252a2d' : this.project.lighting?.background ?? '#c6c8c6');
     }
     resize() {
-        const ratio = Math.min(window.devicePixelRatio, 1.5) * (this.previewQuality === 'draft' ? .65 : 1);
+        const ratio = Math.min(window.devicePixelRatio, 1.5) * (this.draftPreview ? .65 : 1);
         this.editorRenderer.setPixelRatio(ratio); this.shotRenderer.setPixelRatio(ratio);
         const sw = this.stage.clientWidth, sh = this.stage.clientHeight;
         if (sw && sh) {
@@ -658,6 +633,7 @@ export class Engine {
         this.orbit.update();
         const view = `${this.previewId}:${this.gridVisible}:${this.drawingPath}:${this.positionKeying}:${this.objectSnapEnabled}:${this.objectSnapTarget}`;
         if (!force && !this.needsRender && !this.resizeNeeded && view === this.renderedView) return;
+        const renderStarted = performance.now();
         this.needsRender = false; this.renderedView = view;
         if (this.resizeNeeded)
             this.resize();
@@ -673,6 +649,10 @@ export class Engine {
             this.renderShot(this.previewId);
         }
         this.onFrame();
+        if (this.interactionPreview.record(this.sampleCost + performance.now() - renderStarted)) {
+            this.resizeNeeded = true; this.requestSample();
+        }
+        this.sampleCost = 0;
     }
     suggestDepthRange(time = this.time, cameraId = this.previewId, ids?: string[]) {
         if (this.exporting) throw Error('导出期间无法取值');
@@ -787,7 +767,7 @@ export class Engine {
     }
     getProjectedLabels() {
         const w = this.stage.clientWidth, h = this.stage.clientHeight;
-        return this.project.entities.filter(e => editorEntityVisible(this.project, e) && (e.kind === 'actor' || e.kind === 'camera')).map(e => { const p = this.models.get(e.id)!.position.clone().add(new T.Vector3(0, e.kind === 'actor' ? e.height + .16 : .25, 0)); p.project(this.editorCamera); return { id: e.id, name: e.name.split(' · ')[0], color: e.color, x: (p.x * .5 + .5) * w, y: (-.5 * p.y + .5) * h, visible: p.z >= -1 && p.z <= 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1 }; });
+        return this.project.entities.filter(e => editorEntityVisible(this.project, e,this.time) && (e.kind === 'actor' || e.kind === 'camera')).map(e => { const p = this.models.get(e.id)!.position.clone().add(new T.Vector3(0, e.kind === 'actor' ? e.height + .16 : .25, 0)); p.project(this.editorCamera); return { id: e.id, name: e.name.split(' · ')[0], color: e.color, x: (p.x * .5 + .5) * w, y: (-.5 * p.y + .5) * h, visible: p.z >= -1 && p.z <= 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1 }; });
     }
     projectionSignature(id = this.previewId) { const c = this.getShotCamera(id); return { cameraId: this.cameraEntity(id).id, time: this.time, world: c.matrixWorld.toArray(), projection: c.projectionMatrix.toArray() }; }
     dispose() {

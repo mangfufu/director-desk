@@ -1,4 +1,5 @@
 import { assertExtensionData, type ExtensionData } from './plugins/project-data.ts';
+import { invalidField, validateAt } from './project-validation.ts';
 import { assertDepthVideo, type DepthVideo } from './cinematography/depth-video.ts';
 import { cloneProjectData } from './resources/model-data.ts';
 import { findAsset, isAnimalAsset, assetJoints } from './asset-catalog.ts';
@@ -33,6 +34,7 @@ export type Vec3 = [
     number,
     number
 ];
+import { assertVisibility, type VisibilityClip } from './scenes/visibility.ts';
 export type Kind = 'actor' | 'prop' | 'camera' | 'crowd';
 export type Action = 'idle' | 'walk' | 'run' | 'sit' | 'standup' | 'crouch' | 'crawl' | 'jump' | 'lie' | 'fall' | 'wave' | 'point' | 'turn' | 'guard' | 'punch' | 'kick' | 'roundhouse' | 'flying-kick' | 'dodge' | 'throw' | 'push' | 'stumble' | 'roll';
 export type Joint = JointName;
@@ -85,6 +87,7 @@ export interface CameraConfig {
     hiddenEntityIds?: string[];
 }
 export interface Entity {
+    visibility?: VisibilityClip[] | null;
     memberPaths?: MotionPath[] | null;
     physics?: PhysicsBody | null;
     surface?: SurfaceAppearance | null;
@@ -251,8 +254,10 @@ export function assertProject(input: unknown): asserts input is Project {
     const v3 = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every(n);
     if (!p || p.format !== 'director-desk' || ![1, 2].includes(p.version))
         fail('不支持的文件格式或版本');
-    if (typeof p.name !== 'string' || p.name.length > 200 || !n(p.duration) || p.duration <= 0 || !FRAME_RATES.includes(p.fps) || !ASPECTS.includes(p.aspect))
-        fail('名称、时长、画幅或帧率错误');
+    if (typeof p.name !== 'string' || p.name.length > 200) invalidField('name', '名称须为不超过 200 字的字符串');
+    if (!n(p.duration) || p.duration <= 0) invalidField('duration', '时长须为大于 0 的有限秒数');
+    if (!FRAME_RATES.includes(p.fps)) invalidField('fps', `帧率须为 ${FRAME_RATES.join(' / ')}`);
+    if (!ASPECTS.includes(p.aspect)) invalidField('aspect', `画幅须为 ${ASPECTS.join(' / ')}`);
     if (!p.room || typeof p.room.enabled !== 'boolean' || ![p.room.width, p.room.depth, p.room.height].every(x => n(x) && x >= 2.3 && x <= 10000))
         fail('房间各尺寸需在 2.3 至 10000 米之间');
     if (!Array.isArray(p.entities) || !Array.isArray(p.cuts) || !Array.isArray(p.references))
@@ -261,17 +266,19 @@ export function assertProject(input: unknown): asserts input is Project {
     assertLighting(p.lighting);
     const safeId=(id:unknown)=>typeof id==='string' && /^[\p{L}\p{N}_:.-]{1,200}$/u.test(id);
     const ids = new Set<string>();
-    for (const e of p.entities) {
+    for (const [entityIndex,e] of p.entities.entries()) validateAt(`entities[${entityIndex}]`, () => {
         if (!e || !safeId(e.id) || ids.has(e.id) || !['actor', 'prop', 'camera', 'crowd'].includes(e.kind))
             fail('对象标识或类型错误');
         ids.add(e.id);
+        validateAt('visibility',()=>assertVisibility(e.visibility));
         if(e.kind==='camera' ? e.asset!=='camera' : e.asset !== 'external-model' && findAsset(e.asset)?.kind !== e.kind)fail('白模资产不存在或类型不匹配');
         if(e.kind!=='camera' && e.camera!==null)fail('非摄影机对象不应包含摄影机配置');
         if(e.path!==null && (!e.path || typeof e.path!=='object' || Array.isArray(e.path)))fail('路径数据错误');
-        if (typeof e.name !== 'string' || e.name.length > 200 || typeof e.asset !== 'string' || !/^#[0-9a-f]{6}$/i.test(e.color))
-            fail('对象名称或颜色错误');
-        if (!v3(e.position) || !v3(e.rotation) || !v3(e.scale) || e.scale.some(x => x <= 0))
-            fail('对象坐标错误');
+        if (typeof e.name !== 'string' || e.name.length > 200) invalidField('name', '名称须为不超过 200 字的字符串');
+        if (typeof e.asset !== 'string') invalidField('asset', '须为资产 ID 字符串');
+        if (!/^#[0-9a-f]{6}$/i.test(e.color)) invalidField('color', '颜色须为六位十六进制，例如 #808080');
+        for (const field of ['position','rotation','scale'] as const) if (!v3(e[field])) invalidField(field, '须为三个有限数字组成的数组 [x,y,z]');
+        if (e.scale.some(x => x <= 0)) invalidField('scale', '三个轴的缩放值均须大于 0');
         if (typeof e.visible !== 'boolean' || typeof e.locked !== 'boolean' || !['slim', 'normal', 'broad'].includes(e.build) || !['male', 'female'].includes(e.gender) || !n(e.height) || e.height < (isAnimalAsset(e.asset) ? .03 : .2) || e.height > 10)
             fail('人物参数错误');
         if (!['path', 'fixed', 'target'].includes(e.face) || typeof e.faceTarget !== 'string' || typeof e.reference !== 'string')
@@ -292,21 +299,27 @@ export function assertProject(input: unknown): asserts input is Project {
         if (isAnimalAsset(e.asset) && e.footContact) fail('该动物尚不支持自动脚底贴合');
         if(e.clips.some(c=>!c))fail('动作片段不能为空');
         if(new Set(e.clips.map(c=>c.id)).size!==e.clips.length)fail('动作片段标识重复');
-        const clips = [...e.clips].sort((a, b) => a.start - b.start);
+        const clips = e.clips.map((clip,index)=>({clip,index})).sort((a, b) => a.clip.start - b.clip.start);
         for (let i = 0; i < clips.length; i++) {
-            const c = clips[i];
-            assertNativeClip(c, !!e.external);
-            assertRetargetClip(c, e, p);
+            const c = clips[i].clip;
+            validateAt(`clips[${clips[i].index}]`,()=>{
+            validateAt('native',()=>assertNativeClip(c, !!e.external));
+            validateAt('retarget',()=>assertRetargetClip(c, e, p));
             if ([c.offset,c.progressOffset,c.sourceDuration,c.turnAmount].some(v=>v!==undefined && (!n(v)||v<0)) || (c.sourceDuration!==undefined && c.sourceDuration<=0)) fail('动作分割参数错误');
             if (c.name !== undefined && (typeof c.name !== 'string' || !c.name.trim() || c.name.length > 100)) fail('动作片段名称无效');
-            if (!safeId(c.id) || (!['native', 'retarget'].includes(c.action) && !Object.hasOwn(ACTIONS,c.action)) || ![c.start, c.end, c.speed].every(n) || c.start < 0 || c.end <= c.start || c.speed <= 0 || (i > 0 && c.start < clips[i - 1].end))
-                fail('动作时间重叠或范围错误');
+            if (!safeId(c.id)) invalidField('id','须为有效且唯一的片段 ID');
+            if (!['native','retarget'].includes(c.action) && !Object.hasOwn(ACTIONS,c.action)) invalidField('action','动作不存在，请查询可用动作');
+            if (!n(c.start) || c.start<0) invalidField('start','须为大于或等于 0 的有限秒数');
+            if (!n(c.end) || c.end<=c.start) invalidField('end','须为有限秒数且大于 start');
+            if (!n(c.speed) || c.speed<=0) invalidField('speed','须为大于 0 的有限数字');
+            if (i>0 && c.start<clips[i-1].clip.end) invalidField('start',`动作时间重叠：须不早于 clips[${clips[i-1].index}].end，或先缩短／移动相邻片段`);
+            });
         }
-        validatePropParameters(e);
-        assertLightEntity(e);
+        validateAt('parameters',()=>validatePropParameters(e));
+        validateAt('light',()=>assertLightEntity(e));
         assertInitialPose(e.initialPose);
         if (e.kind === 'camera' && e.initialPose) fail('摄影机使用位置与朝向继承，不使用模型姿态');
-        validateAssetParameters(e);
+        validateAt('assetParameters',()=>validateAssetParameters(e));
         assertContactAnchors(e);
         assertHandBinding(e, p);
         if(e.footContact!==undefined && typeof e.footContact!=="boolean")fail('脚底贴合设置错误');
@@ -316,8 +329,12 @@ export function assertProject(input: unknown): asserts input is Project {
                 fail('路径至少需要一个位置点');
             const headings = e.path.points.some(w => w?.heading !== undefined);
             if (headings && (e.kind !== 'actor' && e.kind !== 'crowd' || e.path.points.some(w => !n(w?.heading)))) fail('路径 heading 仅支持人物／群演，且每个途经点都需设置有限弧度');
-            e.path.points.forEach((w, i) => { if (!w || !v3(w.position) || !n(w.time) || w.time < 0 || (i > 0 && w.time <= e.path!.points[i - 1].time))
-                fail('路径时间必须递增'); assertEasing(w.easing); });
+            e.path.points.forEach((w, i) => validateAt(`path.points[${i}]`,()=>{
+                if (!w || !v3(w.position)) invalidField('position','须为三个有限数字组成的数组 [x,y,z]');
+                if (!n(w.time) || w.time<0) invalidField('time','须为大于或等于 0 的有限秒数');
+                if (i>0 && w.time<=e.path!.points[i-1].time) invalidField('time',`路径时间必须递增：须大于 path.points[${i-1}].time`);
+                validateAt('easing',()=>assertEasing(w.easing));
+            }));
             assertPathInterpolation(e.path);
             if (e.path.sections !== undefined) {
                 if (!Array.isArray(e.path.sections) || !e.path.sections.length || e.path.sections.some(s=>!s)) fail('路径片段不能为空');
@@ -328,38 +345,49 @@ export function assertProject(input: unknown): asserts input is Project {
         }
         if (e.kind === 'camera') {
             const c = e.camera;
-            if (!c || !['target', 'manual'].includes(c.aim) || !n(c.focal) || c.focal < 8 || c.focal > 300 || !v3(c.target) || !v3(c.offset) || !n(c.targetHeight) || typeof c.targetId !== 'string' || !['free', 'follow', 'pov'].includes(c.mode) || typeof c.inheritRotation !== 'boolean' || !Array.isArray(c.hideWalls) || c.hideWalls.some(w => !['north', 'south', 'east', 'west', 'ceiling'].includes(w)))
-                fail('摄影机参数错误');
-            assertCameraLookPath(c!.targetPath);
-            assertCameraAimResponse(c!.aimResponse);
-            assertCameraEffects(c!.effects, id => p.entities.some(e => e.id === id && e.kind !== 'camera'));
+            if (!c) invalidField('camera','需要摄影机配置；新增摄影机可省略 patch.camera 以使用默认配置');
+            if (!['target','manual'].includes(c.aim)) invalidField('camera.aim','须为 target / manual');
+            if (!n(c.focal) || c.focal<8 || c.focal>300) invalidField('camera.focal','焦距须为 8—300 毫米的有限数字');
+            for (const field of ['target','offset'] as const) if (!v3(c[field])) invalidField(`camera.${field}`,'须为三个有限数字组成的数组 [x,y,z]');
+            if (!n(c.targetHeight)) invalidField('camera.targetHeight','须为有限数字，单位为米');
+            if (typeof c.targetId!=='string') invalidField('camera.targetId','须为目标对象 ID 字符串；没有目标时用空字符串');
+            if (!['free','follow','pov'].includes(c.mode)) invalidField('camera.mode','须为 free / follow / pov');
+            if (typeof c.inheritRotation!=='boolean') invalidField('camera.inheritRotation','须为 true / false');
+            if (!Array.isArray(c.hideWalls) || c.hideWalls.some(w=>!['north','south','east','west','ceiling'].includes(w))) invalidField('camera.hideWalls','须为数组，元素可选 north / south / east / west / ceiling；不隐藏时用 []');
+            validateAt('camera.targetPath',()=>assertCameraLookPath(c.targetPath));
+            validateAt('camera.aimResponse',()=>assertCameraAimResponse(c.aimResponse));
+            validateAt('camera.effects',()=>assertCameraEffects(c.effects, id => p.entities.some(e => e.id === id && e.kind !== 'camera')));
         }
-    }
+    }, safeId(e?.id)?e.id:undefined);
     assertFloors(p);
     assertZones(p);
     assertEntityGroups(p);
     assertStructureLinks(p);
     const cameras = p.entities.filter(e => e.kind === 'camera');
-    for (const e of p.entities) assertExternalModel(e, p);
+    for (const [index,e] of p.entities.entries()) validateAt(`entities[${index}].external`,()=>assertExternalModel(e,p),e.id);
     assertPhysics(p);
     if (!cameras.length)
         fail('至少需要一台摄影机');
-    for (const e of p.entities) {
+    for (const [index,e] of p.entities.entries()) validateAt(`entities[${index}]`,()=>{
         const hidden = e.camera?.hiddenEntityIds;
         if (hidden !== undefined && (!Array.isArray(hidden) || new Set(hidden).size !== hidden.length || hidden.some(id => !p.entities.some(t => t.id === id && t.kind !== 'camera'))))
-            fail('摄影机隐藏对象重复、不存在或为摄影机');
+            invalidField('camera.hiddenEntityIds','摄影机隐藏对象重复、不存在或为摄影机；请使用不重复的非摄影机对象 ID');
         if (e.camera?.targetId) {
             const target = p.entities.find(t => t.id === e.camera!.targetId);
             if (!target || target.kind === 'camera')
-                fail('摄影机绑定目标不存在或为摄影机');
+                invalidField('camera.targetId','摄影机绑定目标不存在或为摄影机；使用已有非摄影机对象 ID，或空字符串解除绑定');
         }
         if (e.faceTarget && !ids.has(e.faceTarget))
-            fail('朝向目标不存在');
-    }
+            invalidField('faceTarget','朝向目标不存在；使用已有对象 ID，或空字符串');
+    },e.id);
     if (!p.cuts.length || p.cuts[0]?.time !== 0)
-        fail('切镜必须从零秒开始');
-    p.cuts.forEach((c, i) => { if (!c || !n(c.time) || c.time < 0 || c.time>=p.duration || (i > 0 && c.time <= p.cuts[i - 1].time) || !cameras.some(e => e.id === c.cameraId))
-        fail('切镜时间或机位错误'); });
+        invalidField('cuts[0].time','切镜必须从零秒开始，至少保留一个镜头');
+    p.cuts.forEach((c, i) => validateAt(`cuts[${i}]`,()=>{
+        if (!c) invalidField('','切镜不能为空');
+        if (!n(c.time) || c.time<0 || c.time>=p.duration) invalidField('time','须为大于或等于 0 且小于工程 duration 的有限秒数');
+        if (i>0 && c.time<=p.cuts[i-1].time) invalidField('time',`须大于 cuts[${i-1}].time，按时间顺序排列`);
+        if (!cameras.some(e=>e.id===c.cameraId)) invalidField('cameraId','须为工程中已有的摄影机 ID');
+    }));
     const referenceIds=new Set<string>();
     if(p.entities.filter(e=>e.warp&&e.visible).length>8||p.entities.filter(e=>e.field&&e.visible).length>8)fail('同时启用的空间扭曲或影响区域各最多 8 个；可隐藏暂不用的区域');
     const fieldTargetIds = p.entities.filter(e => e.kind !== 'camera' && !e.field && !e.warp).map(e => e.id);

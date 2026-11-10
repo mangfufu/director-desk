@@ -8,9 +8,23 @@
 
 [下载 Windows / Linux 版](https://github.com/mangfufu/director-desk/releases/latest) · [更新记录](https://github.com/mangfufu/director-desk/releases) · [反馈问题](https://github.com/mangfufu/director-desk/issues) · [配套 Skill](skills/director-desk/)
 
-![导演台 0.4.10：左侧布景、右侧摄影机画面，下方编排动作和切镜](docs/images/workspace-0.4.10.jpg)
+![导演台：布景、摄影机画面与时间轴](docs/images/workspace-0.5.3.png)
 
-当前版本 **[0.5.2](https://github.com/mangfufu/director-desk/releases/tag/v0.5.2)** · 支持单独检查和更新官方 Skill，改进配套视频提示词。
+当前版本 **[0.5.3](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3)** · 新增视频反推、镜头联系表、预览缓存与构图辅助线，优化人物外形和编辑体验。
+
+## 从视频开始
+
+在标题栏打开 **视频反推**，选择视频与分析区间，还原人物动作、走位和摄影机，也可以加入简化场景。转换时并排查看原视频与识别过程，完成后播放结果、选择人物外形，再打开为可编辑工程。
+
+人物外形可以替换，动作仍可裁剪、调速和替换，走位与镜头可以继续调整。
+
+此功能使用可选的本地 Human3R 模型，首次使用需下载并配置，需要 NVIDIA 显卡。设置页提供设备建议、安装进度与清理选项。Human3R 仅限非商业使用，商用需另行获得授权；许可在下载前展示。
+
+## 检查镜头与复杂片段
+
+- **镜头联系表**：集中查看各镜头画面、时间和备注，导出 HTML 与他人讨论。
+- **局部预览缓存**：先生成选定区间的预览，再流畅循环观看复杂画面。
+- **构图辅助线**：按需显示三分线、中心线和安全框。
 
 ## 从一场戏开始
 

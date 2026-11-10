@@ -1,4 +1,4 @@
-import { clipRange, pathSections, setClipRange, type TimelineSelection } from '../clip-editing.ts';
+import { clipRange, trackRanges, setClipRange, type TimelineSelection } from '../clip-editing.ts';
 import type { Project } from '../model.ts';
 import { selectionKey } from './timeline-selection.ts';
 
@@ -11,7 +11,8 @@ export function createTimelineGroupDrag(project: Project, selections: TimelineSe
         const shots = project.cuts.map((c, i) => ({ ...c, index: i, duration: (project.cuts[i + 1]?.time ?? duration) - c.time }));
         const indices = new Set(selected.map(s => (s as { index: number }).index));
         const picked = shots.filter(s => indices.has(s.index)), rest = shots.filter(s => !indices.has(s.index));
-        return { apply(delta: number, resize: boolean) {
+        return { apply(delta: number, resize: boolean|'start') {
+            if(resize==='start')throw Error('切镜请调整相邻镜头的结束位置');
             if (!Number.isFinite(delta)) throw Error('拖动时间无效');
             let order = shots;
             if (resize) {
@@ -36,25 +37,27 @@ export function createTimelineGroupDrag(project: Project, selections: TimelineSe
         const entity = project.entities.find(e => e.id === s.entityId)!;
         if (entity.locked) throw Error('选中对象已锁定');
         const range = clipRange(project, s);
-        const neighbours = s.kind === 'action' ? entity.clips.map(c => ({ selection: { kind: 'action' as const, entityId: entity.id, id: c.id }, start: c.start, end: c.end })) : pathSections(entity.path!).map((c, index) => ({ ...c, selection: { kind: 'path' as const, entityId: entity.id, index } }));
+        const neighbours = trackRanges(project,s);
         return { s, start: range.start, end: range.end, neighbours };
     });
-    let minMove = -Infinity, maxMove = Infinity, minResize = -Infinity, maxResize = Infinity;
+    let minMove = -Infinity, maxMove = Infinity, minResize = -Infinity, maxResize = Infinity, minStart=-Infinity,maxStart=Infinity;
     for (const r of ranges) {
         minMove = Math.max(minMove, -r.start); minResize = Math.max(minResize, frame - (r.end - r.start));
+        minStart=Math.max(minStart,-r.start);maxStart=Math.min(maxStart,r.end-r.start-frame);
         for (const n of r.neighbours) {
             if (selectionKey(n.selection) === selectionKey(r.s)) continue;
+            if(n.end<=r.start+1e-8)minStart=Math.max(minStart,n.end-r.start);
             if (n.start >= r.end - 1e-8) maxResize = Math.min(maxResize, n.start - r.end);
             if (keys.has(selectionKey(n.selection))) continue;
             if (n.end <= r.start + 1e-8) minMove = Math.max(minMove, n.end - r.start);
             if (n.start >= r.end - 1e-8) maxMove = Math.min(maxMove, n.start - r.end);
         }
     }
-    return { apply(delta: number, resize: boolean) {
+    return { apply(delta: number, resize: boolean|'start') {
         if (!Number.isFinite(delta)) throw Error('拖动时间无效');
-        const d = resize ? Math.max(minResize, Math.min(maxResize, delta)) : Math.max(minMove, Math.min(maxMove, delta));
+        const d = resize==='start' ? Math.max(minStart,Math.min(maxStart,delta)) : resize ? Math.max(minResize, Math.min(maxResize, delta)) : Math.max(minMove, Math.min(maxMove, delta));
         project.duration = duration;
-        for (const r of ranges) setClipRange(project, r.s, r.start + (resize ? 0 : d), r.end + d);
+        for (const r of ranges) setClipRange(project, r.s, r.start + (resize===true ? 0 : d), r.end + (resize==='start'?0:d));
         return selected.map(s => ({ ...s }));
     } };
 }

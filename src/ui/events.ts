@@ -1,4 +1,5 @@
 import { installDepthControls } from './depth-controls.ts';
+import {editPathPoint} from '../editor/path-editing.ts';
 import { bindEditorContextMenus } from './editor-context-menus.ts';
 import { setSelectedEntities, selectedEntities } from '../editor/timeline-selection.ts';
 import { prepareDocumentModels } from '../scenes/document-models.ts';
@@ -12,6 +13,8 @@ import { readRecoverableDocument } from './resource-recovery-panel.ts';
 import { samplePose } from '../timeline.ts';
 import { $ } from '../ui/common.ts';
 export function bindEvents(ctx: AppContext) {
+    const sidebarQueries=new Map<string,string>();
+    const clearSearch=()=>{ctx.query='';$<HTMLInputElement>('#search').value='';ctx.renderSidebar();$('#search').focus();};
     installDepthControls(ctx);
     document.addEventListener('click', event => {
         const target = event.target as HTMLElement;
@@ -23,17 +26,17 @@ export function bindEvents(ctx: AppContext) {
         }
         if (ctx.busy)
             return;
+        if(target.closest('#clear-search')){clearSearch();return;}
         const creation = target.closest<HTMLElement>('[data-creation-mode]');
         if (creation) {
             ctx.change(() => { ctx.project.creationMode = creation.dataset.creationMode as 'full' | 'geometry'; ctx.assetFilter = '全部'; ctx.query = ''; }, false);
             $<HTMLInputElement>('#search').value = ctx.query; return;
         }
-        const side = target.closest<HTMLElement>('[data-side]');
+        const side = target.closest<HTMLElement>('[data-side],#resource-home');
         if (side) {
-            ctx.sidebarTab = side.dataset.side!;
-            ctx.query = '';
-            $<HTMLInputElement>('#search').value = '';
-            $<HTMLInputElement>('#search').placeholder = ctx.sidebarTab === 'assets' ? '搜索白模资产' : ctx.sidebarTab === 'motions' ? '搜索动作' : '搜索场景对象';
+            sidebarQueries.set(ctx.sidebarTab,ctx.query);
+            ctx.sidebarTab = side.dataset.side ?? side.dataset.resourceTab ?? 'assets';
+            ctx.query = sidebarQueries.get(ctx.sidebarTab)??'';
             ctx.renderSidebar();
             return;
         }
@@ -123,11 +126,7 @@ export function bindEvents(ctx: AppContext) {
         const e = ctx.current();
         if (target.dataset.point !== undefined && e?.path) {
             ctx.change(() => {
-                const point = e.path!.points[Number(target.dataset.point)];
-                if (target.dataset.axis === 'time')
-                    point.time = Number(target.value);
-                else
-                    point.position[Number(target.dataset.axis)] = Number(target.value);
+                editPathPoint(e,Number(target.dataset.point),target.dataset.axis==='time'?'time':Number(target.dataset.axis),Number(target.value));
                 ctx.extendDuration();
             }, false);
             return;
@@ -236,22 +235,24 @@ export function bindEvents(ctx: AppContext) {
     document.addEventListener('keydown', event => {
         if (ctx.busy)
             return;
+        if (document.querySelector('.application-dropdown:popover-open')) return;
         const input = event.target as HTMLElement;
+        if(event.key==='Escape'&&input.id==='search'&&ctx.query){event.preventDefault();event.stopPropagation();clearSearch();return;}
         if (input.closest('#ai-panel')) return;
         if (event.key === 'Escape' && input.closest('#modal-root') && input.tagName !== 'SELECT') {
-            event.preventDefault(); ctx.closeModal(); return;
+            event.preventDefault(); const back=document.querySelector<HTMLButtonElement>('#modal-root .modal-back');if(back)back.click();else ctx.closeModal();return;
         }
-        const selectShortcut = input.tagName === 'SELECT' && !event.altKey && (event.ctrlKey || event.metaKey) && ['s', 'z'].includes(event.key.toLowerCase());
+        const selectShortcut = (input.tagName === 'SELECT' || input instanceof HTMLInputElement && input.type === 'range') && !event.altKey && (event.ctrlKey || event.metaKey) && ['s', 'z'].includes(event.key.toLowerCase());
         if (['INPUT', 'SELECT', 'TEXTAREA'].includes(input.tagName) && !selectShortcut)
             return;
         if (event.key === 'Escape') {
             if (ctx.draft)
                 ctx.cancelPath();
             else
-                ctx.closeModal();
+                {const back=document.querySelector<HTMLButtonElement>('#modal-root .modal-back');if(back)back.click();else ctx.closeModal();}
             return;
         }
-        if ($('#modal-root').children.length)
+        if ($('#modal-root').children.length || document.querySelector('.reconstruction-workspace'))
             return;
         if (event.key === 'Enter' && ctx.draft) {
             ctx.finishPath();
@@ -275,6 +276,7 @@ export function bindEvents(ctx: AppContext) {
         }
         if(event.code==='KeyK' && !event.ctrlKey && !event.metaKey && !event.altKey){event.preventDefault();void ctx.act('position-key',document.body);return;}
         if (event.code === 'Space') {
+            if (input.closest('button, a[href], summary, [role="button"], [role="tab"], [role="checkbox"], [role="switch"], [role="slider"], [contenteditable]:not([contenteditable="false"])')) return;
             event.preventDefault();
             void ctx.act('play', document.body);
         }

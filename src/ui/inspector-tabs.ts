@@ -1,10 +1,11 @@
 export interface InspectorCategory { key: string; label: string; members: string[] }
 const categories: InspectorCategory[] = [
     {key:'base',label:'属性',members:['base','structure','rig','visual']},
-    {key:'camera',label:'镜头',members:['camera']},
+    {key:'camera',label:'镜头',members:['camera','optics']},
     {key:'light',label:'照明',members:['light']},
     {key:'actions',label:'动作',members:['actions','retarget','pose']},
-    {key:'path',label:'走位',members:['path','effects']},
+    {key:'path',label:'走位',members:['path','camera-motion','effects']},
+    {key:'visibility',label:'可见性',members:['visibility']},
     {key:'surface',label:'外观',members:['surface','deform']},
     {key:'physics',label:'物理',members:['physics']},
     {key:'hand',label:'绑定',members:['hand','contacts']},

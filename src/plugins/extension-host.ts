@@ -41,7 +41,7 @@ class ExtensionHost {
         const failed=(error:unknown)=>{const message=error instanceof Error?error.message:String(error);this.errors.set(info.id,message);ctx.toast(`${info.name}：${message}`,true);};
         const sample=(fn:(frame:PluginFrame)=>unknown)=>{
             let failure:unknown;const wrapped=(frame:PluginFrame)=>{if(failure){if(frame.exporting)throw failure;return;}try{const r=fn(frame);if(r&&typeof (r as any).then==='function')throw Error('逐帧回调必须同步');}catch(error){failure=error;failed(error);if(frame.exporting)throw error;}};
-            ctx.engine.pluginHooks.samples.add(wrapped);return own(()=>ctx.engine.pluginHooks.samples.delete(wrapped));
+            ctx.engine.pluginHooks.samples.add(wrapped);ctx.engine.pluginHooks.invalidate();return own(()=>{ctx.engine.pluginHooks.samples.delete(wrapped);ctx.engine.pluginHooks.invalidate();});
         };
         const api={
             version:2,id:info.id,THREE,
@@ -58,7 +58,7 @@ class ExtensionHost {
                     for(const key of Object.keys(ctx.project))delete (ctx.project as unknown as Record<string,unknown>)[key];
                     Object.assign(ctx.project,clone(draft));
                 });
-            },selection:()=>ctx.selected,time:()=>ctx.time,seek:(t:number)=>{live();ctx.seek(t);},invalidate:()=>{live();ctx.engine.sample(ctx.time);ctx.engine.render();},toast:(message:string)=>ctx.toast(message)},
+            },selection:()=>ctx.selected,time:()=>ctx.time,seek:(t:number)=>{live();ctx.seek(t);},invalidate:()=>{live();ctx.engine.pluginHooks.invalidate();ctx.engine.sample(ctx.time);ctx.engine.render();},toast:(message:string)=>ctx.toast(message)},
             ui:{panel:(options:{title:string;mount:(root:ShadowRoot)=>void|(()=>void)})=>{live();const panel=extensionPanel(options.title,options.mount,failed);own(panel.dispose);return panel;},commandButton:(id:string)=>{live();const cmd=info.commands.find(c=>c.id===id);if(!cmd)throw Error('命令不存在');const el=document.createElement('button');el.textContent=cmd.label;el.className='subtle';el.onclick=()=>{void this.run(info.id,id,{}).catch(failed);};document.querySelector('.key-tools')?.append(el);own(()=>el.remove());return el;}},
             events:{on:(name:'project'|'selection',fn:Handler)=>{
                 live();if(!['project','selection'].includes(name))throw Error('未知插件事件');let previous:unknown=Symbol();
@@ -67,7 +67,7 @@ class ExtensionHost {
                 };
                 this.observers.add(notify);return own(()=>this.observers.delete(notify));
             }},
-            render:{onSample:sample,attach:(object:THREE.Object3D)=>{live();ctx.engine.scene.add(object);return own(()=>object.removeFromParent());},use:(pass:(frame:PluginRender,next:()=>void)=>void)=>{live();let failure:unknown;const wrapped=(frame:PluginRender,next:()=>void)=>{if(failure){if(frame.exporting)throw failure;next();return;}try{pass(frame,next);}catch(error){failure=error;failed(error);if(frame.exporting)throw error;next();}};ctx.engine.pluginHooks.passes.add(wrapped);return own(()=>ctx.engine.pluginHooks.passes.delete(wrapped));}},
+            render:{onSample:sample,attach:(object:THREE.Object3D)=>{live();ctx.engine.scene.add(object);ctx.engine.pluginHooks.invalidate();return own(()=>{object.removeFromParent();ctx.engine.pluginHooks.invalidate();});},use:(pass:(frame:PluginRender,next:()=>void)=>void)=>{live();let failure:unknown;const wrapped=(frame:PluginRender,next:()=>void)=>{if(failure){if(frame.exporting)throw failure;next();return;}try{pass(frame,next);}catch(error){failure=error;failed(error);if(frame.exporting)throw error;next();}};ctx.engine.pluginHooks.passes.add(wrapped);ctx.engine.pluginHooks.invalidate();return own(()=>{ctx.engine.pluginHooks.passes.delete(wrapped);ctx.engine.pluginHooks.invalidate();});}},
             backend:{call:(method:string,input:unknown={})=>{live();return extensionDesktop({action:'backend',id:info.id,method,input});}},
             net:{fetch:(url:string,options:Record<string,unknown>={})=>{live();return extensionDesktop({action:'fetch',id:info.id,url,options});}},
             assets:{url:(relative:string)=>new URL(relative,info.entryUrl).href},

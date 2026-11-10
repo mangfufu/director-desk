@@ -1,4 +1,6 @@
 import { createSceneSequencePanel } from './scene-sequence-panel.ts';
+import { openContactSheet } from './contact-sheet-panel.ts';
+import { openPreviewCache } from './preview-cache-panel.ts';
 import { createGroupCommands } from './group-panel.ts';
 import { selectedEntities } from '../editor/timeline-selection.ts';
 import { createArrangementPanel } from './arrangement-panel.ts';
@@ -26,6 +28,7 @@ import { createSpatialPanel } from './spatial-panel.ts';
 import { createSpatialRangePanel } from './spatial-range-panel.ts';
 import { createProductionPanel } from './production-panel.ts';
 import { recordPositionKey } from '../editor/position-keys.ts';
+import {appendPathPoint,holdPathPoint,removePathPoint,clearEntityPath} from '../editor/path-editing.ts';
 import { staticStructure } from '../building/structure-links.ts';
 import { pathSections } from '../clip-editing.ts';
 import * as T from 'three';
@@ -83,6 +86,13 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
         if (rangePanel.handle(action)) return;
         if (productionPanel.handle(action, el)) return;
         switch (action) {
+            case 'preview-settings':
+                document.querySelector<HTMLButtonElement>('#settings-toggle')?.click();
+                document.querySelector<HTMLButtonElement>('[data-settings-category="editing"]')?.click();
+                break;
+            case 'contact-sheet':openContactSheet(ctx);break;
+            case 'preview-cache':await openPreviewCache(ctx);break;
+            case 'video-reconstruction':await (await import('./video-reconstruction-panel.ts')).openVideoReconstruction(ctx);break;
             case 'initial-pose-clear':
                 if (e && !e.locked) ctx.change(() => { delete e.initialPose; });
                 break;
@@ -159,7 +169,7 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
                 break;
             case 'open':
                 if (ctx.dirty)
-                    ctx.showModal('打开项目', '<p class="modal-copy">当前修改尚未导出为项目文件。建议先保存，再打开其他项目。</p>', button('save-then-open', '保存后打开', '', 'primary') + button('choose-project', '直接打开', '', 'subtle'));
+                    if (!ctx.showModal('打开项目', '<p class="modal-copy">当前修改尚未导出为项目文件。建议先保存，再打开其他项目。</p>', button('save-then-open', '保存后打开', '', 'primary') + button('choose-project', '直接打开', '', 'subtle'))) return;
                 else
                     $('#project-file').click();
                 break;
@@ -207,7 +217,9 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
                 ctx.projectDialog();
                 break;
             case 'room':
-                ctx.roomDialog();
+                ctx.inspectorTab = 'environment';
+                ctx.renderInspector();
+                document.querySelector<HTMLInputElement>('[data-scene-room="width"]')?.focus();
                 break;
             case 'scene-templates':
             case 'new-project':
@@ -238,7 +250,7 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
             case 'clear-path':
                 selectClip(null);
                 if (e)
-                    ctx.change(() => { e.position = entityPosition(e, ctx.time).toArray() as Vec3; e.path = null; }, false);
+                    ctx.change(() => clearEntityPath(e,ctx.time), false);
                 break;
             case 'seek-position-key': {
                 const owner=ctx.project.entities.find(e=>e.id===el.dataset.id);
@@ -251,25 +263,20 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
                 break;
             case 'append-point':
                 if (e?.path)
-                    ctx.change(() => { const last = e.path!.points.at(-1)!; e.path!.points.push({ ...clone(last), time: last.time + 2, position: [last.position[0] + .5, last.position[1], last.position[2]] }); ctx.extendDuration(); }, false);
+                    ctx.change(() => { appendPathPoint(e); ctx.extendDuration(); }, false);
                 break;
             case 'hold-point':
                 if (e?.path)
                     ctx.change(() => {
                         const idx = ctx.engine.selectedPoint >= 0 ? ctx.engine.selectedPoint : e.path!.points.length - 1;
-                        const p = e.path!.points[idx];
-                        for (let i = idx + 1; i < e.path!.points.length; i++)
-                            e.path!.points[i].time += 1;
-                        e.path!.points.splice(idx + 1, 0, { ...clone(p), time: p.time + 1, position: [...p.position] });
+                        holdPathPoint(e,idx);
                         ctx.extendDuration();
                     }, false);
                 break;
             case 'remove-point':
                 if (e?.path)
                     ctx.change(() => {
-                        e.path!.points.splice(Number(el.dataset.index), 1);
-                        if (e.path!.points.length < 1)
-                            e.path = null;
+                        removePathPoint(e,Number(el.dataset.index));
                         ctx.engine.selectedPoint = -1;
                     }, false);
                 break;
@@ -369,6 +376,9 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
             case 'unlock-selected':
                 if (e) ctx.change(() => { e.locked = false; }, false);
                 break;
+            case 'lock-selected':
+                if (e) ctx.change(() => { e.locked = true; }, false);
+                break;
             case 'delete':
                 if (e)
                     ctx.deleteDialog(e);
@@ -397,9 +407,6 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
                 break;
             case 'close-modal':
                 ctx.closeModal();
-                break;
-            case 'apply-room':
-                if(ctx.change(() => { ctx.project.room = { enabled: $<HTMLInputElement>('#room-enabled').checked, width: Number($<HTMLInputElement>('#room-width').value), depth: Number($<HTMLInputElement>('#room-depth').value), height: Number($<HTMLInputElement>('#room-height').value) }; })) ctx.closeModal();
                 break;
             case 'rename-project':
                 if(ctx.change(() => { ctx.project.name = $<HTMLInputElement>('#rename-input').value; }, false)) ctx.closeModal();

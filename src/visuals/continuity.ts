@@ -1,6 +1,7 @@
 import type { Entity, Project } from '../model.ts';
 import { numberAt, type AnimatedNumber } from '../animation/channels.ts';
 import { mediaTime, surfaceOpacity } from '../media/model.ts';
+import { entityVisibleAt } from '../scenes/visibility.ts';
 
 /** Preserve effect phase when an independent take starts at the preceding output frame. */
 export function freezeVisualState(e:Entity,project:Project,time:number){
@@ -22,6 +23,6 @@ export function freezeVisualState(e:Entity,project:Project,time:number){
     }
 }
 export function receivesRootField(e:Entity,project:Project,time:number){
-    return e.kind!=='camera'&&!e.field&&!e.warp&&!e.handBinding&&project.entities.some(f=>f.visible&&f.field&&time>=f.field.start&&(!f.field.end||time<f.field.end)&&
+    return e.kind!=='camera'&&!e.field&&!e.warp&&!e.handBinding&&project.entities.some(f=>entityVisibleAt(f,time)&&f.field&&time>=f.field.start&&(!f.field.end||time<f.field.end)&&
         (f.field.targets.length?f.field.targets.includes(e.id):!!e.visual));
 }

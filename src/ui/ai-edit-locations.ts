@@ -2,6 +2,9 @@ import type { AppContext } from '../app-context.ts';
 import { onEditReceipt, readEdits, type EditReceipt } from '../automation/edit-journal.ts';
 import { escape, options } from './common.ts';
 import './ai-edit-locations.css';
+import { selectionForEdit } from '../editor/edit-location-selection.ts';
+import { setSelectedEntities, setSelectedClips, setSelectedTimeRange } from '../editor/timeline-selection.ts';
+import { refreshTimelineSelection } from './timeline-selection-view.ts';
 export function createAIEditLocations(ctx: AppContext) {
     let records: EditReceipt[] = [], selected = '', page = 0, generation = 0;
     const button = document.createElement('button'); button.id = 'ai-changes-toggle'; button.className = 'subtle'; button.textContent = 'AI 改动'; button.dataset.act = 'ai-changes-open';
@@ -39,6 +42,11 @@ export function createAIEditLocations(ctx: AppContext) {
                 else if (entity.light) ctx.inspectorTab = 'light';
                 ctx.renderInspector();
             } else if (row.entityId) ctx.toast('该对象当前已不存在，已定位到所属戏段与时刻');
+            const selection = selectionForEdit(ctx.project, row);
+            setSelectedEntities(selection.entityIds);
+            setSelectedClips(selection.clips, true);
+            setSelectedTimeRange(selection.timeRange);
+            refreshTimelineSelection(ctx);
             ctx.updateTimeUI(); document.querySelector<HTMLButtonElement>('#timeline-center')?.click();
             if (entity) {const track=document.querySelector<HTMLElement>(`#timeline-content [data-select="${CSS.escape(entity.id)}"]`);if(track) {const container=document.querySelector<HTMLElement>('#timeline-content')!;container.scrollTop += track.getBoundingClientRect().top-container.getBoundingClientRect().top-container.clientHeight/2;}}
 

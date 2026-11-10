@@ -20,13 +20,14 @@ import { createAssetParameterEditor } from './asset-parameter-editor.ts';
 import { createExternalParameterEditor } from './external-parameter-editor.ts';
 import { createNativeAnimationEditor } from './native-animation-editor.ts';
 import { createRigEditor } from './rig-editor.ts';
+import { createActorAppearance } from './actor-appearance.ts';
 import { createRetargetAnimationEditor } from './retarget-animation-editor.ts';
 import { createContactAnchorEditor } from './contact-anchor-editor.ts';
 import { createHandBindingEditor } from './hand-binding-editor.ts';
 import { createInspectorNavigation } from './inspector-navigation.ts';
 import { createPathInspector } from './inspector-path.ts';
 import { createActionInspector } from './inspector-actions.ts';
-import { cameraInspector } from './inspector-camera.ts';
+import { cameraInspector, cameraMotionInspector, cameraVisibilityInspector } from './inspector-camera.ts';
 import { createPoseInspector } from './inspector-pose.ts';
 import { transformInspector } from './inspector-transform.ts';
 import { createLegacyParameterEditor } from './legacy-parameter-editor.ts';
@@ -62,6 +63,7 @@ export function createInspector(ctx: AppContext) {
     const externalEditor = createExternalParameterEditor(ctx, renderInspector);
     const nativeEditor = createNativeAnimationEditor(ctx, renderInspector);
     const rigEditor = createRigEditor(ctx, renderInspector);
+    const actorAppearance = createActorAppearance(ctx);
     const retargetEditor = createRetargetAnimationEditor(ctx, renderInspector);
     const contactEditor = createContactAnchorEditor(ctx, renderInspector);
     const handEditor = createHandBindingEditor(ctx, renderInspector);
@@ -99,7 +101,7 @@ export function createInspector(ctx: AppContext) {
             $('#inspector-footer').innerHTML = '<div class="page-footer">'+button('inspector-return', '返回', '', 'subtle')+'</div>'; return;
         }
         if (ctx.inspectorTab === 'environment') {
-            $('#inspector-header').innerHTML = '<div class="inspect-title"><h2>灯光与场景</h2></div>';
+            $('#inspector-header').innerHTML = '<div class="inspect-title"><h2>场景</h2></div>';
             $('#inspector-tabs').innerHTML = '';
             $('#inspector-content').innerHTML = sceneProperties.render() + physicsEditor.world() + lightingEditor.render(); lightingEditor.bind();
             $('#inspector-footer').innerHTML = `<div class="inspector-tool-actions">${lightingEditor.footer()}</div>`;
@@ -119,17 +121,16 @@ export function createInspector(ctx: AppContext) {
         const animal = isAnimalAsset(e.asset);
         const supportedActions = Object.entries(ACTIONS).filter(([key]) => !definition?.capabilities || definition.capabilities.actions.includes(key as keyof typeof ACTIONS));
         const colorButton = `<button data-act="color-open" class="model-color-button subtle" title="打开色板调色" ${e.locked ? 'disabled' : ''}><i class="model-color-chip" style="background:${e.color}"></i>调色</button>`;
-        $('#inspector-header').innerHTML = `<div class="inspect-title"><h2 data-i18n-ignore>${escape(e.name)}</h2><span class="type-badge">${e.light ? '灯光' : { actor: animal ? '动物' : '人物', camera: '摄影机', prop: '道具', crowd: '群演' }[e.kind]}</span>${colorButton}</div><div class="inspect-subtitle">${external ? `导入模型 · ${e.clips.some(c => c.retarget || c.action !== 'idle' && c.action !== 'native') ? '预设动作与路径调度' : hasAnimations ? '自带动画与路径调度' : '静态姿态与路径调度'}` : animal ? `动物白模 · 总高 ${e.height.toFixed(2)} m` : e.kind === 'actor' ? `${e.gender === 'male' ? '男' : '女'} · 身高 ${e.height.toFixed(2)} m` : ''}</div>`;
+        $('#inspector-header').innerHTML = `<div class="inspect-title"><h2 data-i18n-ignore>${escape(e.name)}</h2><span class="type-badge">${e.light ? '灯光' : { actor: animal ? '动物' : '人物', camera: '摄影机', prop: '道具', crowd: '群演' }[e.kind]}</span>${colorButton}${button(e.locked ? 'unlock-selected' : 'lock-selected', '', e.locked ? 'lock' : 'unlock', 'icon-button inspector-lock', `data-object-lock aria-pressed="${e.locked}" title="${e.locked ? '解锁' : '锁定'}" aria-label="${e.locked ? '解锁' : '锁定'}"`)}</div>`;
         colorPalette.render();
         const initialStatus = e.initialPose?.layout !== poseLayout(e) ? '模型已调整，继承姿态不再应用' : inheritedPoseAt(e, ctx.time) ? '当前保持接拍姿态' : '新动作接管，保留开头姿态';
-        if (e.initialPose) $('#inspector-header .inspect-subtitle').innerHTML = `<button class="initial-pose-link" data-inspector-origin title="${initialStatus}">接拍姿态 · 查看详情</button>`;
-        if (e.locked) $('#inspector-header .inspect-title').insertAdjacentHTML('beforeend', button('unlock-selected', '解锁', '', 'inspector-unlock subtle', 'title="当前对象已锁定，仅可查看；点击解锁"'));
+        if (e.initialPose) $('#inspector-header').insertAdjacentHTML('beforeend', `<button class="initial-pose-link" data-inspector-origin title="${initialStatus}">接拍姿态</button>`);
         const tabs = external ? [['base', '基础'], ['structure', '模型'], ...(hasBones ? [['rig', '骨架']] : []), ...(hasAnimations || external.rig&&e.kind==='actor' ? [['actions', '动画']] : []), ['path', '路径']] : e.kind === 'camera' ? [['base', '基础'], ['camera', '摄影机'], ['path', '路径']] : e.kind === 'prop' ? [['base', '基础'], ...(parameterDefaults[e.asset] || definition?.parameters ? [['structure','结构']] : []), ['path', '路径']] : [['base', '基础'], ...(definition?.parameters ? [['structure', '外形']] : []), ['actions', '动作'], ['path', '路径'], ['pose', '姿态']];
         if (!animal && ((external && e.kind === 'actor' && hasBones) || (!external && ['actor', 'crowd'].includes(e.kind)))) tabs.splice(tabs.findIndex(([key]) => key === 'path'), 0, ['retarget', '素材']);
         if (e.kind === 'prop' && !e.light && !e.visual && !e.field && !e.warp) tabs.splice(tabs.findIndex(([key]) => key === 'path'), 0, ['hand', '手持'], ['contacts', '接触']);
         if (e.light) tabs.splice(0, tabs.length, ['light', '灯光'], ['base', '变换'], ['path', '路径']);
         if(canUsePhysics(e))tabs.push(['physics','物理']);
-        if (e.camera) tabs.splice(2, 0, ['effects', '运镜效果']);
+        if (e.camera) tabs.splice(2, 0, ['optics', '光学'], ['camera-motion', '运动'], ['effects', '运镜效果'], ['visibility', '可见性']);
         if(e.asset==='light-spot')tabs.push(['surface','投影']);
         if(e.kind!=='camera'&&!e.light&&!e.field&&!e.warp&&(!e.visual||SURFACE_VISUALS.has(e.visual.preset)))tabs.push(['surface','材质'],['deform','形变']);
         if(e.visual||e.field||e.warp)tabs.push(['visual',e.field?'影响':e.warp?'扭曲':'元素']);
@@ -140,17 +141,17 @@ export function createInspector(ctx: AppContext) {
         const renderPart = (part: string) => {
         let html = '';
         if (part === 'base') {
-            html = '<div class="object-identity">' + field('名称', 'name', e.name, 'type="text" maxlength="80"') + select('编辑状态', 'locked', [['false', '可编辑'], ['true', '锁定']], String(e.locked)) + '</div>';
+            html = '<div class="object-identity">' + field('名称', 'name', e.name, 'type="text" maxlength="80"') + '</div>';
             html += transformFields(e);
+            if (e.kind === 'actor' && !animal) html += actorAppearance.render(e);
             if (!external && e.kind === 'actor')
                 html += `<div class="field-pair">${num(animal ? '总高 / 米' : '身高 / 米', 'height', e.height, '.01', animal ? 'min=".03" max="10"' : 'min=".2" max="10"')}${select('体型', 'build', [['slim', '偏瘦'], ['normal', '标准'], ['broad', '健壮']], e.build)}</div>`;
             if (e.kind !== 'camera' && !e.handBinding && !['ground', 'road'].includes(e.asset)) html += button('ground-selected', '最低点对齐地面', '', 'wide subtle', 'title="整条路径随对象一起平移"');
             const sections = [{ id: 'transform', label: '对象与变换', html: '<div class="object-properties">' + html + '</div>' }];
             if (e.kind === 'crowd') sections.push({ id: 'crowd', label: '群演', html: `<div class="field-pair">${num('身高 / 米', 'height', e.height, '.01', 'min=".2" max="10"')}${select('体型', 'build', [['slim', '偏瘦'], ['normal', '标准'], ['broad', '健壮']], e.build)}</div><div class="field-pair">${num('人数', 'count', e.count, '1', 'min="1" max="1000"')}${num('间距 / 米', 'spacing', e.spacing, '.1', 'min=".2"')}</div>${num('分布种子', 'seed', e.seed, '1')}` });
-            if (e.kind === 'actor' && !animal && !external || e.reference) {
+            if (e.reference) {
                 const ref = ctx.project.references.find(r => r.id === e.reference);
-                sections.push({ id: 'placement', label: '辅助', html: (e.kind === 'actor' && !animal && !external ? button('seat', '放到座面', '', 'wide subtle') : '')
-                    + (ref ? `<div class="reference-inline"><img src="${ref.data}" alt="${escape(ref.name)}"/><span>${escape(ref.name)}</span></div>` : '') });
+                if (ref) sections.push({ id:'reference', label:'参考', html:`<div class="reference-inline"><img src="${ref.data}" alt="${escape(ref.name)}"/><span>${escape(ref.name)}</span></div>` });
             }
             if (e.initialPose) sections.push({ id: 'initial', label: '接拍', html: `<p class="panel-help">${initialStatus}。</p>` + button('initial-pose-clear', '清除本场继承姿态', '', 'wide subtle', e.locked ? 'disabled' : '') });
             html = navigation.render(`${e.id}:base`, sections);
@@ -173,6 +174,9 @@ export function createInspector(ctx: AppContext) {
         else if (part === 'actions') html = external ? (external.rig&&e.kind==='actor'?actionEditor.render(e,Object.entries(ACTIONS),false):'')+(hasAnimations?nativeEditor.render(e):'') : actionEditor.render(e, supportedActions, animal);
         else if (part === 'pose') html = poseEditor.render(e) + button('pose-key', '记录当前姿态', 'plus', 'wide subtle');
         else if (part === 'camera') html = cameraInspector(ctx, e, navigation);
+        else if (part === 'camera-motion') html = cameraMotionInspector(e);
+        else if (part === 'visibility') html = cameraVisibilityInspector(e);
+        else if (part === 'optics') html = cameraEffects.render(e, 'lens');
         else if (part === 'light') html = lightingEditor.render(e);
         else if (part === 'effects' && e.camera) html = cameraEffects.render(e);
         else if (part === 'visual'||part==='deform') html=visuals.render(e, part === 'deform');
@@ -181,7 +185,7 @@ export function createInspector(ctx: AppContext) {
         if (part === 'light') html += '<div class="inspector-tool-actions">' + lightingEditor.footer() + '</div>';
         return html;
         };
-        const html = category.members.map(part=>`<section data-inspector-part="${part}" class="inspector-category-part">${['base','camera','path','actions','pose'].includes(part)?'':`<h2>${escape(tabs.find(([key])=>key===part)![1])}</h2>`}${renderPart(part)}</section>`).join('');
+        const html = category.members.map(part=>`<section data-inspector-part="${part}" class="inspector-category-part">${renderPart(part)}</section>`).join('');
         $('#inspector-content').innerHTML = html;
         disposeActionPicker = bindActionPicker();
         const request = e.id + ':' + ctx.inspectorTab;
@@ -190,22 +194,22 @@ export function createInspector(ctx: AppContext) {
         }
         lastPartRequest=request;
         if (category.members.includes('light')) lightingEditor.bind();
-        if (category.members.includes('effects')) cameraEffects.bind();
+        if (category.members.some(part => ['effects','optics'].includes(part))) cameraEffects.bind();
         $('#inspector-footer').innerHTML = ctx.draft ? `<div class="button-row">${button('cancel-path', '取消', '', 'subtle wide')}${button('finish-path', '完成路线', '', 'primary wide')}</div>` : `<div class="button-row">${button('focus', '定位对象', '', 'subtle wide')}${button('duplicate', '', 'copy', 'icon-button', 'title="复制对象"')}${button('delete', '', 'trash', 'icon-button danger', 'title="删除对象"')}</div>`;
-        if (ctx.inspectorTab === 'camera') $('#inspector-footer .button-row')?.insertAdjacentHTML('beforeend', button('camera-hidden-open', '', 'eye', 'icon-button', `title="本机位隐藏对象 · ${e.camera?.hiddenEntityIds?.length ?? 0}" aria-label="本机位隐藏对象"`));
         if (e.kind === 'prop' && !ctx.draft) $('#inspector-footer .button-row')?.insertAdjacentHTML('beforeend', button('replace-prop-open', '', 'folder', 'icon-button', 'title="替换道具模型" aria-label="替换道具模型"'));
         if (e.locked) {
             document.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('#inspector-content input,#inspector-content select,#inspector-content button,#inspector-footer button').forEach(el => {
                 const act = el.dataset.act;
-                el.disabled = !el.dataset.lightTab && !el.dataset.cinemaTab && !el.dataset.inspectorSection && el.dataset.stepPoint === undefined && !['pose-joint-choice','pose-nodes-visible','curve-channel', 'curve-segment', 'lighting-channel', 'lighting-key', 'cinema-channel', 'cinema-key', 'legacy-parameter-choice', 'path-section-choice', 'pose-group', 'pose-key-choice', 'path-point-choice', 'basic-clip-choice', 'hand-target', 'hand-parameter', 'contact-choice', 'contact-parameter', 'asset-parameter-key', 'external-parameter-key', 'rig-view', 'rig-part', 'native-source', 'native-clip', 'native-parameter', 'retarget-source', 'retarget-clip', 'retarget-parameter'].includes(el.id) && !el.dataset.rigReadonly && el.dataset.rigAction !== 'focus' && el.dataset.field !== 'locked' && !['nodes-open','unlock-selected','focus','duplicate','preview-selected','cut-selected','select-point','seek-key'].includes(act ?? '');
+                el.disabled = !el.dataset.lightTab && !el.dataset.cinemaTab && !el.dataset.inspectorSection && el.dataset.stepPoint === undefined && !['pose-joint-choice','pose-nodes-visible','curve-channel', 'curve-segment', 'lighting-channel', 'lighting-key', 'cinema-channel', 'cinema-key', 'legacy-parameter-choice', 'path-section-choice', 'pose-group', 'pose-key-choice', 'path-point-choice', 'basic-clip-choice', 'hand-parameter', 'contact-choice', 'contact-parameter', 'asset-parameter-key', 'external-parameter-key', 'rig-view', 'rig-part', 'native-source', 'native-clip', 'native-parameter', 'retarget-source', 'retarget-clip', 'retarget-parameter'].includes(el.id) && !el.dataset.rigReadonly && el.dataset.rigAction !== 'focus' && el.dataset.field !== 'locked' && !['nodes-open','unlock-selected','focus','duplicate','preview-selected','cut-selected','select-point','seek-key'].includes(act ?? '');
             });
         }
     }
     return { transformFields, renderInspector, handle(action: string) {
+        if (action === 'cinema-focal-open') { cameraEffects.focusFocal(); ctx.inspectorTab = 'optics'; renderInspector(); return true; }
         if (colorPalette.handle(action)) return true;
         if (action === 'ai-changes-open') { editLocations.open(); return true; }
         if (timelineCurves.handle(action)) return true;
-        if (document.querySelector('[data-inspector-part="effects"]') && cameraEffects.handle(action)) return true;
+        if (document.querySelector('[data-inspector-part="effects"],[data-inspector-part="optics"]') && cameraEffects.handle(action)) return true;
         if (ctx.inspectorTab === 'light' || ctx.inspectorTab === 'environment') return lightingEditor.handle(action);
         return false;
     } };

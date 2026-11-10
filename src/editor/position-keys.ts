@@ -17,4 +17,5 @@ export function recordPositionKey(e:Entity,time:number,position:Vec3,fps:number)
  const found=e.path.points.find(p=>Math.abs(p.time-sourceTime)<1e-7);
  if(found)found.position=[...position];else { const heading = sourcePathHeading(e.path, sourceTime); e.path.points.push({time:sourceTime,position:[...position],...(heading === undefined ? {} : {heading})}); }
  e.path.points.sort((a,b)=>a.time-b.time);
+ return e.path.points.findIndex(p=>Math.abs(p.time-sourceTime)<1e-7);
 }

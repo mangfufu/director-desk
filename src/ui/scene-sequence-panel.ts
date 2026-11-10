@@ -26,7 +26,7 @@ export function createSceneSequencePanel(ctx: AppContext) {
     }
     async function showOrigin() {
         const data = await continuitySummary(ctx.scenes.document());
-        ctx.showModal('接拍前情与站位', `<textarea readonly rows="14" aria-label="接拍来源记录">${escape(continuityText(data))}</textarea>`, '', true);
+        if (!ctx.showModal('接拍前情与站位', `<textarea readonly rows="14" aria-label="接拍来源记录">${escape(continuityText(data))}</textarea>`, '', true)) return;
         $('.modal').classList.add('origin-modal');
     }
     const apply = (label: string, operation: (document: SceneDocument) => SceneDocument) => {
@@ -46,13 +46,13 @@ export function createSceneSequencePanel(ctx: AppContext) {
     });
     function open() {
         const scenes = ctx.scenes.list(), id = ctx.scenes.context.sceneId, index = scenes.findIndex(s => s.id === id), scene = scenes[index];
-        ctx.showModal('独立戏段', `<div class="sequence-panel"><p class="panel-help">当前第 ${index + 1} 场，共 ${scenes.length} 场。</p>
+        if (!ctx.showModal('独立戏段', `<div class="sequence-panel"><p class="panel-help">当前第 ${index + 1} 场，共 ${scenes.length} 场。</p>
             <label class="field">当前戏段名称<input id="sequence-name" maxlength="200" value="${escape(scene.name)}"/></label>
             <div class="sequence-actions">${button('sequence-rename', '保存名称', '', 'subtle')}${button('sequence-up', '上移', '', 'subtle', index === 0 ? 'disabled' : '')}${button('sequence-down', '下移', '', 'subtle', index === scenes.length - 1 ? 'disabled' : '')}${button('sequence-delete', '删除本场', '', 'subtle', scenes.length === 1 ? 'disabled' : '')}</div>
             <label class="field">新增戏段名称<input id="sequence-new-name" maxlength="200" value="第 ${scenes.length + 1} 场"/></label>
             <label class="field">新场景模板<select id="sequence-template">${options(SCENE_TEMPLATES.map(t => [t.id, t.name]), 'blank')}</select></label>
             <div class="sequence-actions">${button('sequence-add', '按模板新增', '', 'subtle')}${button('sequence-copy', '完整复制', '', 'subtle')}${button('sequence-inherit', '从末帧接拍', '', 'primary')}</div>
-            </div>`, button('sequence-origin', '查看接拍前情', '', 'subtle') + button('close-modal', '关闭', '', 'subtle'));
+            </div>`, button('sequence-origin', '查看接拍前情', '', 'subtle') + button('close-modal', '关闭', '', 'subtle'))) return;
     }
     return { handle(action: string) {
         if (!action.startsWith('sequence-')) return false;
@@ -62,7 +62,7 @@ export function createSceneSequencePanel(ctx: AppContext) {
         const id = ctx.scenes.context.sceneId;
         if (action === 'sequence-delete') {
             const name = ctx.scenes.list().find(s => s.id === id)!.name;
-            ctx.showModal('删除戏段', `<p class="modal-copy">删除「${escape(name)}」的全部调度和备注？可以撤销恢复。</p>`, button('sequence-confirm-delete', '删除本场', '', 'primary'), true);
+            if (!ctx.showModal('删除戏段', `<p class="modal-copy">删除「${escape(name)}」的全部调度和备注？可以撤销恢复。</p>`, button('sequence-confirm-delete', '删除本场', '', 'primary'), true)) return;
             return true;
         }
         let changed = false;

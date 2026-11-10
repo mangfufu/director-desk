@@ -1,6 +1,6 @@
 /* Shared modal frame; feature panels own their internal layout. */
 .modal-backdrop{position:fixed;inset:0;background:#080808c9;backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px}
-.modal{width:560px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;min-width:0;background:#191919;border:1px solid #484848;border-radius:8px;box-shadow:0 24px 80px #0009}
+.modal{width:560px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;min-width:0;background:#191919;border:1px solid #484848;border-radius:8px;box-shadow:none}
 .modal-header{padding:16px 20px;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0}
 .modal-header>div{min-width:0}
 .modal-header h2{font-weight:600;font-size:15px;line-height:20px;margin:0 0 4px;color:#eee}

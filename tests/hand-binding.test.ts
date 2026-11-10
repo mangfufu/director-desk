@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as T from 'three';
 import { clone, entity, demoProject, assertProject } from '../src/model.ts';
 import { applyOperations } from '../src/automation/edits.ts';
-import { applyHandBinding, detachHandBinding, editBoundTransform } from '../src/animation/hand-binding.ts';
+import { applyHandBinding, attachHandBinding, detachHandBinding, editBoundTransform } from '../src/animation/hand-binding.ts';
 import { builtinHandFrame } from '../src/animation/hand-frame.ts';
 import { makeHuman, scaleHuman } from '../src/assets/humanoid.ts';
 import { sampleHumanAction } from '../src/assets/human-animation.ts';
@@ -47,4 +47,20 @@ test('world gizmo adjustments invert into hand offsets and detach preserves the 
     assert.ok(root.position.distanceTo(new T.Vector3(...position)) < 1e-10); assert.ok(root.quaternion.angleTo(new T.Quaternion().setFromEuler(new T.Euler(...rotation))) < 1e-7);
     const original = clone(e); e.locked = true; assert.throws(() => detachHandBinding(e, root), /锁定/); e.locked = false; assert.deepEqual(e, original);
     detachHandBinding(e, root); assert.equal(e.handBinding, null); assert.deepEqual(e.position, root.position.toArray()); assert.deepEqual(e.rotation, [root.rotation.x, root.rotation.y, root.rotation.z]);
+});
+
+test('attaching and switching hands preserve world orientation, grip offset and prop scale', () => {
+    const actor = entity('actor', 'human-adult', '人物'), prop = entity('prop', 'cup', '道具'), root = new T.Group();
+    prop.path = {smooth:false,points:[{time:0,position:[0,0,0]},{time:2,position:[1,0,0]}]};
+    root.rotation.set(.3, -.4, .7); root.scale.set(.4, .6, .8);
+    const expected = root.quaternion.clone(), frame = {position:new T.Vector3(2,1,3),rotation:new T.Quaternion().setFromEuler(new T.Euler(.2,.5,-.2))};
+    attachHandBinding(prop, actor, 'left', root, frame); applyHandBinding(root, prop.handBinding!, frame);
+    assert.equal(prop.path, null); assert.ok(root.quaternion.angleTo(expected) < 1e-7);
+    assert.deepEqual(root.scale.toArray(), [.4,.6,.8]);
+    prop.handBinding!.offset = [.1,.2,.3];
+    const other = {position:new T.Vector3(4,1,3),rotation:new T.Quaternion().setFromEuler(new T.Euler(-.3,.1,.6))};
+    attachHandBinding(prop, actor, 'right', root, other); applyHandBinding(root, prop.handBinding!, other);
+    assert.deepEqual(prop.handBinding!.offset, [.1,.2,.3]); assert.ok(root.quaternion.angleTo(expected) < 1e-7);
+    prop.locked = true; const before = clone(prop);
+    assert.throws(() => attachHandBinding(prop, actor, 'left', root, frame), /锁定/); assert.deepEqual(prop, before);
 });

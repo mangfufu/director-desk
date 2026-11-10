@@ -10,7 +10,7 @@ export function createInspectorNavigation() {
             queueMicrotask(()=>document.querySelector<HTMLElement>(`[data-section-owner="${CSS.escape(target.key)}"][data-section="${CSS.escape(target.section)}"]`)?.scrollIntoView({block:'nearest'}));
         },
         render(key: string, sections: InspectorSection[]) {
-            return sections.map(section => `<section class="inspector-parameter-group" data-section-owner="${escape(key)}" data-section="${section.id}"><h3>${escape(section.label)}</h3><div class="inspector-page">${section.html}</div></section>`).join('');
+            return sections.map(section => `<section class="inspector-parameter-group" data-section-owner="${escape(key)}" data-section="${section.id}" aria-label="${escape(section.label)}"><div class="inspector-page">${section.html}</div></section>`).join('');
         },
     };
 }

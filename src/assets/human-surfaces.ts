@@ -5,8 +5,8 @@ type Ring = [y: number, width: number, depth: number, offset?: number];
 /** Rounded anatomy, with a small shared geometry cache per character. */
 export function humanSurfaces() {
     const geometries = new Map<string, T.BufferGeometry>();
-    const surface = (parent: T.Object3D, material: T.Material, rings: Ring[], segments = 16, subdivisions = 3) => {
-        const key = JSON.stringify([rings, segments, subdivisions]); let geometry = geometries.get(key);
+    const surface = (parent: T.Object3D, material: T.Material, rings: Ring[], segments = 16, subdivisions = 3, roundness = 1) => {
+        const key = JSON.stringify([rings, segments, subdivisions, roundness]); let geometry = geometries.get(key);
         if (!geometry) {
             const positions: number[] = [], uv: number[] = [], indices: number[] = [];
             const slope = (a: number, b: number) => a * b > 0 ? 2 * a * b / (a + b) : 0;
@@ -24,7 +24,8 @@ export function humanSurfaces() {
                 const w = sample(index, 1, t), d = sample(index, 2, t), offset = sample(index, 3, t);
                 for (let j = 0; j <= segments; j++) {
                     const angle = j / segments * Math.PI * 2;
-                    positions.push(w * Math.sin(angle), y, d * Math.cos(angle) + offset); uv.push(j / segments, row / count);
+                    const sx = Math.sin(angle), sz = Math.cos(angle);
+                    positions.push(w * Math.sign(sx) * Math.pow(Math.abs(sx), roundness), y, d * Math.sign(sz) * Math.pow(Math.abs(sz), roundness) + offset); uv.push(j / segments, row / count);
                     if (row && j) { const a = (row-1)*(segments+1)+j-1, b = a+segments+1; indices.push(a,a+1,b,a+1,b+1,b); }
                 }
             }
@@ -39,38 +40,58 @@ export function humanSurfaces() {
         return mesh(parent, geometry, material);
     };
     return {
+        surface,
+        bodyLimb(parent:T.Object3D,material:T.Material,kind:'arm'|'forearm'|'thigh'|'calf',length:number,upper:number,lower:number,depth=1){
+            const leg=kind==='thigh'||kind==='calf',calf=kind==='calf';
+            const bulge=calf?.33:kind==='forearm'?.25:kind==='thigh'?.25:.32;
+            const offset=calf?-upper*.18:kind==='arm'?upper*.10:0;
+            const object=surface(parent,material,[
+                [-length-lower*.65,0,0],[-length-lower*.24,lower*.80,lower*.84*depth],
+                [-length,lower,lower*depth],[-length*.78,lower+(upper-lower)*.34,(lower+(upper-lower)*.42)*depth],
+                [-length*.53,upper*.88,upper*.93*depth,offset],[-length*bulge,upper,upper*depth,offset],
+                [-length*.10,upper*(calf?.70:1),upper*(calf?.75:.94)*depth],
+                [0,calf?lower*1.48:upper*(leg?.86:.92),(calf?lower*1.48:upper*.84)*depth],
+                [upper*.35,(calf?lower:upper)*.55,(calf?lower:upper)*.55*depth],[upper*.55,0,0],
+            ],12,2,1);
+            object.geometry=object.geometry.clone().translate(0,length/2,0);object.position.y=-length/2;return object;
+        },
         joint(parent: T.Object3D, material: T.Material, radius: number) { let geometry = geometries.get('joint');
             if (!geometry) { geometry = new T.SphereGeometry(1, 12, 8); geometries.set('joint', geometry); }
             const object = mesh(parent, geometry, material); object.scale.setScalar(radius); return object; },
         limb(parent: T.Object3D, material: T.Material, length: number, upper: number, lower: number, depth = 1) {
             const object = surface(parent, material, [
-                [-length-.01,0,0],[-length,lower*.9,lower*.9*depth],[-length*.8,lower*1.15,lower*1.15*depth],
-                [-length*.48,upper*.87,upper*.87*depth],[-length*.19,upper,upper*depth],[0,upper*.80,upper*.80*depth],[.015,0,0],
-            ], 12, 2); object.geometry=object.geometry.clone().translate(0,length/2,0); object.position.y=-length/2; return object;
+                [-length-lower*.75,0,0],[-length-lower*.3,lower*.78,lower*.78*depth],[-length,lower,lower*depth],
+                [-length*.73,upper*.86,upper*.86*depth],[-length*.34,upper,upper*depth],[-length*.12,upper*.96,upper*.96*depth],
+                [0,upper*.76,upper*.76*depth],[upper*.42,0,0],
+            ], 12, 2, .86); object.geometry=object.geometry.clone().translate(0,length/2,0); object.position.y=-length/2; return object;
         },
         pelvis(parent: T.Object3D, material: T.Material, width: number, depth: number) { return surface(parent,material,[
-            [-.12,0,0],[-.095,width*.58,depth*.68],[-.045,width*.96,depth],[.025,width,depth*.97],
-            [.075,width*.83,depth*.83],[.12,width*.74,depth*.76],[.135,0,0],
-        ]); },
+            [-.115,0,0],[-.085,width*.65,depth*.7,-.008],[-.035,width*.94,depth,-.012],
+            [.035,width,depth,-.01],[.105,width*.86,depth*.87],[.15,width*.76,depth*.75],[.17,0,0],
+        ],16,2,1); },
         torso(parent: T.Object3D, material: T.Material, height: number, width: number, waist: number, depth: number) { return surface(parent, material, [
-            [-.03,0,0],[-.015,waist,depth*.87],[height*.15,waist*.93,depth*.83],
-            [height*.36,width*.90,depth],[height*.61,width,depth*1.04,.006],
-            [height*.78,width*.98,depth*.93],[height*.90,width*.69,depth*.76],
-            [height+.018,.043,.046],[height+.04,0,0],
-        ]); },
+            [-.045,0,0],[-.025,waist*1.05,depth*.86],[height*.12,waist*1.05,depth*.94],
+            [height*.29,waist,depth*.89],[height*.53,width*.96,depth*1.04,.009],[height*.69,width,depth,.009],
+            [height*.84,width*.98,depth*.85],[height*.94,width*.72,depth*.66],
+            [height+.01,.044,.045],[height+.03,0,0],
+        ],16,2,1); },
         head(parent: T.Object3D, material: T.Material, size: number) { return surface(parent, material, [
-            [0,0,0],[size*.10,size*.36,size*.43,size*.08],[size*.32,size*.56,size*.57,size*.05],
-            [size*.72,size*.64,size*.66],[size*1.15,size*.67,size*.69,-size*.025],
-            [size*1.60,size*.59,size*.63,-size*.025],[size*1.88,size*.36,size*.40],[size*2,0,0],
-        ]); },
+            [0,0,0],[size*.12,size*.34,size*.43,size*.10],[size*.34,size*.51,size*.61,size*.06],
+            [size*.65,size*.64,size*.70],[size*.95,size*.67,size*.72],[size*1.27,size*.69,size*.76,-size*.045],
+            [size*1.59,size*.61,size*.69,-size*.07],[size*1.85,size*.39,size*.48,-size*.04],[size*2,0,0],
+        ],16,2,1); },
         hand(parent: T.Object3D, material: T.Material, length: number) { return surface(parent, material, [
-            [-length-.099,0,0],[-length-.088,.023,.016,.014],[-length-.054,.036,.021,.012],
-            [-length-.018,.031,.019,.01],[-length+.006,.025,.023,.005],[-length+.02,0,0],
-        ], 12, 2); },
+            [-length-.145,0,0],[-length-.133,.025,.014,.008],[-length-.083,.038,.022,.006],
+            [-length-.039,.034,.022,.004],[-length,.025,.024],[-length+.02,0,0],
+        ], 12, 2,.72); },
+        skirt(parent: T.Object3D, material: T.Material, length: number, girth: number) { return surface(parent, material, [
+            [-length,.155*girth,.16*girth],[-length*.94,.154*girth,.159*girth],
+            [-length*.45,.127*girth,.14*girth],[0,.102*girth,.12*girth],
+        ],16,2,.72); },
         foot(parent: T.Object3D, material: T.Material, z = .045) {
             // Elliptical shoe volume with a flat sole and a tapered toe. Same ankle/floor reference.
-            const object = surface(parent,material,[[-.11,0,0],[-.094,.037,.034],[-.060,.0475,.037],
-                [.025,.0475,.037],[.075,.042,.030],[.102,.022,.018],[.11,0,0]],12,2);
+            const object = surface(parent,material,[[-.12,0,0],[-.104,.039,.031],[-.07,.049,.037],
+                [.065,.049,.037],[.11,.044,.030],[.137,.025,.018],[.145,0,0]],12,2,.68);
             object.geometry = object.geometry.clone(); object.geometry.rotateX(Math.PI/2); object.position.z=z;
             return object;
         },
