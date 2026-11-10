@@ -20,7 +20,11 @@ Open **Video Reconstruction** in the title bar, choose a video and a time range,
 
 You can replace a character's appearance, trim or retime the recovered animation, and continue editing movement paths and cameras.
 
-This optional feature runs Human3R locally and requires an NVIDIA GPU. Download and set up the model on first use; the settings panel includes hardware guidance, installation progress, and cleanup controls. Human3R is licensed for non-commercial use only; commercial use requires separate authorization. Its license is shown before downloading.
+Video Reconstruction is powered by **[Human3R](https://github.com/fanegg/Human3R)**, using the Human3R-672S model. Human3R provides the reconstruction of human poses, camera trajectories, and scene geometry. DirectorDesk turns those results into editable projects, with character replacement, animation retargeting, and timeline editing. Thanks to the Human3R authors and contributors.
+
+[Project and demos](https://fanegg.github.io/Human3R/) · [Source code](https://github.com/fanegg/Human3R) · [Model downloads](https://huggingface.co/faneggg/human3r) · [Model and source license](desktop/video-reconstruction/Human3R-LICENSE.txt)
+
+The model runs locally, requires an NVIDIA GPU, and is downloaded separately from the app. Review its license and download it on first use; the settings panel includes hardware guidance, installation progress, and cleanup controls. **Human3R is restricted to non-commercial use. Commercial use requires separate authorization.**
 
 ## Review shots and complex scenes
 
@@ -136,6 +140,9 @@ For feedback and feature requests, open an [issue](https://github.com/mangfufu/d
 
 ## License and community
 
-Original project code is licensed under [MIT](LICENSE). Third-party dependencies and animation assets retain their own licenses; see [NOTICE](src/animation/library/NOTICE.txt) for animation sources.
+DirectorDesk's original code is licensed under [MIT](LICENSE). Third-party models, dependencies, and assets retain their own licenses; the project's MIT license does not apply to them.
+
+- **Human3R:** the model and upstream code used for Video Reconstruction are subject to terms including CC BY-NC-SA 4.0 and NAVER's non-commercial license. See the [full license](desktop/video-reconstruction/Human3R-LICENSE.txt) retained with the app.
+- **Bundled animations:** see the [animation credits](src/animation/library/NOTICE.txt) for sources, authors, and licenses.
 
 [Linux.do](https://linux.do/)

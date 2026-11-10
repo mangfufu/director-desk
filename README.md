@@ -18,7 +18,11 @@
 
 人物外形可以替换，动作仍可裁剪、调速和替换，走位与镜头可以继续调整。
 
-此功能使用可选的本地 Human3R 模型，首次使用需下载并配置，需要 NVIDIA 显卡。设置页提供设备建议、安装进度与清理选项。Human3R 仅限非商业使用，商用需另行获得授权；许可在下载前展示。
+视频反推基于 **[Human3R](https://github.com/fanegg/Human3R)**，使用 Human3R-672S 模型。人物姿态、摄影机轨迹和场景几何的重建能力来自 Human3R；导演台将结果整理成可编辑工程，提供人物外形替换、动作适配和时间轴编辑。感谢 Human3R 作者及贡献者。
+
+[原项目与演示](https://fanegg.github.io/Human3R/) · [源代码](https://github.com/fanegg/Human3R) · [模型下载](https://huggingface.co/faneggg/human3r) · [模型与源码许可](desktop/video-reconstruction/Human3R-LICENSE.txt)
+
+模型在本机运行，需要 NVIDIA 显卡，不随安装包附带。首次使用时阅读许可并下载配置；设置页提供设备建议、安装进度与清理选项。**Human3R 仅限非商业使用，商业用途需另行取得授权。**
 
 ## 检查镜头与复杂片段
 
@@ -145,6 +149,9 @@
 
 ## 许可证与友链
 
-项目自有代码采用 [MIT](LICENSE) 许可证。第三方依赖和动作素材保留各自许可，内置动作来源见 [NOTICE](src/animation/library/NOTICE.txt)。
+导演台自有代码采用 [MIT](LICENSE) 许可证。第三方模型、依赖和素材遵循各自许可，不能按本项目的 MIT 许可使用。
+
+- **Human3R**：视频反推所用模型及上游代码，许可包含 CC BY-NC-SA 4.0 和 NAVER 非商业条款，详见随软件保留的 [许可全文](desktop/video-reconstruction/Human3R-LICENSE.txt)。
+- **内置动作素材**：来源、作者与许可见 [动作素材说明](src/animation/library/NOTICE.txt)。
 
 [Linux.do](https://linux.do/)
