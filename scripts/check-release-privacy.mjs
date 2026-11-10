@@ -87,9 +87,9 @@ extraFiles.push('desktop/automation-files.cjs', 'desktop/model-files.ts', 'deskt
 extraFiles.push('desktop/extensions.cjs','desktop/extensions/host.cjs','desktop/extensions/store.cjs','desktop/extensions/worker.cjs');
 extraFiles.push('desktop/mcp-connection.cjs', 'desktop/mcp-stdio.cjs');
 extraFiles.push('desktop/language.cjs');
-const reconstructionFiles=['host.cjs','manifest.cjs','download.cjs','runtime.cjs','storage.cjs','video-source.cjs','run-inference.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt'];
+const reconstructionFiles=['host.cjs','manifest.cjs','download.cjs','runtime.cjs','storage.cjs','video-source.cjs','run-inference.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt','MediaPipe-LICENSE.txt','lite-runtime.cjs','lite-runner.cjs','lite-preload.cjs'];
 extraFiles.push(...reconstructionFiles.map(file=>'desktop/video-reconstruction/'+file));
-if(process.argv.includes('--desktop'))extraFiles.push(...reconstructionFiles.filter(file=>file.endsWith('.py')||file.endsWith('.txt')).map(file=>'.audit/desktop-app/desktop/video-reconstruction/'+file),'.audit/desktop-app/desktop/video-reconstruction/build-project.mjs');
+if(process.argv.includes('--desktop'))extraFiles.push(...reconstructionFiles.filter(file=>file.endsWith('.py')||file.endsWith('.txt')).map(file=>'.audit/desktop-app/desktop/video-reconstruction/'+file),'.audit/desktop-app/desktop/video-reconstruction/build-project.mjs','.audit/desktop-app/desktop/video-reconstruction/lite-worker.js','.audit/desktop-app/desktop/video-reconstruction/lite-preload.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/mcp-stdio.cjs','.audit/desktop-app/desktop/extensions.cjs','.audit/desktop-app/desktop/extension-worker.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/files.cjs', '.audit/desktop-app/desktop/integration.cjs', '.audit/desktop-app/desktop/tools-contract.cjs', '.audit/desktop-app/desktop/updates.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push(...publicSkillFiles.map(file => '.audit/desktop-app/skills/director-desk/' + file));

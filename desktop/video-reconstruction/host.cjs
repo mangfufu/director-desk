@@ -6,22 +6,27 @@ const {assertAnalysisDuration}=require('../../src/reconstruction/interval.ts');
 const {locations,runProcess,installRuntime}=require('./runtime.cjs');
 const storage=require('./storage.cjs');
 const {installationRecord,previousInstallation}=require('./installation-record.cjs');
-async function createReconstructionHost({directory,assetsDirectory,defaultRoot=path.join(directory,'runtime'),buildProject,fetch:fetcher=fetch,platform=process.platform,arch=process.arch,run:runCommand=runProcess,install:install=installRuntime}){
+const lite=require('./lite-runtime.cjs');
+async function createReconstructionHost({directory,assetsDirectory,defaultRoot=path.join(directory,'runtime'),buildProject,fetch:fetcher=fetch,platform=process.platform,arch=process.arch,run:runCommand=runProcess,install:install=installRuntime,liteInstall=lite.install,liteReady=lite.ready,liteRun=require('./lite-runner.cjs').runLite}){
     await fs.mkdir(directory,{recursive:true});
     const settingsFile=path.join(directory,'settings.json'),jobFile=path.join(directory,'last-job.json');
     const licenseText=await fs.readFile(path.join(assetsDirectory,'Human3R-LICENSE.txt'),'utf8');
     const licenseVersion=createHash('sha256').update(licenseText).digest('hex');
     let settings={runtimeRoot:defaultRoot,configVersion:2},job=null,disposed=false,ready=false,writing=false,running=false,aborter,installation=null,installationRoot;
     try{settings={...settings,...JSON.parse(await fs.readFile(settingsFile,'utf8'))};}catch(e){if(e.code!=='ENOENT')settings={runtimeRoot:defaultRoot,configVersion:2};}
+    if(settings.engine===undefined&&settings.consent)settings.engine='human3r';
     if(settings.distribution!==undefined){settings.runtimeRoot=path.join(settings.runtimeRoot,'native-runtime');delete settings.distribution;}
     try{job=JSON.parse(await fs.readFile(jobFile,'utf8'));}catch{}
     const supported=['win32','linux'].includes(platform)&&arch==='x64';
-    const accepted=()=>settings.consent?.version===licenseVersion;
+    const engine=()=>settings.engine==='human3r'?'human3r':'mediapipe';
+    const readiness={mediapipe:false,human3r:false};
+    const models={mediapipe:lite.MODEL,human3r:{...MODEL,licenseVersion,licenseText}};
+    const accepted=()=>engine()==='mediapipe'||settings.consent?.version===licenseVersion;
     const busy=()=>writing||running||job?.status==='running';
     const persistSettings=async()=>{await fs.writeFile(settingsFile+'.tmp',JSON.stringify(settings));await fs.rename(settingsFile+'.tmp',settingsFile);};
     const writeJson=async(file,value)=>{await fs.writeFile(file+'.tmp',JSON.stringify(value));await fs.rename(file+'.tmp',file);};
     const persist=()=>writeJson(jobFile,job);
-    const persistTask=task=>writeJson(path.join(task.directory,'task.json'),{...task,pipelineVersion:RUNTIME_VERSION,manualIntervention:false});
+    const persistTask=task=>writeJson(path.join(task.directory,'task.json'),{...task,pipelineVersion:task.engine==='mediapipe'?'mediapipe-1.2.2-lite-1':RUNTIME_VERSION,manualIntervention:false});
     if(job?.status==='running'){
         job.status='interrupted';job.message='上次任务已中断';require('./install-progress.cjs').finishStages(job,'interrupted');
         // Recover only our own direct run directory; never follow a replaced link.
@@ -39,10 +44,10 @@ async function createReconstructionHost({directory,assetsDirectory,defaultRoot=p
     }
     const snapshot=()=>{
         let task=null;if(job){const {cancelFile,directory,requestSignature,...visible}=job;task=visible;}
-        return {supported,accepted:accepted(),ready,settings:{runtimeRoot:settings.runtimeRoot},model:{...MODEL,licenseVersion,licenseText},job:task,installation};
+        return {supported,engine:engine(),accepted:accepted(),ready,settings:{runtimeRoot:settings.runtimeRoot,engine:engine()},model:models[engine()],modes:{mediapipe:{model:models.mediapipe,ready:readiness.mediapipe,accepted:true},human3r:{model:models.human3r,ready:readiness.human3r,accepted:settings.consent?.version===licenseVersion}},job:task,installation};
     };
     async function checkReady(){
-        ready=false;
+        ready=false;readiness.human3r=false;readiness.mediapipe=await liteReady(settings.runtimeRoot);
         if(installationRoot!==settings.runtimeRoot){installation=null;installationRoot=undefined;}
         try{
             const marker=JSON.parse(await fs.readFile(path.join(settings.runtimeRoot,'ready.json'),'utf8'));
@@ -51,11 +56,11 @@ async function createReconstructionHost({directory,assetsDirectory,defaultRoot=p
             const stat=await fs.stat(path.join(settings.runtimeRoot,'models/human3r_672S.pth'));if(stat.size!==MODEL.bytes)return;
             const local=locations(settings.runtimeRoot,platform);
             for(const file of [local.python,path.join(local.repos,'Human3R/demo.py'),path.join(local.repos,'dinov2/hubconf.py')])await fs.access(file);
-            ready=true;
-        }catch{}
+            readiness.human3r=true;
+        }catch{}finally{ready=readiness[engine()];}
     }
     await checkReady();
-    function assertUsable(){if(disposed)throw Error('软件正在关闭');if(!supported)throw Error('此功能需要 Windows / Linux x64 和 NVIDIA 显卡');}
+    function assertUsable(){if(disposed)throw Error('软件正在关闭');if(!supported)throw Error('此功能需要 Windows / Linux x64');}
     function requireConsent(){if(!accepted())throw Error('LICENSE_REQUIRED：请在“视频反推”中阅读并同意模型许可');}
     async function execute(script,args,task){
         const root=settings.runtimeRoot;
@@ -73,16 +78,19 @@ async function createReconstructionHost({directory,assetsDirectory,defaultRoot=p
         try{
             aborter=new AbortController();
             if(task.kind==='download'){
-                ready=false;
-                await install(settings.runtimeRoot,{task,signal:aborter.signal,fetch:fetcher,platform,run:runCommand,assetsDirectory});
+                ready=false;readiness[task.engine]=false;
+                await (task.engine==='mediapipe'?liteInstall:install)(settings.runtimeRoot,{task,signal:aborter.signal,fetch:fetcher,platform,run:runCommand,assetsDirectory});
                 if(task.cancelled)throw Error('已取消');
-                await fs.writeFile(path.join(settings.runtimeRoot,'ready.json'),JSON.stringify({version:RUNTIME_VERSION,modelHash:MODEL.sha256}));
-                ready=true;task.message='模型已就绪';
+                if(task.engine!=='mediapipe')await fs.writeFile(path.join(settings.runtimeRoot,'ready.json'),JSON.stringify({version:RUNTIME_VERSION,modelHash:MODEL.sha256}));
+                ready=true;readiness[task.engine]=true;task.message='模型已就绪';
             }else{
                 task.message='准备模型';task.progress=5;
+                if(task.engine==='mediapipe')await liteRun({root:settings.runtimeRoot,task,signal:aborter.signal,assetsDirectory});
+                else{
                 await execute('run-inference.py',['--input',task.input.path,'--start',String(task.input.start),'--seconds',String(task.input.seconds),'--fps',String(task.input.fps),'--output',task.directory,'--scene',task.input.scene],task);
                 if(task.cancelled)throw Error('已取消');task.message=task.input.scene==='none'?'生成人物':'生成场景';task.progress=83;
                 await execute('convert-analysis.py',['--input',task.directory,'--scene',task.input.scene],task);
+                }
                 if(task.cancelled)throw Error('已取消');task.message='生成工程';task.progress=95;
                 const result=await buildProject(task.directory,{actorModel:task.input.actorModel});if(task.cancelled)throw Error('已取消');
                 const analysis=JSON.parse(await fs.readFile(path.join(task.directory,'analysis.json'),'utf8'));
@@ -94,7 +102,7 @@ async function createReconstructionHost({directory,assetsDirectory,defaultRoot=p
         finally{
             aborter=undefined;task.finishedAt=Date.now();task.elapsedSeconds=(task.finishedAt-task.startedAt)/1000;
             try{
-                if(task.kind==='download'&&task.status==='completed'){installation=installationRecord(task);installationRoot=settings.runtimeRoot;await fs.writeFile(path.join(settings.runtimeRoot,'ready.json'),JSON.stringify({version:RUNTIME_VERSION,modelHash:MODEL.sha256,installation}));}
+                if(task.kind==='download'&&task.status==='completed'&&task.engine!=='mediapipe'){installation=installationRecord(task);installationRoot=settings.runtimeRoot;await fs.writeFile(path.join(settings.runtimeRoot,'ready.json'),JSON.stringify({version:RUNTIME_VERSION,modelHash:MODEL.sha256,installation}));}
                 await persistTask(task);
                 if(['completed','cancelled'].includes(task.status))try{
                     if(task.kind==='convert')await require('./artifacts.cjs').cleanRun(settings.runtimeRoot,task.directory);
@@ -117,12 +125,17 @@ async function createReconstructionHost({directory,assetsDirectory,defaultRoot=p
                 if(typeof input.path!=='string'||!path.isAbsolute(input.path))throw Error('请选择视频');
                 const source=path.resolve(input.path);if(!(await fs.stat(source)).isFile())throw Error('请选择视频文件');
                 values={path:source,start:input.start??0,seconds:input.seconds??10,fps:input.fps??6,scene:input.scene??'planes',actorModel:reconstructionActorModel(input.actorModel)};
+                if(engine()==='mediapipe'){
+                    if(input.scene&&input.scene!=='none')throw Error('简易识别仅支持人物');
+                    values.scene='none';values.actorModel=values.actorModel==='source'?'human-adult':values.actorModel;values.people=input.people??3;
+                    if(!Number.isInteger(values.people)||values.people<1||values.people>10)throw Error('人物数量应为 1–10');
+                }
                 if(!Number.isFinite(values.start)||values.start<0||!Number.isFinite(values.seconds)||values.seconds<0||!Number.isFinite(values.fps)||values.fps<1||values.fps>24||!['none','planes','mesh'].includes(values.scene))throw Error('时间范围或分析精度无效');
                 if(values.seconds!==0)assertAnalysisDuration(values.seconds,values.fps);
             }
             await storage.initialize(settings.runtimeRoot);
             const id=randomUUID(),output=path.join(settings.runtimeRoot,'runs',id);await fs.mkdir(output,{recursive:true});await fs.mkdir(path.join(settings.runtimeRoot,'cache/tmp'),{recursive:true});
-            job={id,kind,status:'running',message:'准备中',progress:0,startedAt:Date.now(),directory:output,cancelFile:path.join(output,'.cancel'),input:values,cancelled:false,requestId:input.requestId,requestSignature:JSON.stringify(input)};
+            job={id,kind,engine:engine(),status:'running',message:'准备中',progress:0,startedAt:Date.now(),directory:output,cancelFile:path.join(output,'.cancel'),input:values,cancelled:false,requestId:input.requestId,requestSignature:JSON.stringify(input)};
             started=job;
             await persist();await persistTask(job);running=true;const task=job;void run(task).catch(error=>{task.status='failed';task.message=error.message;running=false;});return snapshot();
         }catch(error){
@@ -160,10 +173,14 @@ async function createReconstructionHost({directory,assetsDirectory,defaultRoot=p
                 settings.consent={version:licenseVersion,acceptedAt:new Date().toISOString()};await persistSettings();return snapshot();
             }
             if(action==='configure'){
+                if(input.engine!==undefined){
+                    if(!['human3r','mediapipe'].includes(input.engine))throw Error('未知识别方式');
+                    if(input.runtimeRoot===undefined){settings={...settings,engine:input.engine};await persistSettings();await checkReady();return snapshot();}
+                }
                 if(typeof input.runtimeRoot!=='string'||!path.isAbsolute(input.runtimeRoot))throw Error('请选择模型目录');
                 const root=path.resolve(input.runtimeRoot);
                 try{if((await fs.readdir(root)).length&&!await storage.owned(root))throw Error('请选择空目录或已有的视频重建目录');}catch(e){if(e.code!=='ENOENT')throw e;}
-                settings={...settings,runtimeRoot:root};await persistSettings();await checkReady();return snapshot();
+                settings={...settings,runtimeRoot:root,...(input.engine?{engine:input.engine}:{})};await persistSettings();await checkReady();return snapshot();
             }
             throw Error('未知视频重建操作');
         },

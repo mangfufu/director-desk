@@ -9,6 +9,7 @@ import {reconstructionActorModel} from './actor-model.ts';
 export async function buildProject(directory:string,options:{actorModel?:string}={}){
 const actorModel=reconstructionActorModel(options.actorModel);
 const dir=path.resolve(directory);
+if(await fs.access(path.join(dir,'lite-analysis.json')).then(()=>true,()=>false))return (await import('./lite-project.ts')).buildLiteProject(dir,actorModel);
 const scene=JSON.parse(await fs.readFile(path.join(dir,'scene.json'),'utf8'));
 const project:Project={format:'director-desk',version:2,name:scene.name||'视频重建',duration:scene.duration,fps:24,aspect:scene.aspect,
     room:{enabled:false,width:10,depth:10,height:3},entities:[],cuts:[],references:[],resources:[]};

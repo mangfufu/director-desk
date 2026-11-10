@@ -1,7 +1,9 @@
 import { assetEnglish } from './en-assets.ts';
 import { panelEnglish } from './en-panels.ts';
+const liteEnglish={'已安装':'Installed','来源：Google MediaPipe · Pose Landmarker Lite':'Source: Google MediaPipe · Pose Landmarker Lite','来源：Human3R · fanegg/Human3R':'Source: Human3R · fanegg/Human3R','标准识别使用 Human3R，原许可仅允许非商业用途。商业使用需另行取得授权。':'Standard Recognition uses Human3R, which is licensed for non-commercial use. Commercial use requires separate permission.','我已阅读并同意 Human3R 许可':'I have read and agree to the Human3R license','识别方式':'Reconstruction Mode','标准识别':'Standard Recognition','简易识别（默认）':'Lightweight Recognition (Default)','最多识别人数':'Maximum People','下载约 21 MB，无需独立显卡':'About 21 MB to download. No dedicated GPU required.','建议 8 GB 内存及以上。':'8 GB of RAM or more recommended.','此功能需要 Windows / Linux x64':'Requires Windows or Linux x64.'};
 /** Product terminology: Scene = independent scene; Shot = a camera cut. */
 export const english: Record<string, string> = {
+    ...liteEnglish,
     "先选择片段": "Select a clip first",
     "所选对象已锁定": "Selected objects are locked",
     "请重新选择片段": "Select the clip again",

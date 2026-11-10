@@ -10,7 +10,7 @@
 
 ![导演台：布景、摄影机画面与时间轴](docs/images/workspace-0.5.3.png)
 
-当前版本 **[0.5.3.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3.1)** · 更新视频反推的显卡兼容性，新安装默认将模型下载到软件目录。
+当前版本 **[0.5.4](https://github.com/mangfufu/director-desk/releases/tag/v0.5.4)** · 新增默认的简易识别，无需独立显卡；标准识别可按需下载。
 
 ## 从视频开始
 
@@ -18,11 +18,14 @@
 
 人物外形可以替换，动作仍可裁剪、调速和替换，走位与镜头可以继续调整。
 
-视频反推基于 **[Human3R](https://github.com/fanegg/Human3R)**，使用 Human3R-672S 模型。人物姿态、摄影机轨迹和场景几何的重建能力来自 Human3R；导演台将结果整理成可编辑工程，提供人物外形替换、动作适配和时间轴编辑。感谢 Human3R 作者及贡献者。
+视频反推提供两种识别方式，模型均在本机运行、按需下载：
 
-[原项目与演示](https://fanegg.github.io/Human3R/) · [源代码](https://github.com/fanegg/Human3R) · [模型下载](https://huggingface.co/faneggg/human3r) · [模型与源码许可](desktop/video-reconstruction/Human3R-LICENSE.txt)
+- **简易识别（默认）**：基于 [Google MediaPipe Pose Landmarker Lite](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker)，下载约 21 MB，无需独立显卡。提取人物动作并生成可编辑工程，可更换人物、裁剪和调整动作速度。人物走位为近似结果，不还原场景和原摄影机，多人遮挡时可能漏检或拆成人物片段。
+- **标准识别**：基于 **[Human3R](https://github.com/fanegg/Human3R)** 的 Human3R-672S 模型，重建人物姿态、摄影机轨迹及可选场景几何，需要 NVIDIA 显卡。下载前可查看设备要求、项目来源和许可；**Human3R 仅限非商业使用，商业用途需另行取得授权。**
 
-模型在本机运行，需要 NVIDIA 显卡，不随安装包附带。首次使用时阅读许可并下载配置，默认存放在软件目录的 `video-reconstruction` 文件夹，也可自行选择位置；设置页提供设备建议、安装进度与清理选项。**Human3R 仅限非商业使用，商业用途需另行取得授权。**
+设置页下拉切换识别方式，已安装的会显示标记。模型默认存放在软件目录的 `video-reconstruction` 文件夹，也可自行选择位置；安装进度、缓存清理和占用统计均在设置中查看。
+
+感谢 MediaPipe 与 Human3R 的作者及贡献者。[Human3R 原项目与演示](https://fanegg.github.io/Human3R/) · [模型下载](https://huggingface.co/faneggg/human3r) · [Human3R 许可](desktop/video-reconstruction/Human3R-LICENSE.txt) · [MediaPipe 许可](desktop/video-reconstruction/MediaPipe-LICENSE.txt)
 
 ## 检查镜头与复杂片段
 
@@ -151,6 +154,7 @@
 
 导演台自有代码采用 [MIT](LICENSE) 许可证。第三方模型、依赖和素材遵循各自许可，不能按本项目的 MIT 许可使用。
 
+- **MediaPipe**：简易识别使用的姿态识别组件，保留 [Apache 2.0 许可](desktop/video-reconstruction/MediaPipe-LICENSE.txt)。
 - **Human3R**：视频反推所用模型及上游代码，许可包含 CC BY-NC-SA 4.0 和 NAVER 非商业条款，详见随软件保留的 [许可全文](desktop/video-reconstruction/Human3R-LICENSE.txt)。
 - **内置动作素材**：来源、作者与许可见 [动作素材说明](src/animation/library/NOTICE.txt)。
 

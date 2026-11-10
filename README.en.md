@@ -12,7 +12,7 @@ Work directly in the editor, or connect an AI agent that can build and edit the 
 
 ![DirectorDesk: stage view, camera view, and timeline](docs/images/workspace-0.5.3.png)
 
-Latest release: **[0.5.3.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3.1)** — Updated GPU compatibility for video reconstruction. New installations default to storing models alongside the app. Screenshots show the Chinese interface; older feature screenshots are labeled with their version.
+Latest release: **[0.5.4](https://github.com/mangfufu/director-desk/releases/tag/v0.5.4)** — New Lightweight Recognition runs on the CPU without a dedicated GPU. Standard Recognition remains available as an optional download. Screenshots show the Chinese interface; older feature screenshots are labeled with their version.
 
 ## Start from a video
 
@@ -20,11 +20,14 @@ Open **Video Reconstruction** in the title bar, choose a video and a time range,
 
 You can replace a character's appearance, trim or retime the recovered animation, and continue editing movement paths and cameras.
 
-Video Reconstruction is powered by **[Human3R](https://github.com/fanegg/Human3R)**, using the Human3R-672S model. Human3R provides the reconstruction of human poses, camera trajectories, and scene geometry. DirectorDesk turns those results into editable projects, with character replacement, animation retargeting, and timeline editing. Thanks to the Human3R authors and contributors.
+Video Reconstruction offers two modes. Both run locally and download their models on demand:
 
-[Project and demos](https://fanegg.github.io/Human3R/) · [Source code](https://github.com/fanegg/Human3R) · [Model downloads](https://huggingface.co/faneggg/human3r) · [Model and source license](desktop/video-reconstruction/Human3R-LICENSE.txt)
+- **Lightweight Recognition (Default):** powered by [Google MediaPipe Pose Landmarker Lite](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker). The download is about 21 MB and no dedicated GPU is required. Extract character motion into editable projects, replace characters, trim clips, and adjust playback speed. Positions are approximate; this mode does not reconstruct the scene or original camera. Occlusion can cause missed detections or split a person into separate tracks.
+- **Standard Recognition:** powered by **[Human3R](https://github.com/fanegg/Human3R)** and its Human3R-672S model. It reconstructs human poses, camera trajectories, and optional scene geometry, and requires an NVIDIA GPU. Hardware requirements, project links, and license terms are available before downloading. **Human3R is restricted to non-commercial use; commercial use requires separate authorization.**
 
-The model runs locally, requires an NVIDIA GPU, and is downloaded separately from the app. Review its license and download it on first use. The default location is a `video-reconstruction` folder alongside the app; you can choose another folder. The settings panel includes hardware guidance, installation progress, and cleanup controls. **Human3R is restricted to non-commercial use. Commercial use requires separate authorization.**
+Choose a mode from the settings dropdown; installed modes are marked. Models default to the `video-reconstruction` folder alongside the app, or a folder you choose. Settings also show installation progress, disk usage, and cleanup controls.
+
+Thanks to the MediaPipe and Human3R authors and contributors. [Human3R project and demos](https://fanegg.github.io/Human3R/) · [Model downloads](https://huggingface.co/faneggg/human3r) · [Human3R license](desktop/video-reconstruction/Human3R-LICENSE.txt) · [MediaPipe license](desktop/video-reconstruction/MediaPipe-LICENSE.txt)
 
 ## Review shots and complex scenes
 
@@ -142,6 +145,7 @@ For feedback and feature requests, open an [issue](https://github.com/mangfufu/d
 
 DirectorDesk's original code is licensed under [MIT](LICENSE). Third-party models, dependencies, and assets retain their own licenses; the project's MIT license does not apply to them.
 
+- **MediaPipe:** the pose recognition components used by Lightweight Recognition; the [Apache 2.0 license](desktop/video-reconstruction/MediaPipe-LICENSE.txt) is retained.
 - **Human3R:** the model and upstream code used for Video Reconstruction are subject to terms including CC BY-NC-SA 4.0 and NAVER's non-commercial license. See the [full license](desktop/video-reconstruction/Human3R-LICENSE.txt) retained with the app.
 - **Bundled animations:** see the [animation credits](src/animation/library/NOTICE.txt) for sources, authors, and licenses.
 

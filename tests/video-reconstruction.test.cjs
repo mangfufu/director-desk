@@ -9,15 +9,35 @@ async function fixture(t){
 }
 function fakeSpawn(){const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();setTimeout(()=>child.emit('close',0),5);return child;}
 async function settled(host){for(let n=0;n<200;n++){if(!host.isBusy())return host.state();await new Promise(r=>setTimeout(r,5));}throw Error('Task did not settle');}
+
+test('lightweight mode has independent readiness, no Human3R consent, shared cancellation and persistence',async t=>{
+    const dir=await fixture(t);let available=false,runs=0;
+    const options={directory:path.join(dir,'data'),assetsDirectory:dir,liteReady:async()=>available,
+        liteInstall:async()=>{available=true;},liteRun:async({signal})=>{runs++;await new Promise((_,reject)=>{signal.addEventListener('abort',()=>reject(Error('cancelled')),{once:true});signal.throwIfAborted();});}};
+    const host=await createReconstructionHost(options);t.after(()=>host.dispose());
+    assert.equal(host.state().engine,'mediapipe');assert.equal(host.state().modes.human3r.accepted,false);assert.equal(host.state().accepted,true);assert.equal(host.state().ready,false);
+    await host.handle('download',{requestId:'lite-install'});assert.equal((await settled(host)).ready,true);
+    await assert.rejects(fs.access(path.join(host.state().settings.runtimeRoot,'ready.json')),'lite install does not replace Human3R ready marker');
+    const source=path.join(dir,'input.mp4');await fs.writeFile(source,'test');
+    await assert.rejects(host.handle('start',{path:source,scene:'mesh'}),/仅支持人物/);
+    await assert.rejects(host.handle('start',{path:source,people:0}),/人物数量/);
+    await host.handle('start',{path:source,scene:'none',seconds:1,requestId:'lite-convert'});
+    await assert.rejects(host.handle('configure',{engine:'human3r'}),/结束当前任务/);
+    await new Promise(r=>setTimeout(r,10));await host.handle('cancel');assert.equal((await settled(host)).job.status,'cancelled');assert.equal(runs,1);
+    const again=await createReconstructionHost(options);t.after(()=>again.dispose());assert.equal(again.state().engine,'mediapipe');assert.equal(again.state().ready,true);
+    await again.handle('configure',{engine:'human3r'});assert.equal(again.state().accepted,false);assert.equal(again.state().ready,false);
+});
 test('license blocks downloads and conversion, cannot be accepted by automation, persists and invalidates when changed',async t=>{
     const dir=await fixture(t);let downloads=0;
     const options={directory:path.join(dir,'data'),assetsDirectory:dir,platform:'linux',arch:'x64',install:async()=>downloads++};
     let host=await createReconstructionHost(options);
+    await host.handle('configure',{engine:'human3r'});
     await assert.rejects(host.handle('download',{}),/LICENSE_REQUIRED/);
     await assert.rejects(host.handle('start',{path:'/missing'}),/LICENSE_REQUIRED/);
     await assert.rejects(host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion}),/用户/);
     await assert.rejects(host.handle('accept-license',{accepted:true,version:'old'},true),/用户/);
     assert.equal(downloads,0);
+    await host.handle('configure',{engine:'human3r'});
     await host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion},true);
     host=await createReconstructionHost(options);assert.equal(host.state().accepted,true);
     await fs.appendFile(path.join(dir,'Human3R-LICENSE.txt'),' changed');
@@ -27,6 +47,7 @@ test('download cancellation, retry and repeated request ID do not duplicate inst
     const dir=await fixture(t);let calls=0,blocking=true;
     const host=await createReconstructionHost({directory:path.join(dir,'data'),assetsDirectory:dir,platform:'linux',arch:'x64',
         install:async(_root,{signal})=>{calls++;if(blocking)await new Promise((resolve,reject)=>{signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true});if(signal.aborted)reject(Error('aborted'));});}});
+    await host.handle('configure',{engine:'human3r'});
     await host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion},true);
     const first=await host.handle('download',{requestId:'one'});
     const metadata=JSON.parse(await fs.readFile(path.join(host.state().settings.runtimeRoot,'runs',first.job.id,'task.json'),'utf8'));
@@ -72,6 +93,7 @@ test('restart preserves a completed receipt if the process stopped before updati
 test('failure to persist a new task does not leave the host permanently busy',async t=>{
     const base=await fixture(t),data=path.join(base,'data');let installs=0;
     const host=await createReconstructionHost({directory:data,assetsDirectory:base,platform:'linux',arch:'x64',install:async()=>installs++});t.after(()=>host.dispose());
+    await host.handle('configure',{engine:'human3r'});
     await host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion},true);
     const blocked=path.join(data,'last-job.json.tmp');await fs.mkdir(blocked);
     await assert.rejects(host.handle('download',{requestId:'failed-write'}));
@@ -126,6 +148,7 @@ test('runtime upgrade retains model and consent, and uses packaged verification 
     let usedAssets;
     const host=await createReconstructionHost({directory,assetsDirectory,defaultRoot:root,install:async(_,options)=>{usedAssets=options.assetsDirectory;}});
     assert.equal(host.state().ready,false);
+    await host.handle('configure',{engine:'human3r'});
     await host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion},true);
     // Mark as managed, as an existing real installation would be.
     await fs.writeFile(path.join(root,'.director-video-runtime.json'),JSON.stringify({format:'director-video-runtime'}));
@@ -149,6 +172,7 @@ test('unsupported platform and failed bootstrap cannot mark a runtime ready',asy
     await assert.rejects(unsupported.handle('download'),/Windows/);
     let downloads=0;
     const host=await createReconstructionHost({...options,platform:'linux',install:async()=>{throw Error('Python missing');}});
+    await host.handle('configure',{engine:'human3r'});
     await host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion},true);
     await host.handle('download',{requestId:'fail'});assert.equal((await settled(host)).job.status,'failed');
     assert.equal(downloads,0);assert.equal(host.state().ready,false);
@@ -264,3 +288,13 @@ test('installation receipts survive newer conversion tasks and omit private task
     const receipt=await previousInstallation(dir,{});assert.deepEqual(receipt,installationRecord(installed));assert.equal(receipt.directory,undefined);assert.equal(receipt.requestSignature,undefined);
     assert.deepEqual(await previousInstallation('/not-needed',{installation:receipt}),receipt);
 });
+
+ test('existing standard selection and legacy Human3R consent survive the new lightweight default',async t=>{
+    const base=await fixture(t),directory=path.join(base,'data');await fs.mkdir(directory);
+    await fs.writeFile(path.join(directory,'settings.json'),JSON.stringify({runtimeRoot:path.join(base,'runtime'),consent:{version:'previous-license'}}));
+    let host=await createReconstructionHost({directory,assetsDirectory:base});
+    assert.equal(host.state().engine,'human3r');assert.equal(host.state().accepted,false);
+    await host.handle('configure',{engine:'mediapipe'});
+    host=await createReconstructionHost({directory,assetsDirectory:base});assert.equal(host.state().engine,'mediapipe');
+    assert.match(host.state().modes.human3r.model.sourceUrl,/Human3R/);
+ });

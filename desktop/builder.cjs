@@ -16,7 +16,7 @@ module.exports = {
         { from: '.audit/desktop-app/LICENSE', to: 'LICENSE' }],
     onNodeModuleFile: () => false,
     extraResources: [{ from: '.audit/desktop-app/desktop/mcp-stdio.cjs', to: 'mcp/stdio-bridge.cjs' },
-        {from:'.audit/desktop-app/desktop/video-reconstruction',to:'video-reconstruction',filter:['*.py','*.txt','build-project.mjs']}],
+        {from:'.audit/desktop-app/desktop/video-reconstruction',to:'video-reconstruction',filter:['*.py','*.txt','build-project.mjs','lite-worker.js','lite-preload.cjs']}],
     asar: true, npmRebuild: false, publish: { provider: 'generic', url: 'https://bigthat.me/updates/win-x64/' },
     buildVersion: version, buildNumber: String(parseReleaseVersion(version).parts[3]),
     // electron-builder normalizes package.json with semver.clean(), which drops

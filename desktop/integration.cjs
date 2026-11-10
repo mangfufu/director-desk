@@ -82,9 +82,9 @@ function attachIntegration(window) {
                 } else if (data?.action === 'release-video') {
                     videoSource.clear();result=true;
                 } else if (data?.action === 'license-page') {
-                    await shell.openExternal(runtime.state().model.licenseUrl);result=true;
+                    const state=runtime.state(),model=data.data?.engine?state.modes[data.data.engine]?.model:state.model;if(!model)throw Error('未知识别方式');await shell.openExternal(model.licenseUrl);result=true;
                 } else if (data?.action === 'project-page') {
-                    await shell.openExternal(runtime.state().model.sourceUrl);result=true;
+                    const state=runtime.state(),model=data.data?.engine?state.modes[data.data.engine]?.model:state.model;if(!model)throw Error('未知识别方式');await shell.openExternal(model.sourceUrl);result=true;
                 } else result = await runtime.handle(data?.action, data?.data, true);
             }
             else if (action === 'app-metrics') result = appMetrics();

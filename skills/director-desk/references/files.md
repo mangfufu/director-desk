@@ -87,3 +87,5 @@ Windows / Linux x64 原生运行，需要 NVIDIA 显卡，无需预装 Python �
 转换前的人物模型与分析精度、还原内容、场景同级。`start` 可传 `actorModel`：`source`（默认）保留识别模型，或指定内置人形资产 ID，生成的工程直接使用所选外形和适配动作。任务 `input.actorModel` 保留选择，旧任务缺省按 `source`；单独换某个人物仍使用 `replace-actor`。
 
 配置状态中的 `job.downloadFile` 为当前下载文件名（不含本机目录）；`installation` 保留最近成功配置的总用时与步骤，即使最新任务已切换为视频转换仍可查询。
+
+新配置默认使用简易识别（mediapipe），已有选择保留；state 返回当前 engine、ready，以及 modes 中两种方式的就绪状态、许可与来源。按需 configure 切换识别方式。未就绪时 download 安装约 21 MB 的可选模型，复用 requestId 和异步任务查询。此方式使用 CPU，无需 Human3R 环境和许可确认。start 仅支持 scene:none，可传 people:1–10（默认 3）及内置 actorModel；source 会使用标准成年人物。结果保留可编辑动作、近似位置和显示时段，摄影机固定，不还原场景或原相机。configure(engine:human3r) 切回标准识别，原有许可要求不变。离线工具可以编辑生成的工程，不执行视频识别。

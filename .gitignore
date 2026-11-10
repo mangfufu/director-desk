@@ -33,6 +33,7 @@ release/
 /docs/*
 !/docs/images/
 !/docs/development.md
+!/docs/轻量视频反推.md
 !/docs/制作效率与扩展开发计划.md
 !/docs/staging-workflow.md
 !/docs/physics.md
@@ -63,6 +64,7 @@ release/
 !/scripts/verify-model-control.mjs
 !/scripts/verify-creation-mode.mjs
 !/scripts/test-ai-desktop.mjs
+!/scripts/test-reconstruction-lite.mjs
 !/scripts/test-skills-desktop.mjs
 !/scripts/test-updates-desktop.mjs
 !/scripts/test-files-desktop.mjs
