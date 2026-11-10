@@ -2,6 +2,7 @@ const { prepareMediaImport } = require('./media-import.cjs');
 const { ipcMain, app, safeStorage, clipboard, dialog, net, shell } = require('electron');
 const { createReconstructionHost } = require('./video-reconstruction/host.cjs');
 const { createVideoSource } = require('./video-reconstruction/video-source.cjs');
+const { defaultRuntimeRoot } = require('./video-reconstruction/default-root.cjs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -18,6 +19,7 @@ function attachIntegration(window) {
     let reconstruction, reconstructionRuntime;
     const getReconstruction = () => reconstruction ??= createReconstructionHost({
         directory: path.join(app.getPath('userData'), 'video-reconstruction'),
+        defaultRoot: defaultRuntimeRoot({packaged:app.isPackaged,executable:app.getPath('exe'),userDirectory:app.getPath('userData')}),
         assetsDirectory: app.isPackaged ? path.join(process.resourcesPath, 'video-reconstruction') : path.join(app.getAppPath(), 'desktop/video-reconstruction'),
         buildProject: async (directory,options) => (await import(pathToFileURL(path.join(app.isPackaged ? path.join(process.resourcesPath, 'video-reconstruction') : path.join(app.getAppPath(), 'desktop/video-reconstruction'), 'build-project.mjs')).href)).buildProject(directory,options),
         fetch: (url, options) => net.fetch(url, options),

@@ -10,7 +10,7 @@
 
 ![导演台：布景、摄影机画面与时间轴](docs/images/workspace-0.5.3.png)
 
-当前版本 **[0.5.3](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3)** · 新增视频反推、镜头联系表、预览缓存与构图辅助线，优化人物外形和编辑体验。
+当前版本 **[0.5.3.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3.1)** · 更新视频反推的显卡兼容性，新安装默认将模型下载到软件目录。
 
 ## 从视频开始
 
@@ -22,7 +22,7 @@
 
 [原项目与演示](https://fanegg.github.io/Human3R/) · [源代码](https://github.com/fanegg/Human3R) · [模型下载](https://huggingface.co/faneggg/human3r) · [模型与源码许可](desktop/video-reconstruction/Human3R-LICENSE.txt)
 
-模型在本机运行，需要 NVIDIA 显卡，不随安装包附带。首次使用时阅读许可并下载配置；设置页提供设备建议、安装进度与清理选项。**Human3R 仅限非商业使用，商业用途需另行取得授权。**
+模型在本机运行，需要 NVIDIA 显卡，不随安装包附带。首次使用时阅读许可并下载配置，默认存放在软件目录的 `video-reconstruction` 文件夹，也可自行选择位置；设置页提供设备建议、安装进度与清理选项。**Human3R 仅限非商业使用，商业用途需另行取得授权。**
 
 ## 检查镜头与复杂片段
 

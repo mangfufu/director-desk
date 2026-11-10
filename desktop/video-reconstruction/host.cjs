@@ -6,13 +6,13 @@ const {assertAnalysisDuration}=require('../../src/reconstruction/interval.ts');
 const {locations,runProcess,installRuntime}=require('./runtime.cjs');
 const storage=require('./storage.cjs');
 const {installationRecord,previousInstallation}=require('./installation-record.cjs');
-async function createReconstructionHost({directory,assetsDirectory,buildProject,fetch:fetcher=fetch,platform=process.platform,arch=process.arch,run:runCommand=runProcess,install:install=installRuntime}){
+async function createReconstructionHost({directory,assetsDirectory,defaultRoot=path.join(directory,'runtime'),buildProject,fetch:fetcher=fetch,platform=process.platform,arch=process.arch,run:runCommand=runProcess,install:install=installRuntime}){
     await fs.mkdir(directory,{recursive:true});
     const settingsFile=path.join(directory,'settings.json'),jobFile=path.join(directory,'last-job.json');
     const licenseText=await fs.readFile(path.join(assetsDirectory,'Human3R-LICENSE.txt'),'utf8');
     const licenseVersion=createHash('sha256').update(licenseText).digest('hex');
-    let settings={runtimeRoot:path.join(directory,'runtime'),configVersion:2},job=null,disposed=false,ready=false,writing=false,running=false,aborter,installation=null,installationRoot;
-    try{settings={...settings,...JSON.parse(await fs.readFile(settingsFile,'utf8'))};}catch(e){if(e.code!=='ENOENT')settings={runtimeRoot:path.join(directory,'runtime'),configVersion:2};}
+    let settings={runtimeRoot:defaultRoot,configVersion:2},job=null,disposed=false,ready=false,writing=false,running=false,aborter,installation=null,installationRoot;
+    try{settings={...settings,...JSON.parse(await fs.readFile(settingsFile,'utf8'))};}catch(e){if(e.code!=='ENOENT')settings={runtimeRoot:defaultRoot,configVersion:2};}
     if(settings.distribution!==undefined){settings.runtimeRoot=path.join(settings.runtimeRoot,'native-runtime');delete settings.distribution;}
     try{job=JSON.parse(await fs.readFile(jobFile,'utf8'));}catch{}
     const supported=['win32','linux'].includes(platform)&&arch==='x64';
@@ -74,7 +74,7 @@ async function createReconstructionHost({directory,assetsDirectory,buildProject,
             aborter=new AbortController();
             if(task.kind==='download'){
                 ready=false;
-                await install(settings.runtimeRoot,{task,signal:aborter.signal,fetch:fetcher,platform,run:runCommand});
+                await install(settings.runtimeRoot,{task,signal:aborter.signal,fetch:fetcher,platform,run:runCommand,assetsDirectory});
                 if(task.cancelled)throw Error('已取消');
                 await fs.writeFile(path.join(settings.runtimeRoot,'ready.json'),JSON.stringify({version:RUNTIME_VERSION,modelHash:MODEL.sha256}));
                 ready=true;task.message='模型已就绪';
@@ -126,6 +126,7 @@ async function createReconstructionHost({directory,assetsDirectory,buildProject,
             started=job;
             await persist();await persistTask(job);running=true;const task=job;void run(task).catch(error=>{task.status='failed';task.message=error.message;running=false;});return snapshot();
         }catch(error){
+            if(['EACCES','EPERM','EROFS'].includes(error.code))error.message='无法写入存储位置，请在视频反推设置中选择可写文件夹';
             if(started){started.status='failed';started.message=error.message;await persistTask(started).catch(()=>{});await persist().catch(()=>{});}
             throw error;
         }finally{writing=false;}

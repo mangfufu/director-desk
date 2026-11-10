@@ -57,7 +57,7 @@ async function extract(archive,target,strip,signal){
     }else await tar.x({file:archive,cwd:target,strip,strict:true,preservePaths:false,
         filter:(name,entry)=>{signal?.throwIfAborted();if(!['File','Directory'].includes(entry.type))throw Error('安装包包含不支持的链接');return true;}});
 }
-async function installRuntime(root,{task,signal,fetch:fetcher,platform=process.platform,download=downloadFile,run=runProcess}){
+async function installRuntime(root,{task,signal,fetch:fetcher,platform=process.platform,download=downloadFile,run=runProcess,assetsDirectory=__dirname}){
     const local=locations(root,platform),uv=platform==='win32'?WINDOWS_UV:DOWNLOADS[3];
     const items=[uv,DOWNLOADS[1],DOWNLOADS[2],DOWNLOADS[0]];
     beginStage(task,'components');
@@ -83,6 +83,6 @@ async function installRuntime(root,{task,signal,fetch:fetcher,platform=process.p
     beginStage(task,'dependencies');task.progress=92;
     await command(['pip','install','--python',local.python,'numpy<2','transformers==4.46.3','accelerate','roma','huggingface-hub<1','opencv-python-headless<4.12','scipy','einops','trimesh','matplotlib','pillow','smplx','imageio','tqdm','hydra-core','safetensors']);
     beginStage(task,'verify');task.progress=95;
-    await run(local.python,['-c',"import torch,cv2,transformers,scipy,smplx; assert torch.cuda.is_available(), 'NVIDIA GPU unavailable: please install or update its driver'; print(torch.cuda.get_device_name(0))"],{root,task,signal,platform});
+    await run(local.python,[path.join(assetsDirectory,'runtime_check.py')],{root,task,signal,platform});
 }
 module.exports={locations,environment,runProcess,installRuntime,extract};

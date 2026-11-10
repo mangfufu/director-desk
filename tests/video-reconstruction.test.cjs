@@ -100,6 +100,42 @@ test('managed native environment isolates Python and all large caches without ch
     assert.ok(locations(root,'linux').python.endsWith(path.join('bin','python')));
 });
 
+test('download location follows installed and portable executables, not temporary extraction paths',()=>{
+    const {defaultRuntimeRoot}=require('../desktop/video-reconstruction/default-root.cjs');
+    const base={packaged:true,platform:'win32',executable:'D:\\DirectorDesk\\DirectorDesk.exe',userDirectory:'C:\\profile',env:{}};
+    assert.equal(defaultRuntimeRoot(base),'D:\\DirectorDesk\\video-reconstruction');
+    assert.equal(defaultRuntimeRoot({...base,executable:'C:\\Temp\\unpack\\DirectorDesk.exe',env:{PORTABLE_EXECUTABLE_DIR:'E:\\Apps'}}),'E:\\Apps\\video-reconstruction');
+    assert.equal(defaultRuntimeRoot({...base,platform:'linux',executable:'/tmp/.mount_director/DirectorDesk',env:{APPIMAGE:'/home/user/apps/DirectorDesk.AppImage'}}),'/home/user/apps/video-reconstruction');
+    assert.equal(defaultRuntimeRoot({...base,platform:'linux',executable:'/opt/director/DirectorDesk'}),'/opt/director/video-reconstruction');
+    assert.equal(defaultRuntimeRoot({...base,packaged:false,userDirectory:'/isolated-profile'}),path.join('/isolated-profile','video-reconstruction','runtime'));
+});
+
+test('new download defaults do not move an existing user configuration',async t=>{
+    const dir=await fixture(t),directory=path.join(dir,'data'),defaultRoot=path.join(dir,'app','video-reconstruction');
+    let host=await createReconstructionHost({directory,assetsDirectory:dir,defaultRoot});
+    assert.equal(host.state().settings.runtimeRoot,defaultRoot);
+    const chosen=path.join(dir,'chosen-models');await host.handle('configure',{runtimeRoot:chosen});
+    host=await createReconstructionHost({directory,assetsDirectory:dir,defaultRoot:path.join(dir,'new-app','video-reconstruction')});
+    assert.equal(host.state().settings.runtimeRoot,chosen);
+});
+
+test('runtime upgrade retains model and consent, and uses packaged verification assets',async t=>{
+    const dir=await fixture(t),directory=path.join(dir,'data'),root=path.join(dir,'runtime'),assetsDirectory=dir;
+    await fs.mkdir(root);await fs.writeFile(path.join(root,'ready.json'),JSON.stringify({version:'human3r-672s-native-2',modelHash:require('../desktop/video-reconstruction/manifest.cjs').MODEL.sha256}));
+    await fs.mkdir(path.join(root,'models'));await fs.writeFile(path.join(root,'models','keep.pth'),'retained');
+    let usedAssets;
+    const host=await createReconstructionHost({directory,assetsDirectory,defaultRoot:root,install:async(_,options)=>{usedAssets=options.assetsDirectory;}});
+    assert.equal(host.state().ready,false);
+    await host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion},true);
+    // Mark as managed, as an existing real installation would be.
+    await fs.writeFile(path.join(root,'.director-video-runtime.json'),JSON.stringify({format:'director-video-runtime'}));
+    await host.handle('download');assert.equal((await settled(host)).job.status,'completed');
+    assert.equal(usedAssets,assetsDirectory);assert.equal(host.state().accepted,true);
+    assert.equal(await fs.readFile(path.join(root,'models','keep.pth'),'utf8'),'retained');
+    const marker=JSON.parse(await fs.readFile(path.join(root,'ready.json'),'utf8'));
+    assert.equal(marker.version,require('../desktop/video-reconstruction/manifest.cjs').RUNTIME_VERSION);
+});
+
 test('cancelling an in-progress transfer leaves no partial model',async t=>{
     const dir=await fixture(t),controller=new AbortController();let sent=false;
     const body=new ReadableStream({pull(stream){if(sent){controller.abort();stream.close();}else{sent=true;stream.enqueue(new Uint8Array([1,2,3]));}}});

@@ -26,7 +26,7 @@ module.exports = {
     electronDist: 'node_modules/electron/dist',
     toolsets: { appimage: '1.0.3' },
     win: { target: [{ target: 'nsis', arch: ['x64'] }], executableName: 'DirectorDesk', icon: path.join(__dirname, 'icon.ico'), signExecutable: false },
-    nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
+    nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, include:path.join(__dirname,'installer.nsh'),
         createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: '导演台',
         runAfterFinish: false, deleteAppDataOnUninstall: false, differentialPackage: false,
         artifactName: `DirectorDesk-Setup-${version}.\${ext}`, uninstallDisplayName: `导演台 ${version}`, installerLanguages: ['zh_CN', 'en_US'] },

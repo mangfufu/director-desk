@@ -13,11 +13,11 @@ const DOWNLOADS = [
 ];
 const WINDOWS_UV={file:'cache/uv-windows.zip',url:'https://github.com/astral-sh/uv/releases/download/0.9.9/uv-x86_64-pc-windows-msvc.zip',sha256:'b1c5d78c5cb6804e556e07eeafbcdea7378107c2bd5c342dea0cdc05a607d8e5'};
 const TORCH_WHEELS={
-    win32:[['torch','2.5.1','win_amd64',2510680879,'3c3f705fb125edbd77f9579fa11a138c56af8968a10fc95834cdd9fdf4f1f1a6'],['torchvision','0.20.1','win_amd64',6143050,'0f6c7b3b0e13663fb3359e64f3604c0ab74c2b4809ae6949ace5635a5240f0e5']],
-    linux:[['torch','2.5.1','linux_x86_64',908202405,'bf6484bfe5bc4f92a4a1a1bf553041505e19a911f717065330eb061afe0e14d7'],['torchvision','0.20.1','linux_x86_64',7287066,'d1053ec5054549e7dac2613b151bffe323f3c924939d296df4d7d34925aaf3ad']],
+    win32:[['torch','2.7.1','win_amd64',3273024349,'2bb8c05d48ba815b316879a18195d53a6472a03e297d971e916753f8e1053d30'],['torchvision','0.22.1','win_amd64',7638377,'650561ba326d21021243f5e064133dc62dc64d52f79623db5cd76637a9665f96']],
+    linux:[['torch','2.7.1','manylinux_2_28_x86_64',1039245529,'0b64f7d0a6f2a739ed052ba959f7b67c677028c9566ce51997f9f90fe573ddaa'],['torchvision','0.22.1','manylinux_2_28_x86_64',8730624,'f64ef9bb91d71ab35d8384912a19f7419e35928685bc67544d58f45148334373']],
 };
 for(const platform of Object.keys(TORCH_WHEELS))TORCH_WHEELS[platform]=TORCH_WHEELS[platform].map(([name,version,target,bytes,sha256])=>{
-    const filename=`${name}-${version}+cu124-cp312-cp312-${target}.whl`;
-    return {file:`cache/wheels/${filename}`,url:`https://download.pytorch.org/whl/cu124/${filename.replace('+','%2B')}`,bytes,sha256};
+    const filename=`${name}-${version}+cu128-cp312-cp312-${target}.whl`;
+    return {file:`cache/wheels/${filename}`,url:`https://download.pytorch.org/whl/cu128/${filename.replace('+','%2B')}`,bytes,sha256};
 });
-module.exports={MODEL,DOWNLOADS,WINDOWS_UV,TORCH_WHEELS,RUNTIME_VERSION:'human3r-672s-native-2'};
+module.exports={MODEL,DOWNLOADS,WINDOWS_UV,TORCH_WHEELS,RUNTIME_VERSION:'human3r-672s-native-3'};

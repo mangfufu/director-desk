@@ -26,6 +26,16 @@ if line in original:
 import numpy as np
 import torch
 import cv2
+from runtime_check import verify_gpu
+verify_gpu()
+# Human3R's official checkpoint includes argparse.Namespace model metadata.
+# PyTorch 2.6+ changed torch.load's default; retain upstream's original loading
+# behavior only at this call site for our pinned, hash-verified checkpoint.
+model_source = REPO/'src/dust3r/model.py'
+model_text = model_source.read_text()
+legacy_load = 'torch.load(model_path, map_location="cpu")'
+if legacy_load in model_text:
+    model_source.write_text(model_text.replace(legacy_load, 'torch.load(model_path, map_location="cpu", weights_only=False)'))
 # Use the locally downloaded architecture; its weights are in Human3R's checkpoint.
 original_hub_load = torch.hub.load
 def local_hub_load(repo_or_dir, model, *a, **kw):

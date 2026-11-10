@@ -54,7 +54,7 @@ try {
 await fs.copyFile('desktop/main.cjs', path.join(desktopRoot, 'desktop/main.cjs'));
 await fs.copyFile('desktop/language.cjs', path.join(desktopRoot, 'desktop/language.cjs'));
 await fs.copyFile('desktop/preload.cjs', path.join(desktopRoot, 'desktop/preload.cjs'));
-const reconstructionAssets=['run-inference.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt'];
+const reconstructionAssets=['run-inference.py','runtime_check.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt'];
 await fs.mkdir(path.join(desktopRoot,'desktop/video-reconstruction'),{recursive:true});
 for(const file of reconstructionAssets)await fs.copyFile(path.join('desktop/video-reconstruction',file),path.join(desktopRoot,'desktop/video-reconstruction',file));
 await build({entryPoints:['src/reconstruction/build-project.ts'],outfile:path.join(desktopRoot,'desktop/video-reconstruction/build-project.mjs'),bundle:true,platform:'node',format:'esm',sourcemap:false,minify:true});

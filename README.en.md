@@ -12,7 +12,7 @@ Work directly in the editor, or connect an AI agent that can build and edit the 
 
 ![DirectorDesk: stage view, camera view, and timeline](docs/images/workspace-0.5.3.png)
 
-Latest release: **[0.5.3](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3)** — Video reconstruction, shot contact sheets, cached previews, composition guides, and improvements to character models and editing. Screenshots show the Chinese interface; older feature screenshots are labeled with their version.
+Latest release: **[0.5.3.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.3.1)** — Updated GPU compatibility for video reconstruction. New installations default to storing models alongside the app. Screenshots show the Chinese interface; older feature screenshots are labeled with their version.
 
 ## Start from a video
 
@@ -24,7 +24,7 @@ Video Reconstruction is powered by **[Human3R](https://github.com/fanegg/Human3R
 
 [Project and demos](https://fanegg.github.io/Human3R/) · [Source code](https://github.com/fanegg/Human3R) · [Model downloads](https://huggingface.co/faneggg/human3r) · [Model and source license](desktop/video-reconstruction/Human3R-LICENSE.txt)
 
-The model runs locally, requires an NVIDIA GPU, and is downloaded separately from the app. Review its license and download it on first use; the settings panel includes hardware guidance, installation progress, and cleanup controls. **Human3R is restricted to non-commercial use. Commercial use requires separate authorization.**
+The model runs locally, requires an NVIDIA GPU, and is downloaded separately from the app. Review its license and download it on first use. The default location is a `video-reconstruction` folder alongside the app; you can choose another folder. The settings panel includes hardware guidance, installation progress, and cleanup controls. **Human3R is restricted to non-commercial use. Commercial use requires separate authorization.**
 
 ## Review shots and complex scenes
 
