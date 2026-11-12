@@ -24,6 +24,7 @@ export function bindNavigation(ctx: AppContext) {
         update(delta: number) {
             if (!enabled()) { keys.clear(); return; }
             if (!keys.size) return;
+            ctx.engine.noteViewNavigation();
             const camera = ctx.engine.editorCamera, orbit = ctx.engine.orbit;
             const axis = (positive: string, negative: string) => Number(keys.has(positive)) - Number(keys.has(negative));
             const yaw = axis('KeyQ', 'KeyE') * delta * 1.25 * editorPreferences.current.rotationSpeed;

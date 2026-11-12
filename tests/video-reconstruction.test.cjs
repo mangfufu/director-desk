@@ -5,10 +5,58 @@ const {downloadFile}=require('../desktop/video-reconstruction/download.cjs');
 async function fixture(t){
     const base=path.resolve('tmp/video-to-project/tests');await fs.mkdir(base,{recursive:true});const dir=await fs.mkdtemp(path.join(base,'case-'));
     await fs.writeFile(path.join(dir,'Human3R-LICENSE.txt'),'Non-commercial test license');
+    await fs.writeFile(path.join(dir,'FlowHMR-LICENSE.txt'),'FlowHMR non-commercial test license');
     t.after(()=>fs.rm(dir,{recursive:true,force:true}));return dir;
 }
 function fakeSpawn(){const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();setTimeout(()=>child.emit('close',0),5);return child;}
 async function settled(host){for(let n=0;n<200;n++){if(!host.isBusy())return host.state();await new Promise(r=>setTimeout(r,5));}throw Error('Task did not settle');}
+
+test('FlowHMR separates license, runtime, weights and imported body; same request never repeats conversion',async t=>{
+    const dir=await fixture(t);let parts={runtimeReady:false,modelsReady:false,bodyReady:false},calls=0,converted;
+    const host=await createReconstructionHost({directory:path.join(dir,'data'),assetsDirectory:dir,liteReady:async()=>true,
+        flowStatus:async()=>({...parts,ready:Object.values(parts).every(Boolean)}),flowInstall:async()=>{parts.runtimeReady=parts.modelsReady=true;},
+        flowImport:async()=>{parts.bodyReady=true;},flowRun:async(_root,{task})=>{calls++;converted=task.input;await fs.writeFile(path.join(task.directory,'analysis.json'),JSON.stringify({duration:1}));},
+        buildProject:async directory=>({file:path.join(directory,'test.director'),entities:2})});t.after(()=>host.dispose());
+    await host.handle('configure',{engine:'flowhmr'});assert.equal(host.state().accepted,false);
+    await assert.rejects(host.handle('download'),/LICENSE_REQUIRED/);
+    await assert.rejects(host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion}),/用户/);
+    await host.handle('accept-license',{accepted:true,version:host.state().model.licenseVersion},true);
+    await host.handle('download',{requestId:'flow-download'});let state=await settled(host);
+    assert.equal(state.ready,false);assert.equal(state.modes.flowhmr.runtimeReady,true);assert.equal(state.job.message,'请导入人体文件');assert.equal(state.modes.human3r.accepted,false);
+    const source=path.join(dir,'body.npz');await fs.writeFile(source,'fixture');
+    await assert.rejects(host.handle('start',{path:source,scene:'none'}),/人体文件/);
+    await host.handle('import-body',{path:source,requestId:'flow-body'});assert.equal((await settled(host)).ready,true);
+    await assert.rejects(host.handle('start',{path:source,scene:'mesh'}),/仅支持人物/);
+    await assert.rejects(host.handle('start',{path:source,scene:'none',seconds:200}),/视频区间/);
+    const input={path:source,scene:'none',seconds:1,fps:0,cameraMode:'fixed',requestId:'flow-convert'};
+    await host.handle('start',input);state=await settled(host);assert.equal(state.job.status,'completed');assert.equal(Object.hasOwn(converted,'people'),false);assert.equal(converted.fps,30);assert.equal(converted.actorModel,'human-adult');assert.equal(converted.cameraMode,'fixed');
+    await host.handle('start',input);assert.equal(calls,1);
+    await host.handle('start',{...input,fps:30,requestId:'flow-retry'});assert.equal((await settled(host)).job.status,'completed');assert.equal(converted.fps,30);
+    await host.handle('configure',{engine:'human3r'});assert.equal(host.state().accepted,false);
+    await host.handle('configure',{engine:'mediapipe'});assert.equal(host.state().ready,true);
+});
+
+test('bundled lightweight recognition runs on first launch offline, survives storage changes and legacy cleanup',async t=>{
+    const dir=await fixture(t);let usedRoot,runs=0;
+    const host=await createReconstructionHost({directory:path.join(dir,'profile'),assetsDirectory:dir,
+        bundledLiteReady:async root=>{assert.equal(root,path.join(dir,'lite'));return true;},
+        liteReady:async()=>{throw Error('Bundled mode must not read a legacy installation');},
+        fetch:async()=>{throw Error('No network expected');},liteInstall:async()=>{throw Error('No installation expected');},
+        liteRun:async({root,task})=>{runs++;usedRoot=root;await fs.writeFile(path.join(task.directory,'analysis.json'),'{}');},
+        buildProject:async directory=>({file:path.join(directory,'result.director'),entities:2})});
+    t.after(()=>host.dispose());
+    assert.equal(host.state().ready,true);assert.equal(host.state().accepted,true);assert.equal(host.state().modes.mediapipe.bundled,true);
+    await host.handle('download',{requestId:'already-bundled'});assert.equal(host.state().job,null);
+    const root=path.join(dir,'user-storage');await host.handle('configure',{runtimeRoot:root});assert.equal(host.state().ready,true);
+    await require('../desktop/video-reconstruction/storage.cjs').initialize(root);
+    await fs.mkdir(path.join(root,'models'),{recursive:true});await fs.writeFile(path.join(root,'models/pose_landmarker_lite.task'),'old downloaded copy');
+    await host.handle('remove-runtime',{engine:'mediapipe'});assert.equal(host.state().ready,true);
+    await assert.rejects(fs.access(path.join(root,'models/pose_landmarker_lite.task')));
+    const usage=await host.handle('storage',{engine:'mediapipe'});assert.ok(usage.bundledBytes>20_000_000);assert.equal(usage.models,0);
+    const source=path.join(dir,'input.mp4');await fs.writeFile(source,'test');
+    await host.handle('start',{path:source,seconds:1,scene:'none',requestId:'offline-first-run'});
+    assert.equal((await settled(host)).job.status,'completed');assert.equal(runs,1);assert.equal(usedRoot,path.join(dir,'lite'));
+});
 
 test('lightweight mode has independent readiness, no Human3R consent, shared cancellation and persistence',async t=>{
     const dir=await fixture(t);let available=false,runs=0;
@@ -20,9 +68,10 @@ test('lightweight mode has independent readiness, no Human3R consent, shared can
     await assert.rejects(fs.access(path.join(host.state().settings.runtimeRoot,'ready.json')),'lite install does not replace Human3R ready marker');
     const source=path.join(dir,'input.mp4');await fs.writeFile(source,'test');
     await assert.rejects(host.handle('start',{path:source,scene:'mesh'}),/仅支持人物/);
-    await assert.rejects(host.handle('start',{path:source,people:0}),/人物数量/);
     await host.handle('start',{path:source,scene:'none',seconds:1,requestId:'lite-convert'});
     await assert.rejects(host.handle('configure',{engine:'human3r'}),/结束当前任务/);
+    await assert.rejects(host.handle('clear-cache',{engine:'mediapipe'}),/结束当前任务/);
+    await assert.rejects(host.handle('remove-runtime',{engine:'human3r'}),/结束当前任务/);
     await new Promise(r=>setTimeout(r,10));await host.handle('cancel');assert.equal((await settled(host)).job.status,'cancelled');assert.equal(runs,1);
     const again=await createReconstructionHost(options);t.after(()=>again.dispose());assert.equal(again.state().engine,'mediapipe');assert.equal(again.state().ready,true);
     await again.handle('configure',{engine:'human3r'});assert.equal(again.state().accepted,false);assert.equal(again.state().ready,false);
@@ -72,7 +121,7 @@ test('restart persists interrupted task metadata so explicit cleanup can reclaim
     assert.equal(host.state().job.status,'interrupted');
     assert.equal(JSON.parse(await fs.readFile(path.join(dir,'task.json'),'utf8')).status,'interrupted');
     const restarted=await createReconstructionHost(options);t.after(()=>restarted.dispose());
-    assert.equal(restarted.state().job.status,'interrupted');await restarted.handle('clear-cache');
+    assert.equal(restarted.state().job.status,'interrupted');await restarted.handle('clear-cache',{engine:'human3r'});
     for(const name of ['frame-00000.npz','frames','person-0.glb'])await assert.rejects(fs.access(path.join(dir,name)));
     for(const name of ['reconstructed.director','custom.glb'])await fs.access(path.join(dir,name));
 });

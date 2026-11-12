@@ -3,6 +3,9 @@ const { ipcMain, app, safeStorage, clipboard, dialog, net, shell } = require('el
 const { createReconstructionHost } = require('./video-reconstruction/host.cjs');
 const { createVideoSource } = require('./video-reconstruction/video-source.cjs');
 const { defaultRuntimeRoot } = require('./video-reconstruction/default-root.cjs');
+const {text:desktopText}=require('./language.cjs');
+const {createBlenderHost}=require('./blender-import/host.cjs');
+const {readModelFiles}=require('./model-files.ts');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -15,6 +18,8 @@ const { createSkillHost } = require('./skills/host.cjs');
 const { createOfficialSkill } = require('./skills/official.cjs');
 const { TOOL_DEFINITIONS, MCP_TOOL_DEFINITIONS, DISCUSSION_TOOLS, isDiscussionToolCall, BUILTIN_SKILL } = require('./tools-contract.cjs');
 function attachIntegration(window) {
+    let blender;
+    const getBlender=()=>blender??=createBlenderHost({directory:path.join(app.getPath('userData'),'blender-import'),script:app.isPackaged?path.join(process.resourcesPath,'blender-import/export-scene.py'):path.join(app.getAppPath(),'desktop/blender-import/export-scene.py'),readModelFiles});
     const videoSource=createVideoSource();
     let reconstruction, reconstructionRuntime;
     const getReconstruction = () => reconstruction ??= createReconstructionHost({
@@ -71,9 +76,29 @@ function attachIntegration(window) {
                 // Use the existing close/save flow, never destroy the window directly.
                 if (data === 'close') setImmediate(() => { if (!window.isDestroyed()) window.close(); });
             }
+            else if(action==='blender') {
+                const runtime=getBlender();await runtime.ready;
+                if(data?.action==='choose-file'||data?.action==='choose-blender') {
+                    const program=data.action==='choose-blender';
+                    const chosen=await dialog.showOpenDialog(window,{title:desktopText(window,program?'选择 Blender':'导入 Blender 工程'),properties:['openFile'],...(!program?{filters:[{name:'Blender',extensions:['blend']}]}:process.platform==='win32'?{filters:[{name:'Blender',extensions:['exe']}]}:{})});
+                    const file=chosen.canceled?undefined:chosen.filePaths[0];
+                    result=program&&file?await runtime.configure(file):{path:file};
+                } else if(data?.action==='state')result=runtime.state();
+                else if(data?.action==='configure')result=await runtime.configure(data.data?.path);
+                else if(data?.action==='convert')result=await runtime.convert(data.data);
+                else if(data?.action==='model')result=await runtime.model(data.data);
+                else if(data?.action==='release'){await runtime.release(data.data?.id);result={};}
+                else if(data?.action==='cancel')result=runtime.cancel(data.data?.id);
+                else throw Error('未知 Blender 操作');
+            }
             else if (action === 'reconstruction') {
                 const runtime = await getReconstruction();
-                if (data?.action === 'choose-video' || data?.action === 'choose-directory') {
+                if(data?.action === 'choose-body'){
+                    const chosen=await dialog.showOpenDialog(window,{title:'导入人体文件',properties:['openFile'],filters:[{name:'Extended SMPL+H',extensions:['xz','zip','gz','npz']}]});
+                    result={path:chosen.canceled?undefined:chosen.filePaths[0]};
+                } else if(data?.action === 'body-page'){
+                    await shell.openExternal(runtime.state().modes.flowhmr.model.bodyUrl);result=true;
+                } else if (data?.action === 'choose-video' || data?.action === 'choose-directory') {
                     const directory = data.action === 'choose-directory';
                     const chosen = await dialog.showOpenDialog(window, directory ? {title:'模型目录',properties:['openDirectory','createDirectory']} : {title:'选择视频',properties:['openFile'],filters:[{name:'视频',extensions:['mp4','mov','mkv','avi','webm','m4v']}]});
                     result = {path:chosen.canceled ? undefined : chosen.filePaths[0]};
@@ -118,9 +143,9 @@ function attachIntegration(window) {
         } catch (e) { return { ok: false, error: e.message }; }
     });
     window.webContents.on('did-start-navigation', details => { if (!details.isMainFrame || details.isSameDocument) return; ready = false; host.stop(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '页面重新载入，调用结果未确认；请重新读取工程，不要直接重复写入' }); } pending.clear(); });
-    window.on('closed', () => { host.stop(); void reconstruction?.then(runtime=>runtime.dispose()).catch(()=>{}); void mcp.close(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '软件已关闭，调用结果未确认；请重新读取工程，不要直接重复写入' }); }
+    window.on('closed', () => { host.stop(); blender?.dispose(); void reconstruction?.then(runtime=>runtime.dispose()).catch(()=>{}); void mcp.close(); for (const task of pending.values()) { clearTimeout(task.timer); task.resolve({ ok: false, execution: 'unknown', error: '软件已关闭，调用结果未确认；请重新读取工程，不要直接重复写入' }); }
         windowEvents.forEach(name => window.removeListener(name, notifyWindowState));
         ipcMain.removeHandler('director-host'); ipcMain.removeListener('director-tool-result', resultHandler); ipcMain.removeListener('director-tools-ready', readyHandler); });
-    return { videoResponse:request=>videoSource.respond(request), isBusy: () => host.isRunning() || skillHost.isBusy() || pending.size > 0 || !!reconstructionRuntime?.isBusy() };
+    return { videoResponse:request=>videoSource.respond(request), isBusy: () => !!blender?.isBusy() || host.isRunning() || skillHost.isBusy() || pending.size > 0 || !!reconstructionRuntime?.isBusy() };
 }
 module.exports = { attachIntegration };

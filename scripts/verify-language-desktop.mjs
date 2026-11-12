@@ -7,13 +7,14 @@ import {_electron as electron} from 'playwright-core';
 const output=path.resolve('output/playwright/language');await fs.mkdir(output,{recursive:true});
 const profile=await fs.mkdtemp(path.join(output,'desktop-')),env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
 const appPath=path.resolve(process.env.DIRECTOR_APP_PATH||'.audit/desktop-app');
-const launch=()=>electron.launch({executablePath:createRequire(import.meta.url)('electron'),args:[appPath,`--director-test-profile=${profile}`],env});
+const launch=()=>electron.launch({executablePath:createRequire(import.meta.url)('electron'),args:[appPath,'--lang=zh-CN',`--director-test-profile=${profile}`],env});
 let app=await launch();
 try {
     const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     // Electron owns beforeunload dialogs; do not let Playwright auto-dismiss them.
     page.on('dialog',()=>{});
     await page.locator('#timeline-content .track-lane').first().waitFor();
+    assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
     await page.evaluate(()=>document.querySelector('#settings-toggle').click());
     await page.locator('#ui-language').selectOption('en');
     assert.equal(await page.locator('[data-settings-category="navigation"]').innerText(),'Navigation');

@@ -10,6 +10,12 @@ const fixture = await fs.mkdtemp(path.join(parent, 'privacy-test-'));
 const run = (...args) => spawnSync(process.execPath, [scanner, ...args], { cwd: fixture, encoding: 'utf8' });
 try {
     await fs.mkdir(path.join(fixture, 'dist/assets'), { recursive: true });
+    // Keep the fixture in step with the desktop source inputs checked by the gate.
+    // Runtime downloads, binaries and Python caches are not source fixtures.
+    await fs.cp('desktop', path.join(fixture, 'desktop'), { recursive: true,
+        filter: async file => (await fs.stat(file)).isDirectory()
+            ? path.basename(file) !== '__pycache__'
+            : /\.(?:cjs|ts|py|txt)$/.test(file) });
     // The release gate now requires the bundled motion payload and desktop/helper inputs as well as web files.
     for (const relative of ['src/animation/library/humanoid-v1.json', 'src/animation/library/humanoid-v1-manifest.json',
         'desktop/main.cjs', 'desktop/preload.cjs', 'desktop/integration.cjs', 'desktop/media-import.cjs', 'desktop/file-host.cjs', 'desktop/files.cjs', 'desktop/ai-host.cjs', 'desktop/ai-conversation.cjs', 'desktop/providers.cjs', 'desktop/update-config.cjs', 'desktop/update-host.cjs', 'desktop/updates.cjs',
@@ -46,6 +52,8 @@ try {
         await fs.copyFile(path.join(fixture, 'skills/director-desk', file), destination);
     }
     await fs.mkdir(path.join(stagedRoot, 'desktop'), { recursive: true });
+    for (const directory of ['blender-import', 'video-reconstruction'])
+        await fs.cp(path.join('.audit/desktop-app/desktop', directory), path.join(stagedRoot, 'desktop', directory), { recursive: true });
     for (const file of ['mcp-stdio.cjs', 'files.cjs', 'integration.cjs', 'tools-contract.cjs', 'updates.cjs', 'extensions.cjs', 'extension-worker.cjs'])
         await fs.writeFile(path.join(stagedRoot, 'desktop', file), 'module.exports = {};');
     assert.equal(run('--desktop').status, 0);

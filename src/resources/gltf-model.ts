@@ -1,7 +1,8 @@
 import * as T from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import { adoptModel, disposeSource, type LoadedModel } from './model-runtime.ts';
-import { modelPath, readGltfDocument, unpackModelFiles, type ModelPackage } from './model-package.ts';
+import { adoptModel, disposeSource, type LoadedModel, type ModelSource } from './model-runtime.ts';
+import { modelPath, readGltfDocument, unpackModelFiles, inlineModelBytes, resolveModelUri, type ModelPackage } from './model-package.ts';
+import { shareModelImages } from './model-image-pool.ts';
 
 const prefix = 'model-package:///';
 const requiredExtensions = new Set(['KHR_lights_punctual', 'KHR_materials_clearcoat', 'KHR_materials_dispersion', 'KHR_materials_ior', 'KHR_materials_sheen',
@@ -43,5 +44,58 @@ export async function loadGltfModel(resource: ModelPackage, signal?: AbortSignal
     } finally { urls.forEach(url => URL.revokeObjectURL(url)); internalURLs.forEach(url => URL.revokeObjectURL(url)); }
     if (signal?.aborted) { disposeSource(gltf); signal.throwIfAborted(); }
     if (failedDependency) { disposeSource(gltf); throw Error('模型关联资源无法解码，请检查贴图或缓冲区文件'); }
-    return adoptModel(gltf, document.asset.copyright ?? '', ['glTF 按米制、Y 轴向上读取；朝向和尺寸可在导入时校正。']);
+    // The same embedded texture often occurs in many separately editable objects.
+    // Hash encoded bytes once per image, then share only the immutable Source.
+    try {
+        const json = gltf.parser.json, textures = new Set<T.Texture>();
+        for (const scene of gltf.scenes) scene.traverse(node => {
+            if (!(node instanceof T.Mesh)) return;
+            for (const material of Array.isArray(node.material) ? node.material : [node.material])
+                for (const value of Object.values(material)) if (value instanceof T.Texture) textures.add(value);
+        });
+        const hashes = new Map<number, Promise<string | undefined>>();
+        const fileBytes = (uri: string) => uri.startsWith('data:') ? inlineModelBytes(uri) : files.get(resolveModelUri(resource.entry, uri));
+        const imageHash = async (index: number): Promise<string | undefined> => {
+            const img = json.images?.[index]; if (!img) return;
+            let encoded: Uint8Array | undefined;
+            if (img.uri) encoded = fileBytes(img.uri);
+            else if (img.bufferView !== undefined) {
+                const view = json.bufferViews?.[img.bufferView], buffer = json.buffers?.[view?.buffer];
+                if (view && buffer) {
+                    let data: Uint8Array | undefined;
+                    if (buffer.uri) data = fileBytes(buffer.uri);
+                    else if (/\.glb$/i.test(resource.entry)) {
+                        const offset = 20 + new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(12, true) + 8;
+                        data = bytes.subarray(offset);
+                    }
+                    if (data) encoded = data.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
+                }
+            }
+            if (!encoded) return;
+            const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(encoded)));
+            return Array.from(digest, b => b.toString(16).padStart(2, '0')).join('');
+        };
+        const entries: { texture: T.Texture; key: string }[] = [];
+        const sourceIndices = new Map<T.Texture['source'], number>();
+        // GLTFLoader clones textures for texCoord > 0 without copying their
+        // associations. The clone still points to the original immutable Source.
+        for (const [object, association] of gltf.parser.associations) {
+            if (object instanceof T.Texture && association?.textures !== undefined) sourceIndices.set(object.source, association.textures);
+        }
+        for (const texture of textures) {
+            const index = gltf.parser.associations.get(texture)?.textures ?? sourceIndices.get(texture.source);
+            const def = index === undefined ? undefined : json.textures?.[index];
+            const imageIndex = def?.extensions?.EXT_texture_webp?.source ?? def?.extensions?.EXT_texture_avif?.source ?? def?.source;
+            if (imageIndex === undefined) continue;
+            if (!hashes.has(imageIndex)) hashes.set(imageIndex, imageHash(imageIndex));
+            const key = await hashes.get(imageIndex); if (key) entries.push({ texture, key });
+        }
+        signal?.throwIfAborted();
+        const lease = shareModelImages(entries);
+        (gltf as ModelSource).sharedImages = lease.images; (gltf as ModelSource).releaseImages = lease.release;
+    } catch (error) { disposeSource(gltf); throw error; }
+    // Parsing caches retain encoded buffers and intermediate texture clones.
+    // Runtime ownership needs only the completed scenes, clips and image leases.
+    const { scene, scenes, cameras, animations, sharedImages, releaseImages } = gltf as ModelSource;
+    return adoptModel({scene,scenes,cameras,animations,sharedImages,releaseImages}, document.asset.copyright ?? '', ['glTF 按米制、Y 轴向上读取；朝向和尺寸可在导入时校正。']);
 }

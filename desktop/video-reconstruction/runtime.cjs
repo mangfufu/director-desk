@@ -30,10 +30,10 @@ function stopTree(child,platform=process.platform){
         killer.on('error',()=>child.kill());
     }else{try{process.kill(-child.pid,'SIGKILL');}catch{child.kill('SIGKILL');}}
 }
-function runProcess(executable,args,{root,task,signal,onLine=()=>{},platform=process.platform,spawnProcess=spawn}){
+function runProcess(executable,args,{root,task,signal,onLine=()=>{},platform=process.platform,spawnProcess=spawn,env={},cwd=root}){
     return new Promise((resolve,reject)=>{
         signal?.throwIfAborted();const log=sync.createWriteStream(path.join(task.directory,'run.log'),{flags:'a'});
-        const child=spawnProcess(executable,args,{cwd:root,env:environment(root,platform),windowsHide:true,detached:platform!=='win32',stdio:['ignore','pipe','pipe']});
+        const child=spawnProcess(executable,args,{cwd,env:{...environment(root,platform),...env},windowsHide:true,detached:platform!=='win32',stdio:['ignore','pipe','pipe']});
         let tail='',partial='',finished=false;
         const cancel=()=>stopTree(child,platform);signal?.addEventListener('abort',cancel,{once:true});
         const finish=error=>{if(finished)return;finished=true;signal?.removeEventListener('abort',cancel);log.end();error?reject(error):resolve();};
@@ -44,7 +44,7 @@ function runProcess(executable,args,{root,task,signal,onLine=()=>{},platform=pro
         child.once('close',code=>finish(code===0&&!signal?.aborted?undefined:Error(signal?.aborted?'已取消':tail.trim().split('\n').slice(-4).join('\n')||`运行失败（${code}）`)));
     });
 }
-async function extract(archive,target,strip,signal){
+async function extract(archive,target,strip,signal,{skipLinks=false}={}){
     await fs.mkdir(target,{recursive:true});
     if(archive.endsWith('.zip')){
         const files=unzipSync(new Uint8Array(await fs.readFile(archive)));
@@ -55,7 +55,7 @@ async function extract(archive,target,strip,signal){
             const file=path.join(target,...parts);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,data);
         }
     }else await tar.x({file:archive,cwd:target,strip,strict:true,preservePaths:false,
-        filter:(name,entry)=>{signal?.throwIfAborted();if(!['File','Directory'].includes(entry.type))throw Error('安装包包含不支持的链接');return true;}});
+        filter:(name,entry)=>{signal?.throwIfAborted();if(skipLinks&&['SymbolicLink','Link'].includes(entry.type))return false;if(!['File','Directory'].includes(entry.type))throw Error('安装包包含不支持的链接');return true;}});
 }
 async function installRuntime(root,{task,signal,fetch:fetcher,platform=process.platform,download=downloadFile,run=runProcess,assetsDirectory=__dirname}){
     const local=locations(root,platform),uv=platform==='win32'?WINDOWS_UV:DOWNLOADS[3];

@@ -3,10 +3,11 @@ export class InteractionPreview {
     active = false;
     draft = false;
     private slowFrames = 0;
-    update(active: boolean, enabled: boolean) {
+    update(active: boolean, enabled: boolean, heavyScene = false) {
         this.active = active && enabled;
         const before = this.draft;
         if (!this.active) { this.draft = false; this.slowFrames = 0; }
+        else if (heavyScene) this.draft = true;
         return before !== this.draft;
     }
     record(milliseconds: number) {

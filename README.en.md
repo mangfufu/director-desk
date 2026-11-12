@@ -2,151 +2,86 @@
 
 [简体中文](README.md) · **English**
 
-**Block the scene. Plan the camera moves. Export a reference video.**
+A 3D previsualization tool for AI video production. Build sets, block character movement, design camera work, and export reference videos with matching prompts. Work in the editor or let an AI agent edit the project directly.
 
-DirectorDesk is a 3D previsualization tool for AI video creators. Use simple models to plan where characters stand, how they move, and how the camera captures the action. Export the result as a reference video, with scene-specific prompts for your video generation model.
+[Download for Windows / Linux](https://github.com/mangfufu/director-desk/releases/latest) · [Release notes](https://github.com/mangfufu/director-desk/releases) · [Report an issue](https://github.com/mangfufu/director-desk/issues)
 
-Work directly in the editor, or connect an AI agent that can build and edit the scene for you.
+![Stage view, camera view, and timeline](docs/images/workspace-current-en.png)
 
-[Download for Windows / Linux](https://github.com/mangfufu/director-desk/releases/latest) · [Release notes](https://github.com/mangfufu/director-desk/releases) · [Report an issue](https://github.com/mangfufu/director-desk/issues) · [Agent skill](skills/director-desk/)
+Latest release: [0.5.5](https://github.com/mangfufu/director-desk/releases/tag/v0.5.5). Interface screenshots show the current release.
 
-![DirectorDesk: stage view, camera view, and timeline](docs/images/workspace-0.5.3.png)
+## Features
 
-Latest release: **[0.5.4](https://github.com/mangfufu/director-desk/releases/tag/v0.5.4)** — New Lightweight Recognition runs on the CPU without a dedicated GPU. Standard Recognition remains available as an optional download. Screenshots show the Chinese interface; older feature screenshots are labeled with their version.
-
-## Start from a video
-
-Open **Video Reconstruction** in the title bar, choose a video and a time range, and reconstruct character motion and camera movement, with optional simplified scenery. Watch the source and reconstruction side by side, review the result, choose character models, and open it as an editable project.
-
-You can replace a character's appearance, trim or retime the recovered animation, and continue editing movement paths and cameras.
-
-Video Reconstruction offers two modes. Both run locally and download their models on demand:
-
-- **Lightweight Recognition (Default):** powered by [Google MediaPipe Pose Landmarker Lite](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker). The download is about 21 MB and no dedicated GPU is required. Extract character motion into editable projects, replace characters, trim clips, and adjust playback speed. Positions are approximate; this mode does not reconstruct the scene or original camera. Occlusion can cause missed detections or split a person into separate tracks.
-- **Standard Recognition:** powered by **[Human3R](https://github.com/fanegg/Human3R)** and its Human3R-672S model. It reconstructs human poses, camera trajectories, and optional scene geometry, and requires an NVIDIA GPU. Hardware requirements, project links, and license terms are available before downloading. **Human3R is restricted to non-commercial use; commercial use requires separate authorization.**
-
-Choose a mode from the settings dropdown; installed modes are marked. Models default to the `video-reconstruction` folder alongside the app, or a folder you choose. Settings also show installation progress, disk usage, and cleanup controls.
-
-Thanks to the MediaPipe and Human3R authors and contributors. [Human3R project and demos](https://fanegg.github.io/Human3R/) · [Model downloads](https://huggingface.co/faneggg/human3r) · [Human3R license](desktop/video-reconstruction/Human3R-LICENSE.txt) · [MediaPipe license](desktop/video-reconstruction/MediaPipe-LICENSE.txt)
-
-## Review shots and complex scenes
-
-- **Shot contact sheets:** review shot images, timing, and notes together, then export an HTML sheet to share.
-- **Cached previews:** render a selected range once and loop the preview for smoother playback of complex scenes.
-- **Composition guides:** toggle thirds, center lines, and safe-area guides.
-
-## From an idea to a reference video
-
-1. **Build a set.** Start with a template or a blank scene. Add characters, furniture, buildings, and props.
-2. **Block the action.** Place characters, assign actions, draw movement paths, and position your cameras. Arrange camera moves and cuts on the timeline.
-3. **Preview and export.** Check the actual camera views, export a reference video, and prepare the prompts for each scene.
-
-Every camera renders the same 3D scene you edit. Switch between Stage, Split, and Camera views to see how a change affects the shot.
-
-DirectorDesk plans the visual reference; your chosen video generation model produces the final footage.
-
-Browse built-in and saved actions in the **Actions** tab, then drag one onto a character’s timeline track. Move clips before, after, or between other clips; a preview shows where they will land, and later clips shift when needed to make room. Right-click a clip to adjust its timing, split at the playhead, or delete it. Right-click an object in the stage view to frame, duplicate, or hide it.
-
-## Let AI work in the editor
-
-**Built-in assistant.** Configure a model provider and describe what you want. The assistant can build sets, arrange character movement, and edit camera work. Review what changed, jump to the affected objects and times, or undo an edit. You can also select characters, clips, or a time range and ask AI to work on that selection.
-
-**External agents through MCP.** Connect an MCP-capable agent, such as Codex or Claude Code, to the project currently open in DirectorDesk. Open **AI → MCP Connection**, copy the configuration for your client, and have the agent read the built-in skill. Claude Desktop can use the included local stdio bridge. Local MCP is enabled by default; turning it off is remembered.
-
-![The built-in assistant with an example scene and camera request](docs/images/ai-assistant-0.4.10.jpg)
-
-*This screenshot shows a draft request before it is sent.*
-
-Each scene can store two independent prompts: one for generation with a reference video, and one for text-only generation. The official skill comes with the app and can be updated separately under **AI → Skills**. You can also import your own skills and enable or disable them as needed.
-
-## Draw character movement
-
-Select a character, open **Blocking**, and choose **Freehand**. Drag to draw a path, then release and draw again to extend it. Paths can follow the ground or visible surfaces, including stairs and platforms. You can edit the waypoints and timing afterward. Freehand drawing also works for camera paths.
-
-![Drawing a character path in a street scene](docs/images/freehand-path-0.4.10.jpg)
-
-You can also control a character with the keyboard and record its movement. Continue editing the recorded position and action clips on the timeline. Recording from a later point preserves the earlier blocking.
-
-## Color and depth video
-
-Export the same scene and camera work as a color reference video or a grayscale depth video. Adjust the near and far distances, invert the depth, and tune the depth curve. You can fit the range to the current view or selected objects.
-
-| Color | Depth |
+| Feature | What you can do |
 | --- | --- |
-| ![Color render of a corridor scene](docs/images/depth-color-0.4.10.png) | ![Depth render from the same camera at the same time](docs/images/depth-depth-0.4.10.png) |
+| Sets and assets | Use built-in characters, props, and templates; build with primitives or import GLB/glTF, FBX, and OBJ models |
+| Blender scenes | Import sets, cameras, lights, and animation from a `.blend` file using your local Blender installation. No add-on required |
+| Animation and blocking | Browse or import animations, draw movement paths, record keyboard-controlled movement, and adjust poses and physics |
+| Cameras | Cut between cameras; use zoom, dolly zoom, handheld motion, lens distortion, and depth of field |
+| Timeline | Drag, snap, select, split, and retime clips; control when objects appear and disappear |
+| Visual effects | Add lighting, shadows, image and video surfaces, mirrors, particles, deformation, and keyframes |
+| Projects and export | Work across scenes, continue from a previous scene’s final frame, save named versions, and batch-export color or depth video |
+| Review | Use shot contact sheets, cached previews, and composition guides |
 
-*Both images use the same scene, camera, and time. Depth exports retain the blocking, camera movement, and cuts.*
+Start with a template or a blank scene, arrange the action and cameras, refine the timing, then preview and export.
 
-## More creative tools
+## AI-assisted editing
 
-| Task | Tools |
-| --- | --- |
-| Build sets quickly | Built-in models, geometric primitives, object colors, adjustable dimensions, and surface snapping |
-| Bring your own assets | GLB/glTF, FBX, and OBJ model import; animation import and a personal action library |
-| Design camera work | Multiple cameras, POV attachments, zoom, dolly zoom, handheld motion, lens distortion, depth of field, and focus controls |
-| Shape the image | Lighting and shadows, image and video surfaces, mirrors, particles, deformation, and keyframes |
-| Plan multiple scenes | Independent scenes, continuation from the previous scene’s final frame, clip multi-selection, splitting, and easing curves |
-| Prepare a handoff | Single-scene and batch video export, project files, asset packages, and optional character name labels |
-
-- **Reusable sets:** group objects, align them, create arrays, or save a setup to your set library.
-- **Character poses and physics:** adjust joints and use optional gravity, collision, inertia, and ragdoll controls for falls, rolling objects, and impulse-driven movement.
-- **Project versions:** save named versions and restore them after restarting the app.
-- **Automatic routing:** generate routes around static obstacles on a level ground surface, with staggered starts for crowds.
-- **Plugins:** install, enable, and disable extensions that add creative tools and visual effects. See the [plugin guide and example](docs/plugins.md) (Chinese).
-
-## Templates you can edit
-
-These previews were rendered by DirectorDesk. They play at the original speed with reduced resolution and frame rate.
-
-| Night Street Chase · Running and handheld camera | Suspense Corridor · Dolly zoom |
-| --- | --- |
-| ![Night street chase](docs/images/neon-chase.gif) | ![Corridor dolly zoom](docs/images/dolly-hall.gif) |
+- **Built-in assistant:** configure a model provider, then describe the set, action, or camera changes you want. Target selected characters, clips, or a time range. Locate changes and undo them.
+- **External agents:** connect Codex, Claude Code, or another MCP client to edit the current project. Copy the configuration from **AI → MCP Connection**. An included stdio bridge supports Claude Desktop.
+- **Video prompts:** save separate reference-video and text-only prompts for each scene. The [bundled skill](skills/director-desk/) updates independently of the app; you can also import your own skills.
 
 <details>
-<summary>More templates</summary>
+<summary>View the built-in assistant</summary>
 
-| Lighting Stage | Bedroom · Four Characters |
-| --- | --- |
-| ![Lighting stage](docs/images/light-stage.gif) | ![Bedroom blocking](docs/images/bedroom.gif) |
-| Empty Room | Woodland Clearing |
-| ![Empty room, first eight seconds](docs/images/room.gif) | ![Woodland clearing](docs/images/park.gif) |
-| Street at Dusk | Courtyard |
-| ![Street at dusk](docs/images/street.gif) | ![Courtyard](docs/images/courtyard.gif) |
-
-An abstract scene with particles, thin-film surfaces, mirrors, and deformation:
-
-![Abstract light study](docs/images/abstract-stage.png)
+![An example request in the assistant, before sending](docs/images/assistant-current-en.png)
 
 </details>
 
-## Download and get started
+<details>
+<summary>View depth video and template demos</summary>
 
-Get the **Windows installer** or **portable ZIP** from [Releases](https://github.com/mangfufu/director-desk/releases/latest). For the portable edition, extract the entire ZIP before running `DirectorDesk.exe`. Both editions include the agent skill.
+![Depth preview and range controls](docs/images/depth-current-en.png)
 
-**Linux x64:** download the AppImage, make it executable, and run it. Alternatively, extract the tar.gz archive and run `DirectorDesk`. Both include the agent skill. Tested on Ubuntu 24.04 under WSL 2.
+| Night Street Chase | Suspense Corridor |
+| --- | --- |
+| ![Night Street Chase](docs/images/neon-chase.gif) | ![Suspense Corridor](docs/images/dolly-hall.gif) |
 
-Set your default project and export folders in Settings. Updates can be checked against the website and GitHub. The Windows installer edition and Linux AppImage support downloading an update and restarting to apply it. ZIP and tar.gz users replace the app manually. Keep the AppImage in a folder you can write to.
+These demos were rendered by DirectorDesk. They play at the original speed with reduced resolution and frame rate.
 
-Choose **English** or **简体中文** under **Edit → Settings → Language**. Your choice is remembered. Project names, dialogue, prompts, and AI conversations stay as you wrote them.
+</details>
 
-For feedback and feature requests, open an [issue](https://github.com/mangfufu/director-desk/issues). To run the web editor locally or contribute code, see [development and build instructions](docs/development.md) (Chinese).
+## Get started
 
-## Star history
+- **Windows:** run the installer, or extract the entire portable ZIP and run DirectorDesk.exe.
+- **Linux x64:** make the AppImage executable and run it, or extract the tar.gz archive. Tested on Ubuntu 24.04 under WSL 2.
+- **Language:** choose Chinese or English under **Edit → Settings → Language**. The app follows the system locale on first launch, using English outside Chinese locales. A saved preference takes priority.
+- **Updates:** the Windows installer edition and Linux AppImage can download an update and restart to apply it. Portable editions are updated manually.
 
-<a href="https://www.star-history.com/?repos=mangfufu%2Fdirector-desk&amp;type=date&amp;legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=mangfufu%2Fdirector-desk&amp;type=Date&amp;theme=dark">
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=mangfufu%2Fdirector-desk&amp;type=Date&amp;theme=light">
-    <img alt="DirectorDesk GitHub star history" src="https://api.star-history.com/chart?repos=mangfufu%2Fdirector-desk&amp;type=Date&amp;theme=light" width="800">
-  </picture>
-</a>
+[Development and builds](docs/development.md) · [Plugin API](docs/plugins.md) · [Set editing guide](docs/staging-workflow.md) — these guides are in Chinese.
 
-## License and community
+## Extract motion from video
 
-DirectorDesk's original code is licensed under [MIT](LICENSE). Third-party models, dependencies, and assets retain their own licenses; the project's MIT license does not apply to them.
+Open **Video Reconstruction**, choose a video and a time range, review the preview, then open the result as an editable project. Replace character models, trim or retime animation clips, swap actions, and edit movement paths.
 
-- **MediaPipe:** the pose recognition components used by Lightweight Recognition; the [Apache 2.0 license](desktop/video-reconstruction/MediaPipe-LICENSE.txt) is retained.
-- **Human3R:** the model and upstream code used for Video Reconstruction are subject to terms including CC BY-NC-SA 4.0 and NAVER's non-commercial license. See the [full license](desktop/video-reconstruction/Human3R-LICENSE.txt) retained with the app.
-- **Bundled animations:** see the [animation credits](src/animation/library/NOTICE.txt) for sources, authors, and licenses.
+The default **Lightweight Recognition** uses [MediaPipe Pose Landmarker Lite](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker). It is bundled with DirectorDesk: no separate installation or dedicated GPU is needed. Processing runs locally. It extracts character motion and approximate positions, without reconstructing the original set or camera movement. Manage installation, storage, and cleanup in Video Reconstruction settings.
 
-[Linux.do](https://linux.do/)
+![Motion preview from Lightweight Recognition](docs/images/lightweight-current-en.png)
+
+## License and credits
+
+DirectorDesk's original code is licensed under [MIT](LICENSE). Third-party components, models, and assets retain their own licenses:
+
+- [MediaPipe · Apache 2.0](desktop/video-reconstruction/MediaPipe-LICENSE.txt)
+- [Human3R](https://github.com/fanegg/Human3R) · [Non-commercial license](desktop/video-reconstruction/Human3R-LICENSE.txt)
+- [FlowHMR](https://github.com/flowhmr/flowhmr) / [Windows port](https://github.com/xiaoerofficial021-collab/FlowHMR-Windows) · [Model license](desktop/video-reconstruction/FlowHMR-LICENSE.txt); SMPL+H body files have separate official license terms
+- [Animation sources and licenses](src/animation/library/NOTICE.txt)
+
+<details>
+<summary>Star History</summary>
+
+[![GitHub Star History](https://api.star-history.com/chart?repos=mangfufu/director-desk&type=Date)](https://www.star-history.com/#mangfufu/director-desk&Date)
+
+</details>
+
+Community: [Linux.do](https://linux.do/)

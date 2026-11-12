@@ -6,7 +6,7 @@ const { attachIntegration } = require('./integration.cjs');
 const { attachUpdates } = require('./updates.cjs');
 const { attachFiles } = require('./files.cjs');
 const { attachExtensions } = require('./extensions.cjs');
-const { attachLanguage, text } = require('./language.cjs');
+const { attachLanguage, text, desktopLanguage } = require('./language.cjs');
 
 const origin = 'director://app';
 protocol.registerSchemesAsPrivileged([{ scheme: 'director', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
@@ -20,13 +20,14 @@ let integration;
 const csp = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 async function createWindow() {
-    const windowTitle = app.isPackaged ? '导演台' : '导演台 · 开发测试版';
+    const systemLanguage=desktopLanguage(process.platform==='linux'?process.env:{},app.getLocale());
+    const windowTitle = systemLanguage==='en'?(app.isPackaged?'DirectorDesk':'DirectorDesk · Development Build'):(app.isPackaged ? '导演台' : '导演台 · 开发测试版');
     window = new BrowserWindow({ width: 1600, height: 1000, minWidth: 1000, minHeight: 720, show: false,
         title: windowTitle, backgroundColor: '#101214', icon: path.join(__dirname, 'icon.ico'),
         frame: false,
         webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck: false,
-            additionalArguments: process.platform==='linux' && process.env.WSL_DISTRO_NAME ? ['--director-wsl-pointer'] : [] } });
-    attachLanguage(window);
+            additionalArguments: ['--director-system-language='+systemLanguage,...(process.platform==='linux' && process.env.WSL_DISTRO_NAME ? ['--director-wsl-pointer'] : [])] } });
+    attachLanguage(window,systemLanguage);
     window.on('page-title-updated', (event, title) => {
         event.preventDefault();
         const name = title || '导演台';
@@ -71,7 +72,7 @@ else {
                     const mime={'.js':'text/javascript','.mjs':'text/javascript','.cjs':'text/javascript','.json':'application/json','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.wasm':'application/wasm','.woff2':'font/woff2'}[path.extname(resource)]||'application/octet-stream';
                     return new Response(await extensions.asset(id,digest,resource),{headers:{'Content-Type':mime,'X-Content-Type-Options':'nosniff'}});
                 }
-                if (url.hostname !== 'app' || request.method !== 'GET' || !/^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.core|model-import\.worker|planner\.worker)-[A-Za-z0-9_-]+\.js)$/.test(relative))
+                if (url.hostname !== 'app' || request.method !== 'GET' || !/^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.(?:core|module)|model-import\.worker|planner\.worker)-[A-Za-z0-9_-]+\.js)$/.test(relative))
                     return new Response('Not found', { status: 404 });
                 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' }[path.extname(relative)];
                 return new Response(await fs.readFile(path.join(webRoot, relative)), { headers: {

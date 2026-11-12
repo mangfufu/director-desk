@@ -307,7 +307,7 @@ function createNew(template: SceneTemplate = 'bedroom') {
 let previousFrame = performance.now(), lastUI = 0;
 function frame(now: number) { const delta = Math.min((now - previousFrame) / 1000, .1); previousFrame = now;
     const gesture = document.documentElement.dataset.timelineDrag;
-    engine.updateInteractionPreview(!busy && !engine.exporting && (engine.dragging || gesture === 'seek' || gesture === 'resize' || gesture === 'move' || now < interactiveSeekUntil));
+    engine.updateInteractionPreview(!busy && !engine.exporting && (playing || engine.viewInteracting || engine.dragging || gesture === 'seek' || gesture === 'resize' || gesture === 'move' || now < interactiveSeekUntil), playing);
     if (!busy && !engine.exporting) {
     if (playing) {
         time += delta;
@@ -320,9 +320,10 @@ function frame(now: number) { const delta = Math.min((now - previousFrame) / 100
             }
         }
     }
+    engine.flushTransform();
     navigation.update(delta);
     extensionHost(uiContext).poll();
-    if (playing || time !== engine.time || engine.needsSample || (history.pending && !document.documentElement.dataset.timelineDrag) || draft || engine.dragging) engine.sample(time);
+    if (playing || time !== engine.time || engine.needsSample || (history.pending && !engine.dragging && !document.documentElement.dataset.timelineDrag) || draft) engine.sample(time);
     engine.render(false);
     if (now - lastUI > 50) {
         updateTimeUI();

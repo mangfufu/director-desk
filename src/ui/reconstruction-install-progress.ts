@@ -2,7 +2,7 @@ import {escape} from './common.ts';
 import {t} from '../i18n/locale.ts';
 
 export function installSummary(job:any){
-    const label=job.status==='completed'?'模型已就绪':job.status==='failed'?'配置失败':job.status==='cancelled'?'已取消':job.status==='interrupted'?'配置已中断':job.message||'准备中';
+    const label=job.status==='completed'?(job.message||'模型已就绪'):job.status==='failed'?'配置失败':job.status==='cancelled'?'已取消':job.status==='interrupted'?'配置已中断':job.message||'准备中';
     return t(label)+(job.status==='running'?` ${Math.floor(job.progress||0)}%`:'');
 }
 export function paintInstallProgress(container:HTMLElement,job:any){

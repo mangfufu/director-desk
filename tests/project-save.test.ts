@@ -5,10 +5,19 @@ import type { AppContext } from '../src/app-context.ts';
 import { SceneWorkspace } from '../src/scenes/scene-workspace.ts';
 import { demoProject } from '../src/model.ts';
 
+function fileBridge(destination: () => Promise<unknown>, chunks: Uint8Array[] = []) {
+    return async (action: string, data?: any) => {
+        if (action === 'project-destination') return destination();
+        if (action === 'automation-write-begin') return { ok: true, data: { id: 'write', path: data.path, filename: data.name } };
+        if (action === 'automation-write-chunk') chunks.push(data.bytes.slice());
+        return { ok: true, data: { saved: action === 'automation-write-close' } };
+    };
+}
+
 test('an edit committed during disk I/O stays unsaved and prevents save-and-exit continuation', async () => {
     const w=Object.getOwnPropertyDescriptor(globalThis,'window'),d=Object.getOwnPropertyDescriptor(globalThis,'document');
     let finish!: (value:unknown)=>void;
-    Object.defineProperty(globalThis,'window',{configurable:true,value:{directorDesktop:{files:()=>new Promise(resolve=>finish=resolve)}}});
+    Object.defineProperty(globalThis,'window',{configurable:true,value:{directorDesktop:{files:fileBridge(()=>new Promise(resolve=>finish=resolve))}}});
     Object.defineProperty(globalThis,'document',{configurable:true,value:{querySelector:()=>null}});
     const project=demoProject(),scenes=new SceneWorkspace(project,()=>({time:0,selected:project.entities[0].id,preview:'program'}));
     let dirty=true;
@@ -31,7 +40,8 @@ test('save marks clean only after confirmed disk success, keeping canceled/faile
     const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window'), previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
     let complete: (v: unknown) => void = () => {};
     const states: string[] = [];
-    Object.defineProperty(globalThis, 'window', { configurable: true, value: { directorDesktop: { files: () => new Promise(resolve => complete = resolve) } } });
+    const chunks: Uint8Array[] = [];
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { directorDesktop: { files: fileBridge(() => new Promise(resolve => complete = resolve), chunks) } } });
     Object.defineProperty(globalThis, 'document', { configurable: true, value: { querySelector: () => ({ textContent: '' }) } });
     const ctx = { dirty: true, busy: false, playing: true, draft: null, engine: { exporting: false }, history: { pending: null },
         scenes: { dirty:false, markSaved() {}, document: () => ({ name: '测试', scenes: [{ id: 'first' }, { id: 'second' }] }) }, updateTimeUI() {}, toast: (s: string) => states.push(s),
@@ -43,7 +53,8 @@ test('save marks clean only after confirmed disk success, keeping canceled/faile
         assert.equal(ctx.dirty, true); assert.equal(ctx.busy, false);
         saving = saveProjectFile(ctx); complete({ ok: false, error: 'disk full' }); assert.equal(await saving, false);
         assert.equal(ctx.dirty, true); assert.equal(ctx.busy, false);
-        saving = saveProjectFile(ctx); complete({ ok: true, data: { saved: true } }); assert.equal(await saving, true);
+        saving = saveProjectFile(ctx); complete({ ok: true, data: { path: 'saved.director' } }); assert.equal(await saving, true);
+        assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString()), ctx.scenes.document());
         assert.equal(ctx.dirty, false); assert.equal(ctx.busy, false); assert.ok(states.includes('项目已保存'));
     } finally {
         if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else Reflect.deleteProperty(globalThis, 'window');
@@ -67,4 +78,22 @@ test('browser download allows save-and-open continuation without claiming confir
         if (w) Object.defineProperty(globalThis,'window',w); else Reflect.deleteProperty(globalThis,'window');
         if (d) Object.defineProperty(globalThis,'document',d); else Reflect.deleteProperty(globalThis,'document');
     }
+});
+
+test('a failed streamed write aborts the temporary file and never marks the project saved', async () => {
+    const w=Object.getOwnPropertyDescriptor(globalThis,'window');
+    const actions:string[]=[];let marked=false;
+    Object.defineProperty(globalThis,'window',{configurable:true,value:{directorDesktop:{files:async(action:string)=>{
+        actions.push(action);
+        if(action==='project-destination')return {ok:true,data:{path:'save.director'}};
+        if(action==='automation-write-begin')return {ok:true,data:{id:'write',path:'save.director',filename:'save.director'}};
+        if(action==='automation-write-chunk')return {ok:false,error:'disk full'};
+        return {ok:true,data:{}};
+    }}}});
+    const ctx={dirty:true,busy:false,draft:null,history:{pending:null},engine:{exporting:false},updateTimeUI(){},toast(){},
+        scenes:{document:()=>({name:'save'}),markSaved(){marked=true;}}} as unknown as AppContext;
+    try {
+        assert.equal(await saveProjectFile(ctx),false);assert.equal(marked,false);assert.equal(ctx.dirty,true);
+        assert.deepEqual(actions,['project-destination','automation-write-begin','automation-write-chunk','automation-write-abort']);
+    }finally{if(w)Object.defineProperty(globalThis,'window',w);else Reflect.deleteProperty(globalThis,'window');}
 });

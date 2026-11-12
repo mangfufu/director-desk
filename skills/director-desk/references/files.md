@@ -70,7 +70,7 @@
 
 ## 视频反推
 
-桌面版 `director_reconstruct`：`open` 打开面板，`state` 查询模型及最新任务。首次使用由用户在界面确认 Human3R 非商业许可，Agent 不代为同意。`download` 下载运行环境；`start` 接收绝对视频 `path`、`start`、`seconds`（0 到结尾）、`fps`（3/6/12）和 `scene`（`none` 仅人物及摄影机；`planes` 人物＋简化平面，默认；`mesh` 人物＋环境网格）。非零时长在 3/6/12 fps 下分别至少为 0.7/0.4/0.2 秒；不足两帧的视频区间会被拒绝。下载、转换传唯一 `requestId`，立即返回，继续用 `state` 查询，`cancel` 取消。
+桌面版 `director_reconstruct`：`open` 打开面板，`state` 查询模型及最新任务。选择标准识别（Human3R）时，首次使用由用户在界面确认其非商业许可，Agent 不代为同意；默认的内置简易识别不需要此步骤。`download` 下载运行环境；`start` 接收绝对视频 `path`、`start`、`seconds`（0 到结尾）、`fps`（3/6/12）和 `scene`（`none` 仅人物及摄影机；`planes` 人物＋简化平面，默认；`mesh` 人物＋环境网格）。非零时长在 3/6/12 fps 下分别至少为 0.7/0.4/0.2 秒；不足两帧的视频区间会被拒绝。下载、转换传唯一 `requestId`，立即返回，继续用 `state` 查询，`cancel` 取消。
 
 `result` 返回完成的 `.director` 路径，再按用户意图用 `director_import` 打开或合并；转换本身不替换当前工程。离线工具可编辑转换结果，不执行模型推理。结果仍需检查，原始预测和程序后处理不能当成人工修正后的效果。
 
@@ -78,7 +78,7 @@ Windows / Linux x64 原生运行，需要 NVIDIA 显卡，无需预装 Python �
 
 `preview` 加 `history:true` 返回可回看的帧序号及时间；传 `frame` 查询其中某帧，不返回图片。
 
-转换成功或取消后自动清理中间文件，保留工程、识别预览及日志。`clear-cache` 清理受管缓存和已结束任务的中间文件；`remove-runtime` 移除模型、运行环境和缓存，保留转换结果。进行中的任务必须先结束；不会删除所选目录内的其他文件。
+转换成功或取消后自动清理中间文件，保留工程、识别预览及日志。`storage`、`clear-cache`、`remove-runtime` 可传 `engine:mediapipe|human3r|flowhmr`，省略时使用当前识别方式，不切换用户选择。占用统计仅针对所选方式；清理缓存只处理其缓存及已结束任务的中间文件；卸载只移除其模型、运行环境和缓存，保留其他识别方式及转换结果。旧版未记录 engine 的任务按 Human3R 处理。进行中的任务必须先结束；不会删除所选目录内的其他文件。
 
 配置任务的 `job.steps` 按步骤返回 pending/running/completed/failed/cancelled，`job.detail` 和 downloadedBytes/totalBytes 提供当前下载状态；无需读取完整日志。识别过程以骨架预览，生成工程的人物模型保持原有方式。
 
@@ -88,4 +88,25 @@ Windows / Linux x64 原生运行，需要 NVIDIA 显卡，无需预装 Python �
 
 配置状态中的 `job.downloadFile` 为当前下载文件名（不含本机目录）；`installation` 保留最近成功配置的总用时与步骤，即使最新任务已切换为视频转换仍可查询。
 
-新配置默认使用简易识别（mediapipe），已有选择保留；state 返回当前 engine、ready，以及 modes 中两种方式的就绪状态、许可与来源。按需 configure 切换识别方式。未就绪时 download 安装约 21 MB 的可选模型，复用 requestId 和异步任务查询。此方式使用 CPU，无需 Human3R 环境和许可确认。start 仅支持 scene:none，可传 people:1–10（默认 3）及内置 actorModel；source 会使用标准成年人物。结果保留可编辑动作、近似位置和显示时段，摄影机固定，不还原场景或原相机。configure(engine:human3r) 切回标准识别，原有许可要求不变。离线工具可以编辑生成的工程，不执行视频识别。
+新配置默认使用简易识别（mediapipe），已有选择保留；state 返回当前 engine、ready，以及 modes 中各方式的就绪状态、许可与来源。按需 configure 切换识别方式。简易识别随桌面版内置，首次即可 start，无需 download、环境安装或许可确认；modes.mediapipe.bundled 标明内置状态。此方式使用 CPU。内置时 download 不重复下载；remove-runtime 只清理旧版额外下载的组件，不移除内置能力。storage.bundledBytes 单列内置体积，不计入用户存储目录的 total。start 仅支持 scene:none，自动识别人物，可传内置 actorModel；source 会使用标准成年人物。结果保留可编辑动作、近似位置和显示时段，摄影机固定，不还原场景或原相机。configure(engine:human3r) 切回标准识别，原有许可要求不变。离线工具可以编辑生成的工程，不执行视频识别。
+
+
+`preview` 默认只返回帧号、时间、人物数量等摘要；`history:true` 附带可回看的帧序号列表，`frame` 选择其中一帧。重复查询最新预览时可带上前次 `jobId` 和 `sequence`，未产生新帧则返回 null，避免重复结果。
+
+### FlowHMR 人物动作
+
+`configure(engine:"flowhmr")` 选择 FlowHMR。按需查询 `state.modes.flowhmr` 的 `runtimeReady`、`modelsReady`、`bodyReady`；只有三项齐全才 `ready:true`。首次下载由用户在界面确认 FlowHMR 模型许可。`download` 安装运行环境及公开模型；用户从官方页面取得 Extended SMPL+H 后，用 `import-body(path,requestId)` 导入 `smplh.tar.xz` 或 `neutral/model.npz`，支持取消和状态查询，不代用户取得人体文件许可。
+
+`start` 使用 `scene:"none"`、`cameraMode:"moving"|"fixed"`（原视频镜头，默认 moving）、内置 `actorModel`；source 使用 human-adult。输出固定 30 fps，不受 fps 参数影响，视频区间 0.1–166 秒，seconds:0 读取到结尾但仍受帧数限制。`download`、`import-body`、`start` 均传唯一 requestId。生成工程中的人物、显示时段、走位和动作片段可编辑；识别出的摄影机位置、视线、焦距和倾斜随工程保存，可继续编辑；与人物共用对齐后的空间坐标。原始导出与多人站位后处理分别记录。清理和卸载按 engine 隔离。
+
+识别任务的 state.job 返回 elapsedSeconds（已用时）和 estimatedRemainingSeconds（预计剩余秒数；尚不足以估算时为 null）。结束后保留总用时。
+
+## Blender 工程导入（桌面版）
+
+`director_import({kind:"blender",path:"/absolute/scene.blend",revision,requestId})` 默认 `mode:"scene"`，在当前文档中新建独立戏段并切换过去，保留原戏段及文件关联，可撤销；`mode:"merge"` 加入当前戏段；`mode:"open"` 作为未保存的新文档打开。后台使用本机 Blender 4.2+，无需安装插件。自动查找失败时可提供 `blenderPath`（可执行文件绝对路径，记住供后续使用）；`animations:false` 仅导入起始帧。
+
+沿用 `director_job` 查询进度或取消；完成后返回独立对象 ID 与 `warnings`。模型及材质通过 GLB 导入，集合实例自动展开，每个顶层实例作为一个可编辑对象；没有表面的控制对象跳过并提示。骨骼和对象动画保留为原生动作片段；透视摄影机转换为路径、视线、焦距及切镜，灯光取起始帧。当前已有内容时保留原切镜和全局设置。正交／全景摄影机、世界节点、顶点／面实例及动态几何等未支持内容会提示。原文件不修改；生成的资源随工程保存，中间文件自动清理。
+
+离线工具没有桌面进程，不能自行运行 Blender；可编辑或校验桌面导入后保存的 `.director` 工程。
+
+旧版漫反射、光泽和玻璃材质会转换，原有图片与 UV 保留；复杂程序材质简化为基础颜色和贴图，不进行渲染烘焙。静态物体跳过逐帧动画采样，保留真正的动作与摄影机动画。导入用于可编辑预演，不追求最终渲染画面一致。

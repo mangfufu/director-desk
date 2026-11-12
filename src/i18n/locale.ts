@@ -1,16 +1,18 @@
 import { english } from './en.ts';
+import {initialLanguage} from './initial-language.ts';
 
 export type Language = 'zh-CN' | 'en';
 const key = 'director-ui-language';
-let language: Language = 'zh-CN';
-try { if (globalThis.localStorage?.getItem(key) === 'en') language = 'en'; } catch { /* Session-only preference. */ }
+const systemLanguage=globalThis.window?.directorDesktop?.systemLanguage??globalThis.navigator?.languages?.[0]??globalThis.navigator?.language;
+let language: Language = initialLanguage(undefined,systemLanguage);
+try { language=initialLanguage(globalThis.localStorage?.getItem(key),systemLanguage); } catch { /* Session-only preference. */ }
 const listeners = new Set<() => void>();
 export const getLanguage = () => language;
 export function setLanguage(value: string) {
     if (value !== 'en' && value !== 'zh-CN') return;
+    try { globalThis.localStorage?.setItem(key, value); } catch { /* Keep the session choice. */ }
     if (language === value) return;
     language = value;
-    try { globalThis.localStorage?.setItem(key, value); } catch { /* Keep the session choice. */ }
     listeners.forEach(listener => listener());
 }
 export function onLanguageChange(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); }

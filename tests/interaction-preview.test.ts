@@ -26,3 +26,10 @@ test('composition guides and adaptive preview use the same atomic MCP preference
         assert.deepEqual(await editSettings({scope:'editor',action:'read'}),next);
     }finally{await editSettings({scope:'editor',action:'set',patch:before.values});}
 });
+
+test('known texture-heavy scenes start reduced preview on the first drag frame and restore on release',()=>{
+    const preview=new InteractionPreview();
+    assert.equal(preview.update(true,true,true),true);assert.equal(preview.draft,true);
+    assert.equal(preview.update(false,true,true),true);assert.equal(preview.draft,false);
+    preview.update(true,false,true);assert.equal(preview.draft,false);
+});

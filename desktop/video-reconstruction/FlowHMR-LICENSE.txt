@@ -1,0 +1,15 @@
+# FlowHMR Model Weights License
+
+Copyright © 2025–2026 FlowHMR authors. All rights reserved.
+
+This license applies only to the FlowHMR model weights released in this repository, including `flowhmr_base` and `flowhmr_latest`. Source code is not covered by this license and is governed by the separate license provided in the code repository.
+
+Permission is granted to use, copy, modify, and distribute these model weights solely for non-commercial educational, research, and non-profit purposes.
+
+Any redistributed copy or modified version of the weights must acknowledge its origin in FlowHMR and retain this license and all applicable copyright and attribution notices.
+
+Commercial use is not permitted under this license. For licensing inquiries, please contact **zhankewang0@gmail.com**. Any commercial use requires the applicable permissions from the relevant rights holders.
+
+Third-party software, pretrained models, body-model assets, and datasets remain subject to their respective licenses. This license does not replace those terms or grant rights to third-party materials.
+
+If you use these weights in your research, please cite [FlowHMR: Physically Plausible Motion Capture from Video](https://arxiv.org/abs/2610.03691).

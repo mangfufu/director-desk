@@ -7,7 +7,7 @@ import { assertModelNodeBindings, type ModelNodeEdits } from './model-node-edits
 import { ModelNodeRuntime } from './model-node-runtime.ts';
 import { modelNodeHidden } from './model-node-visibility.ts';
 
-export interface ModelSource { scene: T.Group; scenes: T.Group[]; cameras: T.Camera[]; animations: T.AnimationClip[]; materials?: T.Material[]; textures?: T.Texture[] }
+export interface ModelSource { scene: T.Group; scenes: T.Group[]; cameras: T.Camera[]; animations: T.AnimationClip[]; materials?: T.Material[]; textures?: T.Texture[]; sharedImages?: Set<unknown>; releaseImages?: () => void }
 
 export interface ModelInspection {
     bounds: ReturnType<typeof boundsData>;
@@ -207,5 +207,8 @@ export function disposeSource(source: ModelSource) {
     });
     for (const material of materials) for (const value of Object.values(material)) if (value instanceof T.Texture) textures.add(value);
     geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); skeletons.forEach(s => s.dispose());
-    textures.forEach(texture => { texture.dispose(); const image = texture.source.data; if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) image.close(); });
+    const images = new Set<unknown>();
+    textures.forEach(texture => { texture.dispose(); images.add(texture.source.data); });
+    images.forEach(image => { if (!source.sharedImages?.has(image) && typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) image.close(); });
+    source.releaseImages?.();
 }

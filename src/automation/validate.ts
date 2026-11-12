@@ -1,5 +1,5 @@
 import { TOOL_DEFINITIONS } from './contract.ts';
-type Schema = { type?: string; description?: string; enum?: readonly unknown[]; properties?: Record<string, Schema>; required?: readonly string[]; additionalProperties?: boolean; items?: Schema; minItems?: number; maxItems?: number; anyOf?: Schema[] };
+type Schema = { type?: string; description?: string; enum?: readonly unknown[]; properties?: Record<string, Schema>; required?: readonly string[]; additionalProperties?: boolean; items?: Schema; minimum?: number; minItems?: number; maxItems?: number; anyOf?: Schema[] };
 // The tool contract uses this deliberately small JSON Schema subset. No generated code/eval.
 export function validateToolInput(name: string, input: unknown) {
     const definition = TOOL_DEFINITIONS.find(t => t.name === name);
@@ -15,6 +15,7 @@ export function validateToolInput(name: string, input: unknown) {
         if (schema.type && type !== schema.type || schema.enum && !schema.enum.includes(value)) throw new Error('工具参数类型或取值错误：' + at
             + `；需要 ${schema.enum ? schema.enum.map(v => JSON.stringify(v)).join(' / ') : schema.type}` + (schema.description ? `；${schema.description}` : ''));
         if (type === 'number' && !Number.isFinite(value)) throw new Error('工具参数必须是有限数字：' + at);
+        if (type === 'number' && schema.minimum !== undefined && (value as number) < schema.minimum) throw new Error(`工具参数超出范围：${at}；最小值为 ${schema.minimum}`);
         if (Array.isArray(value)) {
             if (value.length < (schema.minItems ?? 0) || value.length > (schema.maxItems ?? 10000)) throw new Error('工具参数数组长度错误：' + at);
             value.forEach((v, i) => visit(v, schema.items || {}, `${at}[${i}]`, depth + 1));

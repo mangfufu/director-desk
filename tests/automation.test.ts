@@ -50,6 +50,16 @@ test('Tool contract rejects unknown keys, unbounded export, NaN and prototype fi
     validateToolInput('director_apply', { revision: 1, requestId: 'x', operations: [{ operation: 'add', asset: 'woman', position: [1, 2, 3] }] });
 });
 
+test('reconstruction discovery is concise and preview bounds match its declared schema',()=>{
+    const short=TOOL_DEFINITIONS.find(t=>t.name==='director_reconstruct')!,full=toolHelp(['director_reconstruct']).tools[0];
+    assert.ok(short.description.length<full.description.length/3);
+    assert.match(short.description,/bundled/);assert.match(full.description,/bodyReady/);
+    validateToolInput('director_reconstruct',{action:'preview',jobId:'job',sequence:1,history:true});
+    assert.throws(()=>validateToolInput('director_reconstruct',{action:'preview',frame:0}),/director_reconstruct.frame.*1/);
+    assert.throws(()=>validateToolInput('director_reconstruct',{action:'preview',sequence:-1}),/director_reconstruct.sequence.*1/);
+    validateToolInput('director_reconstruct',{action:'start',seconds:.1,requestId:'flow-short'});
+});
+
 
 test('catalog parameter values route to the documented patch field with an actionable atomic error', () => {
     const before = demoProject(), saved = JSON.stringify(before);

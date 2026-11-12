@@ -10,6 +10,7 @@ import { createZip } from '../production/zip.ts';
 import { safeFilename } from '../production/notes.ts';
 import { openOutput, type FileDestination } from './file-delivery.ts';
 import { contactSheetBlob } from '../production/contact-render.ts';
+import { jsonBlob } from '../files/json-blob.ts';
 
 export interface FileExportRequest extends FileDestination {
     kind: 'project' | 'screenshot' | 'video' | 'depth-video' | 'bundle' | 'prompt' | 'contact-sheet';
@@ -47,7 +48,7 @@ export async function exportFiles(ctx: AppContext, args: FileExportRequest, sign
         return save(blob,safeFilename(document.name+'-'+scene.name)+'-联系表.html');
     }
     if (args.kind === 'project') {
-        const result = await save(new Blob([JSON.stringify(document, null, 2)], { type: 'application/json' }), safeFilename(document.name) + '.director');
+        const result = await save(jsonBlob(document), safeFilename(document.name) + '.director');
         if (result.files[0].saved) {
             ctx.scenes.markSaved(result.files[0].path, document); ctx.dirty = ctx.scenes.dirty;
         }

@@ -11,10 +11,11 @@ export function createReconstructionPreview(container:HTMLElement){
     const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=false;
     const points=new Points(new BufferGeometry(),new PointsMaterial({color:0xaaaaaa,size:2,sizeAttenuation:false}));
     const lines=new LineSegments(new BufferGeometry(),new LineBasicMaterial({color:0xffffff}));scene.add(points,lines);
-    let hasFrame=false,following=true,aspect=16/9;
+    let hasFrame=false,following=true,aspect=16/9,frameX=0,frameY=0;
+    const projection=()=>{camera.updateProjectionMatrix();camera.projectionMatrix.elements[8]-=frameX;camera.projectionMatrix.elements[9]-=frameY;camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();};
     const render=()=>renderer.render(scene,camera);
     controls.addEventListener('change',render);controls.addEventListener('start',()=>following=false);
-    function resize(){const width=container.clientWidth,height=container.clientHeight;if(!width||!height)return;const w=Math.min(width,height*aspect),h=w/aspect;renderer.setSize(w,h);camera.aspect=aspect;camera.updateProjectionMatrix();render();}
+    function resize(){const width=container.clientWidth,height=container.clientHeight;if(!width||!height)return;const w=Math.min(width,height*aspect),h=w/aspect;renderer.setSize(w,h);camera.aspect=aspect;projection();render();}
     const observer=new ResizeObserver(resize);observer.observe(container);
     return {
         update(frame:any){
@@ -24,7 +25,7 @@ export function createReconstructionPreview(container:HTMLElement){
             const segments:number[]=[];
             for(const actor of frame.actors||[])for(let j=1;j<actor.joints.length;j++){const parent=frame.parents[j];if(parent>=0)segments.push(...actor.joints[parent],...actor.joints[j]);}
             lines.geometry.dispose();lines.geometry=new BufferGeometry();lines.geometry.setAttribute('position',new Float32BufferAttribute(segments,3));
-            if(following||!hasFrame){camera.position.fromArray(frame.camera.position);camera.up.fromArray(frame.camera.up);controls.target.fromArray(frame.camera.target);camera.fov=frame.camera.fov;camera.updateProjectionMatrix();controls.update();}
+            if(following||!hasFrame){camera.position.fromArray(frame.camera.position);camera.up.fromArray(frame.camera.up);controls.target.fromArray(frame.camera.target);camera.fov=frame.camera.fov;frameX=frame.camera.frameX??0;frameY=frame.camera.frameY??0;projection();controls.update();}
             hasFrame=true;render();
         },
         follow(){following=true;},

@@ -3,10 +3,12 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { publicFiles as publicSkillFiles } from './builtin-skill-files.cjs';
+import {FILES as liteFiles} from '../desktop/video-reconstruction/lite-runtime.cjs';
+import {digest} from '../desktop/video-reconstruction/download.cjs';
 
 // Scan compiled web payload only. Never put this script or its local denylist in the installer.
 const root = path.resolve('dist');
-const allowed = /^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.core|model-import\.worker|planner\.worker)-[A-Za-z0-9_-]+\.js)$/;
+const allowed = /^(?:index\.html|favicon\.svg|assets\/[A-Za-z0-9_-]+\.(?:js|css)|assets\/(?:three\.(?:core|module)|model-import\.worker|planner\.worker)-[A-Za-z0-9_-]+\.js)$/;
 const rules = [
     ['absolute-windows-path', /[A-Za-z]:[\\/](?:[\w .-]+[\\/])/],
     ['user-home-path', /(?:\/Users\/|\/home\/|file:\/\/\/)[^\s"'<>]+/],
@@ -86,8 +88,9 @@ const extraFiles = ['desktop/main.cjs', 'desktop/preload.cjs', 'desktop/integrat
 extraFiles.push('desktop/automation-files.cjs', 'desktop/model-files.ts', 'desktop/file-host.cjs', 'desktop/files.cjs', 'desktop/update-config.cjs', 'desktop/update-host.cjs', 'desktop/updates.cjs');
 extraFiles.push('desktop/extensions.cjs','desktop/extensions/host.cjs','desktop/extensions/store.cjs','desktop/extensions/worker.cjs');
 extraFiles.push('desktop/mcp-connection.cjs', 'desktop/mcp-stdio.cjs');
-extraFiles.push('desktop/language.cjs');
-const reconstructionFiles=['host.cjs','manifest.cjs','download.cjs','runtime.cjs','storage.cjs','video-source.cjs','run-inference.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt','MediaPipe-LICENSE.txt','lite-runtime.cjs','lite-runner.cjs','lite-preload.cjs'];
+extraFiles.push('desktop/language.cjs','desktop/blender-import/host.cjs','desktop/blender-import/discovery.cjs','desktop/blender-import/export-scene.py','desktop/blender-import/materials.py');
+if(process.argv.includes('--desktop'))extraFiles.push('.audit/desktop-app/desktop/blender-import/export-scene.py');
+const reconstructionFiles=['host.cjs','manifest.cjs','download.cjs','runtime.cjs','storage.cjs','video-source.cjs','run-inference.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt','FlowHMR-LICENSE.txt','flow-worker.py','flow-camera.py','flow-requirements.txt','flow-runtime.cjs','flow-manifest.cjs','MediaPipe-LICENSE.txt','lite-runtime.cjs','lite-runner.cjs','lite-preload.cjs'];
 extraFiles.push(...reconstructionFiles.map(file=>'desktop/video-reconstruction/'+file));
 if(process.argv.includes('--desktop'))extraFiles.push(...reconstructionFiles.filter(file=>file.endsWith('.py')||file.endsWith('.txt')).map(file=>'.audit/desktop-app/desktop/video-reconstruction/'+file),'.audit/desktop-app/desktop/video-reconstruction/build-project.mjs','.audit/desktop-app/desktop/video-reconstruction/lite-worker.js','.audit/desktop-app/desktop/video-reconstruction/lite-preload.cjs');
 if (process.argv.includes('--desktop')) extraFiles.push('.audit/desktop-app/desktop/mcp-stdio.cjs','.audit/desktop-app/desktop/extensions.cjs','.audit/desktop-app/desktop/extension-worker.cjs');
@@ -97,6 +100,13 @@ for (const file of extraFiles) {
     const content = await fs.readFile(file, 'utf8');
     for (const [name, regex] of rules) if (regex.test(content)) failures.push({ file, rule: name });
     if ([...privateTerms].some(term => content.toLowerCase().includes(term.toLowerCase()))) failures.push({ file, rule: 'local-private-term' });
+}
+if(process.argv.includes('--desktop')){
+    for(const item of liteFiles){
+        const file='.audit/desktop-app/desktop/video-reconstruction/lite/'+item.file;
+        try{if((await fs.stat(file)).size!==item.bytes||await digest(file)!==item.sha256)failures.push({file,rule:'invalid-bundled-lite-asset'});}
+        catch{failures.push({file,rule:'missing-bundled-lite-asset'});}
+    }
 }
 if (!manifest.some(f => f.file === 'index.html') || !manifest.some(f => f.file.endsWith('.js'))) failures.push({ file: 'dist', rule: 'missing-web-entry' });
 if (failures.length) {

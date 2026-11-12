@@ -2,8 +2,10 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const invoke = (action, data) => ipcRenderer.invoke('director-host', { action, data });
 contextBridge.exposeInMainWorld('directorDesktop', {
     windowChrome: 'custom',
+    systemLanguage: process.argv.includes('--director-system-language=zh-CN')?'zh-CN':'en',
     appMetrics: () => invoke('app-metrics'),
     reconstruction: (action, data) => invoke('reconstruction', {action, data}),
+    blender: (action, data) => invoke('blender', {action, data}),
     windowControl: command => invoke('window-control', command),
     onWindowState: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('director-window-state', listener); return () => ipcRenderer.removeListener('director-window-state', listener); },
     wslPointerInput: process.argv.includes('--director-wsl-pointer'),

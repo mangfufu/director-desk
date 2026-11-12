@@ -8,7 +8,8 @@
 .reconstruction-heading strong{font-size:12px;font-weight:500}
 .reconstruction-source-list{display:grid;gap:12px;padding:var(--panel-inset);align-content:start;flex:1}
 .reconstruction-source-item{display:flex;align-items:center;gap:8px;padding:10px 8px;border:1px solid var(--border);background:var(--accent);min-width:0}
-#recon-filename{overflow-wrap:anywhere;font-size:12px}
+#recon-filename{flex:1;min-width:0;overflow-wrap:anywhere;font-size:12px}
+#recon-remove{flex:none;width:28px;height:28px;min-height:28px;padding:5px;margin-left:auto}
 .reconstruction-workspace{background:var(--background)}
 .reconstruction-view-tabs{display:flex;gap:0;align-items:center;height:100%}
 .reconstruction-view-tabs button{height:100%;border:0;border-radius:0;background:transparent;padding:0 14px;color:var(--muted-foreground)}
@@ -113,3 +114,12 @@
 .reconstruction-model-content{display:grid;gap:10px;padding:0 0 12px;border-bottom:1px solid var(--border)}
 .reconstruction-license-choice{display:flex;align-items:center;gap:8px;font-size:12px}
 .reconstruction-license-choice input{margin:0;flex:none}
+
+#recon-flow details{margin:0}
+.reconstruction-flow-consent,.reconstruction-body-import{align-items:center;font-size:12px}
+.reconstruction-flow-consent>label,.reconstruction-body-import>span{flex:1;min-width:0}
+#recon-flow-components{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+#recon-flow-components>div:last-child{grid-column:auto}
+
+#recon-timing{font-variant-numeric:tabular-nums;color:var(--muted-foreground)}
+#recon-timing:empty{display:none}

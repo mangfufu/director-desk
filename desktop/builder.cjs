@@ -2,6 +2,7 @@ const path = require('node:path');
 const { publicFiles: publicSkillFiles } = require('../scripts/builtin-skill-files.cjs');
 const { releaseVersion, parseReleaseVersion } = require('./release-version.cjs');
 const metadata = require('../package.json');
+const {FILES:liteFiles}=require('./video-reconstruction/lite-runtime.cjs');
 // Electron downloads its runtime on first require; npm ci alone may not create dist.
 require('electron');
 const version = releaseVersion(metadata.version);
@@ -15,8 +16,8 @@ module.exports = {
         filter: publicSkillFiles },
         { from: '.audit/desktop-app/LICENSE', to: 'LICENSE' }],
     onNodeModuleFile: () => false,
-    extraResources: [{ from: '.audit/desktop-app/desktop/mcp-stdio.cjs', to: 'mcp/stdio-bridge.cjs' },
-        {from:'.audit/desktop-app/desktop/video-reconstruction',to:'video-reconstruction',filter:['*.py','*.txt','build-project.mjs','lite-worker.js','lite-preload.cjs']}],
+    extraResources: [{from:'.audit/desktop-app/desktop/blender-import/export-scene.py',to:'blender-import/export-scene.py'},{from:'.audit/desktop-app/desktop/blender-import/materials.py',to:'blender-import/materials.py'},{ from: '.audit/desktop-app/desktop/mcp-stdio.cjs', to: 'mcp/stdio-bridge.cjs' },
+        {from:'.audit/desktop-app/desktop/video-reconstruction',to:'video-reconstruction',filter:['*.py','*.txt','build-project.mjs','lite-worker.js','lite-preload.cjs',...liteFiles.map(item=>'lite/'+item.file)]}],
     asar: true, npmRebuild: false, publish: { provider: 'generic', url: 'https://bigthat.me/updates/win-x64/' },
     buildVersion: version, buildNumber: String(parseReleaseVersion(version).parts[3]),
     // electron-builder normalizes package.json with semver.clean(), which drops

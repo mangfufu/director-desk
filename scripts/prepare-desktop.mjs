@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import { publicFiles as publicSkillFiles } from './builtin-skill-files.cjs';
 import { releaseVersion, parseReleaseVersion } from '../desktop/release-version.cjs';
 import './build-offline-skill.mjs';
+import {prepareBundledLite} from './prepare-bundled-lite.mjs';
 
 const check = spawnSync(process.execPath, ['scripts/check-release-privacy.mjs'], { stdio: 'inherit' });
 if (check.status !== 0) process.exit(check.status || 1);
@@ -52,10 +53,14 @@ try {
     await fs.writeFile('desktop/icon.icns', Buffer.concat([icnsHeader, icons]));
 } finally { await browser.close(); }
 await fs.copyFile('desktop/main.cjs', path.join(desktopRoot, 'desktop/main.cjs'));
-await fs.copyFile('desktop/language.cjs', path.join(desktopRoot, 'desktop/language.cjs'));
+await build({entryPoints:['desktop/language.cjs'],outfile:path.join(desktopRoot,'desktop/language.cjs'),bundle:true,platform:'node',format:'cjs',external:['electron'],sourcemap:false,minify:true});
 await fs.copyFile('desktop/preload.cjs', path.join(desktopRoot, 'desktop/preload.cjs'));
-const reconstructionAssets=['run-inference.py','runtime_check.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt','MediaPipe-LICENSE.txt','lite-preload.cjs'];
+await fs.mkdir(path.join(desktopRoot,'desktop/blender-import'),{recursive:true});
+await fs.copyFile('desktop/blender-import/export-scene.py',path.join(desktopRoot,'desktop/blender-import/export-scene.py'));
+await fs.copyFile('desktop/blender-import/materials.py',path.join(desktopRoot,'desktop/blender-import/materials.py'));
+const reconstructionAssets=['run-inference.py','runtime_check.py','convert-analysis.py','gltf-rig.py','preview.py','Human3R-LICENSE.txt','FlowHMR-LICENSE.txt','flow-worker.py','flow-camera.py','flow-requirements.txt','MediaPipe-LICENSE.txt','lite-preload.cjs'];
 await fs.mkdir(path.join(desktopRoot,'desktop/video-reconstruction'),{recursive:true});
+await prepareBundledLite(path.join(desktopRoot,'desktop/video-reconstruction/lite'));
 for(const file of reconstructionAssets)await fs.copyFile(path.join('desktop/video-reconstruction',file),path.join(desktopRoot,'desktop/video-reconstruction',file));
 await build({entryPoints:['src/reconstruction/build-project.ts'],outfile:path.join(desktopRoot,'desktop/video-reconstruction/build-project.mjs'),bundle:true,platform:'node',format:'esm',sourcemap:false,minify:true});
 await build({entryPoints:['src/reconstruction/lite-worker.ts'],outfile:path.join(desktopRoot,'desktop/video-reconstruction/lite-worker.js'),bundle:true,platform:'browser',format:'esm',sourcemap:false,minify:true});

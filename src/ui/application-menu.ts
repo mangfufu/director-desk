@@ -25,7 +25,7 @@ export function mountApplicationMenu() {
     mode.querySelector('[data-creation-mode="full"]')!.textContent = '精细模型';
     mode.querySelector('[data-creation-mode="geometry"]')!.textContent = '几何体';
     document.querySelector('.sidebar .search-field')!.before(mode);
-    for (const [action, label] of [['group-create', '编组'], ['group-select', '选择整组'], ['group-ungroup', '解组'], ['arrange-open', '对齐与阵列'], ['staging-open', '布景库'], ['versions-open','历史版本'], ['plugins-open','插件'], ['navigate-open','自动避障'], ['scene-reuse-open','场景复用 / 插入'], ['preview-settings','预览设置']]) {
+    for (const [action, label] of [['blender-import', '导入 Blender 工程'], ['group-create', '编组'], ['group-select', '选择整组'], ['group-ungroup', '解组'], ['arrange-open', '对齐与阵列'], ['staging-open', '布景库'], ['versions-open','历史版本'], ['plugins-open','插件'], ['navigate-open','自动避障'], ['scene-reuse-open','场景复用 / 插入'], ['preview-settings','预览设置']]) {
         const control = document.createElement('button'); control.dataset.act = action; control.textContent = label;
         document.querySelector('.side-bottom')!.append(control);
     }
@@ -33,61 +33,95 @@ export function mountApplicationMenu() {
     document.querySelector('.side-bottom')!.append(saveAs);
     const contact=document.createElement('button');contact.dataset.act='contact-sheet';contact.textContent='镜头联系表';document.querySelector('.side-bottom')!.append(contact);
     const previewCache=document.createElement('button');previewCache.dataset.act='preview-cache';previewCache.textContent='局部预览';document.querySelector('.side-bottom')!.append(previewCache);
-    const definitions: [string, string, [string, string?][]][] = [
-        ['file', '文件', [['[data-act="project"]'], ['[data-act="scene-templates"]'], ['[data-act="open"]'], ['[data-menu-copy="save"]'], ['[data-act="save-as"]'], ['[data-act="versions-open"]'], ['[data-menu-copy="export"]'], ['[data-act="model-import"]']]],
-        ['edit', '编辑', [['[data-act="undo"]', '撤销'], ['[data-act="redo"]', '重做'], ['[data-act="group-create"]'], ['[data-act="group-select"]'], ['[data-act="group-ungroup"]'], ['[data-act="arrange-open"]'], ['#settings-toggle', '设置']]],
-        ['view', '视图', [['[data-act="preview-settings"]'], ['[data-act="room"]', '场景属性'], ['[data-act="preview-cache"]'], ['#reset-layout', '重置面板布局']]],
-        ['production', '制作', [['[data-act="scene-reuse-open"]'], ['[data-act="production-notes"]', '剧情与提示词'], ['[data-act="spatial-open"]'], ['[data-act="navigate-open"]'], ['[data-act="contact-sheet"]']]],
-        ['extensions', '扩展', [['[data-act="plugins-open"]']]],
-        ['help', '帮助', [['[data-act="help"]', '操作与快捷键'], ['#update-toggle', '检查更新']]],
+    const definitions: [string, string, [string, string][][]][] = [
+        ['file', '文件', [
+            [['[data-act="scene-templates"]', '新建工程'], ['[data-act="open"]', '打开']],
+            [['[data-menu-copy="save"]', '保存'], ['[data-act="save-as"]', '另存为…'], ['[data-act="project"]', '重命名项目'], ['[data-act="versions-open"]', '历史版本']],
+            [['[data-act="model-import"]', '导入模型'], ['[data-act="blender-import"]', '导入 Blender 工程']],
+            [['[data-menu-copy="export"]', '导出视频']],
+        ]],
+        ['edit', '编辑', [
+            [['[data-act="undo"]', '撤销'], ['[data-act="redo"]', '重做']],
+            [['[data-act="group-create"]', '编组'], ['[data-act="group-ungroup"]', '解组'], ['[data-act="group-select"]', '选择整组']],
+            [['[data-act="arrange-open"]', '对齐与阵列']],
+            [['#settings-toggle', '设置']],
+        ]],
+        ['view', '视图', [
+            [['[data-act="preview-settings"]', '预览设置'], ['[data-act="preview-cache"]', '局部预览']],
+            [['#reset-layout', '重置面板布局']],
+        ]],
+        ['production', '制作', [
+            [['[data-act="room"]', '灯光与场景'], ['[data-act="scene-reuse-open"]', '场景复用 / 插入']],
+            [['[data-act="spatial-open"]', '空间检查'], ['[data-act="navigate-open"]', '自动避障']],
+            [['[data-act="production-notes"]', '剧情与提示词'], ['[data-act="contact-sheet"]', '镜头联系表']],
+        ]],
+        ['extensions', '扩展', [[['[data-act="plugins-open"]', '插件']]]],
+        ['help', '帮助', [
+            [['[data-act="help"]', '操作与快捷键']],
+            [['#update-toggle', '检查更新']],
+        ]],
     ];
     const menus: { trigger: HTMLButtonElement; menu: HTMLDivElement }[] = [];
-    for (const [id, title, entries] of definitions) {
+    for (const [id, title, groups] of definitions) {
         const trigger = document.createElement('button'), menu = document.createElement('div');
         trigger.type = 'button'; trigger.textContent = title; trigger.dataset.menu = id;
         menu.id = `application-menu-${id}`; menu.className = 'application-dropdown'; menu.popover = 'auto';
-        menu.setAttribute('aria-label', title); trigger.setAttribute('popovertarget', menu.id);
-        trigger.setAttribute('aria-haspopup', 'true'); trigger.setAttribute('aria-expanded', 'false');
-        for (const [selector, label] of entries) {
-            const control = document.querySelector<HTMLElement>(selector); if (!control) continue;
-            if (control instanceof HTMLSelectElement) {
-                const row = document.createElement('label'); row.className = 'menu-option';
-                const text = document.createElement('span'); text.textContent = label!;
-                row.append(text, control); menu.append(row);
-            } else {
-                if (label) {
-                    const svg = control.querySelector('svg');
-                    control.replaceChildren(...(svg ? [svg] : []), document.createTextNode(label));
-                }
-                if (control instanceof HTMLButtonElement) {
-                    control.classList.remove('icon-button', 'subtle', 'wide', 'primary'); control.classList.add('menu-command');
-                }
-                menu.append(control);
+        menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', title); trigger.setAttribute('popovertarget', menu.id);
+        trigger.setAttribute('aria-haspopup', 'menu'); trigger.setAttribute('aria-expanded', 'false');
+        for (const entries of groups) {
+            const controls: HTMLButtonElement[] = [];
+            for (const [selector, label] of entries) {
+                const control = document.querySelector<HTMLButtonElement>(selector); if (!control) continue;
+                control.textContent = label;
+                control.setAttribute('aria-label', label); control.setAttribute('role', 'menuitem');
+                control.type = 'button';
+                control.classList.remove('icon-button', 'subtle', 'wide', 'primary'); control.classList.add('menu-command');
+                controls.push(control);
             }
+            if (!controls.length) continue;
+            if (menu.childElementCount) {
+                const separator = document.createElement('div'); separator.className = 'menu-separator';
+                separator.setAttribute('role', 'separator'); menu.append(separator);
+            }
+            menu.append(...controls);
         }
         bar.append(trigger); document.body.append(menu); menus.push({ trigger, menu });
-        const place = () => {
-            if (!menu.matches(':popover-open')) return;
+        const place = (opening = false) => {
+            if (!opening && !menu.matches(':popover-open')) return;
             const r = trigger.getBoundingClientRect();
-            menu.style.left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)) + 'px';
+            const width = menu.offsetWidth || parseFloat(getComputedStyle(menu).width);
+            menu.style.left = Math.max(8, Math.min(r.left, innerWidth - width - 8)) + 'px';
             menu.style.top = r.bottom + 5 + 'px';
         };
+        menu.addEventListener('beforetoggle', event => { if ((event as ToggleEvent).newState === 'open') place(true); });
         menu.addEventListener('toggle', () => { trigger.setAttribute('aria-expanded', String(menu.matches(':popover-open'))); place(); });
         menu.addEventListener('click', event => {
-            if ((event.target as HTMLElement).closest('button') && menu.matches(':popover-open')) menu.hidePopover();
+            if ((event.target as HTMLElement).closest('button:not(:disabled)') && menu.matches(':popover-open')) menu.hidePopover();
         });
         trigger.addEventListener('keydown', event => {
-            if (event.key !== 'ArrowDown') return;
-            event.preventDefault(); menu.showPopover(); place(); menu.querySelector<HTMLElement>('button:not(:disabled),select')?.focus();
+            if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+            event.preventDefault(); event.stopPropagation(); menu.showPopover(); place();
+            const items = menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+            items[event.key === 'ArrowUp' ? items.length - 1 : 0]?.focus();
         });
         menu.addEventListener('keydown', event => {
-            if (event.target instanceof HTMLSelectElement || !['ArrowDown', 'ArrowUp'].includes(event.key)) return;
-            event.preventDefault();
-            const items = [...menu.querySelectorAll<HTMLElement>('button:not(:disabled),select')];
-            const index = items.indexOf(document.activeElement as HTMLElement);
-            items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+            if (event.key === 'Escape') {
+                event.preventDefault(); event.stopPropagation(); menu.hidePopover(); trigger.focus(); return;
+            }
+            if (['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+                event.preventDefault(); event.stopPropagation();
+                const index = menus.findIndex(item => item.menu === menu);
+                const next = menus[(index + (event.key === 'ArrowRight' ? 1 : -1) + menus.length) % menus.length];
+                next.menu.showPopover(); next.menu.querySelector<HTMLElement>('button:not(:disabled)')?.focus(); return;
+            }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault(); event.stopPropagation();
+            const items = [...menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+            const index = items.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+            items[next]?.focus();
         });
-        window.addEventListener('resize', place);
+        window.addEventListener('resize', () => place());
     }
     if(window.directorDesktop?.reconstruction){const video=document.createElement('button');video.type='button';video.dataset.act='video-reconstruction';video.textContent='视频反推';bar.append(video);}
     bar.addEventListener('pointerover', event => {

@@ -6,10 +6,15 @@ import {sampleFields,sampleParticleFields} from './visuals/fields.ts';
 import {DeformationRuntime} from './visuals/deformation.ts';
 import { SurfaceRuntime } from './media/surface-runtime.ts';
 import { SceneLighting } from './lighting/runtime.ts';
+import { ShadowCache } from './lighting/shadow-cache.ts';
+import { nearestVisibleHit } from './spatial/nearest-hit.ts';
 import { installWallTransmission, isWallEntity } from './lighting/wall-transmission.ts';
 import { fitFeetToSurface } from './editor/foot-contact.ts';
 import { SceneRenderCache } from './editor/scene-render-cache.ts';
 import { InteractionPreview } from './editor/interaction-preview.ts';
+import { ViewInteraction } from './editor/view-interaction.ts';
+import { InteractionMaterials } from './editor/interaction-materials.ts';
+import { TransformQueue } from './editor/transform-queue.ts';
 import type { DepthRange } from './cinematography/depth-video.ts';
 import { DepthRangeSampler } from './cinematography/depth-range-sampler.ts';
 import { FreehandPathInput } from './editor/freehand-path-input.ts';
@@ -146,12 +151,24 @@ export class Engine {
     previewQuality: 'full' | 'draft' = 'full';
     adaptivePreview = true;
     private interactionPreview = new InteractionPreview();
+    private viewInteraction = new ViewInteraction();
+    private continuousPreview = false;
+    private editorViewChanged = false;
+    get viewInteracting() { return this.viewInteraction.active(performance.now()); }
+    noteViewNavigation() { this.viewInteraction.touch(performance.now()); }
+    private interactionMaterials = new InteractionMaterials();
     private sampleCost = 0;
+    private shadowCache = new ShadowCache();
+    private transformQueue = new TransformQueue();
+    private get dynamicShadowPass() { return this.exporting || this.pluginHooks.passes.size > 0 || this.pluginHooks.samples.size > 0 || this.project.entities.some(e => e.surface || e.visual || e.field || e.warp || e.deform); }
     get draftPreview() { return !this.exporting && (this.previewQuality === 'draft' || this.interactionPreview.draft); }
-    updateInteractionPreview(active: boolean) {
-        if (this.interactionPreview.update(active, this.adaptivePreview && this.previewQuality === 'full')) {
-            this.resizeNeeded = true; this.requestSample();
-        }
+    updateInteractionPreview(active: boolean, continuous = false) {
+        this.continuousPreview = continuous;
+        const wasActive = this.interactionPreview.active;
+        const heavyScene = !this.dynamicShadowPass && (this.interactionMaterials.ready(this.editorRenderer) || this.interactionMaterials.ready(this.shotRenderer));
+        const resized = this.interactionPreview.update(active, this.adaptivePreview && this.previewQuality === 'full', heavyScene);
+        if (resized) this.resizeNeeded = true;
+        if (resized || wasActive !== this.interactionPreview.active) { this.requestSample(); this.needsRender = true; }
     }
     setPreviewQuality(value: 'full' | 'draft') { this.previewQuality = value; this.resizeNeeded = true; this.sample(this.time); this.render(); }
     private cb: Callbacks;
@@ -182,7 +199,13 @@ export class Engine {
         this.editorCamera.position.set(7, 5.9, 7);
         this.editorCamera.layers.enable(1);
         this.orbit = new OrbitControls(this.editorCamera, this.editorRenderer.domElement);
-        this.orbit.addEventListener('change', () => { this.needsRender = true; });
+        this.orbit.addEventListener('start', () => this.viewInteraction.start());
+        this.orbit.addEventListener('end', () => this.viewInteraction.end(performance.now()));
+        this.orbit.addEventListener('change', () => {
+            this.editorViewChanged = true;
+            this.viewInteraction.changed(performance.now());
+        });
+        window.addEventListener('blur', () => this.viewInteraction.clear(), {signal: this.events.signal});
         this.orbit.target.set(0, .85, 0);
         this.orbit.enableDamping = true;
         this.orbit.minDistance = .3;
@@ -197,9 +220,9 @@ export class Engine {
         helper.traverse(o => o.layers.set(1));
         this.gizmo.getRaycaster().layers.enable(1);
         this.scene.add(helper);
-        this.gizmo.addEventListener('mouseDown', () => { this.captureJointBase(); this.dragging = true; this.orbit.enabled = false; this.objectSnapTarget = ''; this.snapTargets = null; this.cb.transformStart(); });
+        this.gizmo.addEventListener('mouseDown', () => { this.captureJointBase(); this.dragging = true; this.orbit.enabled = false; this.objectSnapTarget = ''; this.snapTargets = null; this.transformQueue.clear(); this.updateInteractionPreview(true); this.cb.transformStart(); });
         this.gizmo.addEventListener('objectChange', () => { if (this.dragging)
-            this.cb.transform(this.proxy.position.toArray() as Vec3, [this.proxy.rotation.x, this.proxy.rotation.y, this.proxy.rotation.z], this.proxy.scale.toArray() as Vec3); });
+            this.transformQueue.push({position:this.proxy.position.toArray() as Vec3, rotation:[this.proxy.rotation.x, this.proxy.rotation.y, this.proxy.rotation.z], scale:this.proxy.scale.toArray() as Vec3}); });
         this.gizmo.addEventListener('mouseUp', () => this.finishTransform());
         const canvas = this.editorRenderer.domElement;
         const signal = this.events.signal;
@@ -241,8 +264,10 @@ export class Engine {
         this.resizeObserver.observe(shot);
         this.rebuild(project);
     }
-    private renderer() { const r = new T.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true }); r.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap; r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.05; return r; }
+    private renderer() { const r = new T.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true }); r.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); r.domElement.addEventListener('webglcontextrestored', () => { this.shadowCache.clear(); this.interactionMaterials.clear(); }); r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap; r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping; r.toneMappingExposure = 1.05; return r; }
     rebuild(project: Project) {
+        this.shadowCache.clear();
+        this.interactionMaterials.clear();
         this.physics.invalidate();
         this.freehandInput?.cancel();
         this.externalModels.assertReady(project);
@@ -309,9 +334,15 @@ export class Engine {
         this.sample(this.time);
         this.resizeNeeded = true;
     }
+    flushTransform() {
+        if (!this.dragging) { this.transformQueue.clear(); return false; }
+        return this.transformQueue.flush(value => this.cb.transform(value.position, value.rotation, value.scale));
+    }
     private finishTransform(cancel=false) {
         if(!this.dragging)return;
+        if (cancel) this.transformQueue.clear(); else this.flushTransform();
         this.dragging=false;this.gizmo.dragging=false;this.orbit.enabled=true;this.snapTargets=null;
+        this.updateInteractionPreview(false);
         this.cb.transformEnd(cancel);
     }
     sample(time: number, physicsBaseline = false) {
@@ -632,9 +663,10 @@ export class Engine {
             return;
         this.orbit.update();
         const view = `${this.previewId}:${this.gridVisible}:${this.drawingPath}:${this.positionKeying}:${this.objectSnapEnabled}:${this.objectSnapTarget}`;
-        if (!force && !this.needsRender && !this.resizeNeeded && view === this.renderedView) return;
+        const editorOnly = !force && !this.needsRender && !this.resizeNeeded && view === this.renderedView;
+        if (editorOnly && !this.editorViewChanged) return;
         const renderStarted = performance.now();
-        this.needsRender = false; this.renderedView = view;
+        this.needsRender = false; this.editorViewChanged = false; this.renderedView = view;
         if (this.resizeNeeded)
             this.resize();
         this.helpers.traverse(o => { if (o instanceof T.CameraHelper)
@@ -643,9 +675,9 @@ export class Engine {
         this.surfaces.sample(this.project,this.models,this.time);
         this.prepareView(true);
         if (this.stage.clientWidth)
-            this.pluginHooks.render({time:this.time,project:this.project,exporting:this.exporting,renderer:this.editorRenderer,scene:this.scene,camera:this.editorCamera,view:'stage',depth:false},()=>this.editorRenderer.render(this.scene, this.editorCamera));
+            this.interactionMaterials.render(this.scene,this.editorRenderer,this.interactionPreview.active&&!this.dynamicShadowPass,()=>this.pluginHooks.render({time:this.time,project:this.project,exporting:this.exporting,renderer:this.editorRenderer,scene:this.scene,camera:this.editorCamera,view:'stage',depth:false},()=>this.shadowCache.render(this.editorRenderer,this.scene,this.editorCamera,()=>this.editorRenderer.render(this.scene,this.editorCamera),this.dynamicShadowPass,this.interactionPreview.active,this.interactionMaterials.ready(this.editorRenderer)&&!this.continuousPreview)));
         this.prepareView(false);
-        if (this.shot.clientWidth) {
+        if (this.shot.clientWidth && !editorOnly) {
             this.renderShot(this.previewId);
         }
         this.onFrame();
@@ -653,6 +685,10 @@ export class Engine {
             this.resizeNeeded = true; this.requestSample();
         }
         this.sampleCost = 0;
+        if(this.adaptivePreview&&!this.dynamicShadowPass){
+            if(this.stage.clientWidth)this.interactionMaterials.prepare(this.scene,this.editorRenderer,this.editorCamera);
+            if(this.shot.clientWidth)this.interactionMaterials.prepare(this.scene,this.shotRenderer,this.getShotCamera());
+        }
     }
     suggestDepthRange(time = this.time, cameraId = this.previewId, ids?: string[]) {
         if (this.exporting) throw Error('导出期间无法取值');
@@ -695,7 +731,7 @@ export class Engine {
     private renderShot(id: string, depth: DepthRange | null = this.project.depthVideo?.enabled ? this.project.depthVideo : null) {
         const camera = this.getShotCamera(id), effects = this.cameraEntity(id).camera!.effects;
         const focusTarget = effects?.focusTargetId ? this.models.get(effects.focusTargetId)?.getWorldPosition(new T.Vector3()) : undefined;
-        this.pluginHooks.render({time:this.time,project:this.project,exporting:this.exporting,renderer:this.shotRenderer,scene:this.scene,camera,view:'shot',depth:!!depth},()=>this.shotEffects.render(this.shotRenderer, this.scene, camera, effects, this.time, cameraFocusDistance(camera, effects, this.time, focusTarget), cam => this.renderReferenceLabels(cam, id),collectWarps(this.project.entities,this.models,camera,this.time), depth));
+        this.interactionMaterials.render(this.scene,this.shotRenderer,this.interactionPreview.active&&!this.dynamicShadowPass&&!depth,()=>this.pluginHooks.render({time:this.time,project:this.project,exporting:this.exporting,renderer:this.shotRenderer,scene:this.scene,camera,view:'shot',depth:!!depth},()=>this.shadowCache.render(this.shotRenderer,this.scene,camera,()=>this.shotEffects.render(this.shotRenderer, this.scene, camera, effects, this.time, cameraFocusDistance(camera, effects, this.time, focusTarget), cam => this.renderReferenceLabels(cam, id),collectWarps(this.project.entities,this.models,camera,this.time), depth),this.dynamicShadowPass || !!depth,this.interactionPreview.active,this.interactionMaterials.ready(this.shotRenderer)&&!this.continuousPreview)));
     }
     focusBounds(bounds: T.Box3) {
         if (bounds.isEmpty()) return;
@@ -714,22 +750,14 @@ export class Engine {
     }
     private pathPointFromRay(ray: T.Raycaster, surfaces = this.pathSurfaces()): Vec3 | null {
         if (this.pathSurfaceMode === 'surface') {
-            const surface = ray.intersectObjects(surfaces, true).find(hit => {
-                let node: T.Object3D | null = hit.object;
-                while (node) { if (!node.visible) return false; node = node.parent; }
-                return true;
-            });
+            const surface = nearestVisibleHit(ray, surfaces);
             if (surface) return surface.point.toArray() as Vec3;
         }
         const out = new T.Vector3();
         return ray.ray.intersectPlane(new T.Plane(new T.Vector3(0,1,0), -workingElevation(this.project)), out) ? out.toArray() as Vec3 : null;
     }
     private entityFromRay(ray: T.Raycaster): string | undefined {
-        const hit = ray.intersectObjects([...this.models.values()], true).find(x => {
-            let node: T.Object3D | null = x.object;
-            while (node) { if (!node.visible) return false; node = node.parent; }
-            return true;
-        });
+        const hit = nearestVisibleHit(ray, this.models.values());
         return hit?.object.userData.entityId;
     }
     entityAt(clientX: number, clientY: number): string | undefined {
@@ -771,6 +799,7 @@ export class Engine {
     }
     projectionSignature(id = this.previewId) { const c = this.getShotCamera(id); return { cameraId: this.cameraEntity(id).id, time: this.time, world: c.matrixWorld.toArray(), projection: c.projectionMatrix.toArray() }; }
     dispose() {
+        this.interactionMaterials.clear();
         this.physics.dispose();
         if (this.disposed) return;
         this.disposed = true; this.events.abort(); this.resizeObserver.disconnect();

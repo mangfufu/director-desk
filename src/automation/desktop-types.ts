@@ -9,7 +9,9 @@ export interface AgentEvent { type: string; text?: string; name?: string; status
 declare global {
     interface Window { directorDesktop?: {
         windowChrome?: 'custom';
+        systemLanguage?: 'zh-CN'|'en';
         reconstruction?(action: string, data?: Record<string, unknown>): Promise<DesktopResult<any>>;
+        blender?(action: string, data?: Record<string, unknown>): Promise<DesktopResult<any>>;
         appMetrics?(): Promise<DesktopResult<{ cpu: number | null; memoryBytes: number | null }>>;
         windowControl?(command: 'state' | 'minimize' | 'maximize' | 'close'): Promise<DesktopResult<{ maximized: boolean; fullscreen: boolean }>>;
         onWindowState?(callback: (state: { maximized: boolean; fullscreen: boolean }) => void): () => void;
@@ -22,7 +24,7 @@ declare global {
         skills?(data: SkillRequest): Promise<DesktopResult<SkillResult>>;
         builtinSkill?(): Promise<DesktopResult<typeof import('./skill.ts').BUILTIN_SKILL>>;
         onBuiltinSkill?(callback: (data: typeof import('./skill.ts').BUILTIN_SKILL) => void): () => void;
-        files?(action: 'locations' | 'set-locations' | 'choose' | 'choose-export-directory' | 'save-project' | 'save-export' | 'automation-read' | 'automation-write-begin' | 'automation-write-chunk' | 'automation-write-close' | 'automation-write-abort', data?: unknown): Promise<DesktopResult<{ projects?: string; exports?: string; saved?: boolean; filename?: string; name?: string; id?: string; path?: string; content?: string; package?: import('../resources/model-package.ts').ModelPackage }>>;
+        files?(action: 'locations' | 'set-locations' | 'choose' | 'choose-export-directory' | 'save-project' | 'project-destination' | 'save-export' | 'automation-read' | 'automation-write-begin' | 'automation-write-chunk' | 'automation-write-close' | 'automation-write-abort', data?: unknown): Promise<DesktopResult<{ projects?: string; exports?: string; saved?: boolean; filename?: string; name?: string; id?: string; path?: string; content?: string; package?: import('../resources/model-package.ts').ModelPackage }>>;
         onSaveBeforeClose?(callback: () => Promise<boolean>): () => void;
         update(action: 'state' | 'save' | 'check' | 'download' | 'install' | 'page', data?: unknown): Promise<DesktopResult<import('../updates/types.ts').UpdateState>>;
         onUpdate(callback: (state: import('../updates/types.ts').UpdateState) => void): () => void;

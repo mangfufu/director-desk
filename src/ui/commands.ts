@@ -90,6 +90,7 @@ export function createCommands(ctx: AppContext, inspectorTools: { handle(action:
                 document.querySelector<HTMLButtonElement>('#settings-toggle')?.click();
                 document.querySelector<HTMLButtonElement>('[data-settings-category="editing"]')?.click();
                 break;
+            case 'blender-import':await (await import('./blender-import-panel.ts')).openBlenderImport(ctx);break;
             case 'contact-sheet':openContactSheet(ctx);break;
             case 'preview-cache':await openPreviewCache(ctx);break;
             case 'video-reconstruction':await (await import('./video-reconstruction-panel.ts')).openVideoReconstruction(ctx);break;

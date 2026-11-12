@@ -64,6 +64,18 @@ function createFileHost({ directory, defaults, chooseDirectory, chooseSave }) {
                 catch (error) { await file.close().catch(() => {}); await fs.rm(destination, { force: true }).catch(() => {}); throw error; }
             }
         },
+        async projectDestination({ name, path: existingPath } = {}) {
+            await ready;
+            if (typeof name !== 'string' || (existingPath !== undefined && typeof existingPath !== 'string')) throw Error('项目保存参数无效');
+            if (!existingPath) {
+                try { await fs.mkdir(locations.projects, { recursive: true }); }
+                catch { throw Error('默认工程目录不可用，请在“文件位置”中重新选择目录'); }
+            }
+            const filename = existingPath || await chooseSave(this.defaultPath(name.replace(/\.director$/i, '') + '.director'));
+            if (!filename) return { saved: false };
+            if (!path.isAbsolute(filename) || path.extname(filename).toLowerCase() !== '.director') throw Error('请使用 .director 工程文件名');
+            return { path: filename };
+        },
         async saveProject({ name, content, path: existingPath } = {}) {
             await ready;
             if (saving) throw Error('项目正在保存');
@@ -72,13 +84,8 @@ function createFileHost({ directory, defaults, chooseDirectory, chooseSave }) {
             if (data?.format !== 'director-desk' || ![1,2,3].includes(data.version)) throw Error('项目文件格式无效');
             saving = true;
             try {
-                if (!existingPath) {
-                    try { await fs.mkdir(locations.projects, { recursive: true }); }
-                    catch { throw Error('默认工程目录不可用，请在“文件位置”中重新选择目录'); }
-                }
-                const filename = existingPath || await chooseSave(this.defaultPath(name.replace(/\.director$/i, '') + '.director'));
+                const { path: filename } = await this.projectDestination({ name, path: existingPath });
                 if (!filename) return { saved: false };
-                if (!path.isAbsolute(filename) || path.extname(filename).toLowerCase() !== '.director') throw Error('请使用 .director 工程文件名');
                 await atomicWrite(filename, content);
                 return { saved: true, path: filename };
             } finally { saving = false; }

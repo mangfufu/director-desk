@@ -107,6 +107,8 @@ AI → 技能中的“检查技能更新”和“更新技能”独立于软件�
 
 ## 界面语言
 
+首次启动用系统语言选择中文或英文，已有手动选择优先。Linux 按 LC_ALL、LC_MESSAGES、LANG 的顺序读取，其他系统使用 Electron locale；非中文回退英文。共享规则位于 `src/i18n/initial-language.ts`，桌面构建将其打入 `language.cjs`，不得在发布包中直接引用源码路径。
+
 界面语言在 `src/i18n/` 维护：内置文案按完整标签匹配，动态标签用明确的占位格式；新功能应补齐英文术语。界面层保留原文以支持即时往返切换，不修改输入值、option 的 value、工程数据或 MCP 协议。用户名称与第三方内容使用 `data-i18n-ignore`；动态标题应仅翻译固定部分。桌面原生弹窗使用 `desktop/language.cjs`，与界面选择同步。
 
 验证：`node --experimental-strip-types --test tests/locale.test.ts`；开发服务器上运行 `node scripts/verify-language.mjs`；`npm run desktop:prepare` 后运行 `node scripts/verify-language-desktop.mjs`。后者使用隔离配置并检查原生弹窗参数，不操作用户工程或发起模型请求。

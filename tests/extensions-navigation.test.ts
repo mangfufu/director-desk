@@ -61,7 +61,9 @@ test('extension package validates portable files and declared native entry',()=>
 });
 test('legacy file identity remains stable across opens without conflating new projects',async()=>{
     const doc=readSceneDocument(createScene('blank'));
+    const expected='legacy:'+Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(doc)))).toString('hex');
     const a=await identifyImportedDocument(structuredClone(doc)),b=await identifyImportedDocument(structuredClone(doc));
+    assert.equal(a.projectId,expected,'chunked serialization retains the existing legacy identity');
     assert.equal(a.projectId,b.projectId);
     const changed=structuredClone(doc);changed.name='Other';assert.notEqual((await identifyImportedDocument(changed)).projectId,a.projectId);
     assert.equal((await identifyImportedDocument({...doc,projectId:'saved-identity'})).projectId,'saved-identity');

@@ -1,9 +1,25 @@
 import { assetEnglish } from './en-assets.ts';
 import { panelEnglish } from './en-panels.ts';
-const liteEnglish={'已安装':'Installed','来源：Google MediaPipe · Pose Landmarker Lite':'Source: Google MediaPipe · Pose Landmarker Lite','来源：Human3R · fanegg/Human3R':'Source: Human3R · fanegg/Human3R','标准识别使用 Human3R，原许可仅允许非商业用途。商业使用需另行取得授权。':'Standard Recognition uses Human3R, which is licensed for non-commercial use. Commercial use requires separate permission.','我已阅读并同意 Human3R 许可':'I have read and agree to the Human3R license','识别方式':'Reconstruction Mode','标准识别':'Standard Recognition','简易识别（默认）':'Lightweight Recognition (Default)','最多识别人数':'Maximum People','下载约 21 MB，无需独立显卡':'About 21 MB to download. No dedicated GPU required.','建议 8 GB 内存及以上。':'8 GB of RAM or more recommended.','此功能需要 Windows / Linux x64':'Requires Windows or Linux x64.'};
+const liteEnglish={'轻量识别 · MediaPipe（默认）':'Lightweight · MediaPipe (Default)','标准识别 · Human3R':'Standard · Human3R','已安装':'Installed','来源：Google MediaPipe · Pose Landmarker Lite':'Source: Google MediaPipe · Pose Landmarker Lite','来源：Human3R · fanegg/Human3R':'Source: Human3R · fanegg/Human3R','标准识别使用 Human3R，原许可仅允许非商业用途。商业使用需另行取得授权。':'Standard Recognition uses Human3R, which is licensed for non-commercial use. Commercial use requires separate permission.','我已阅读并同意 Human3R 许可':'I have read and agree to the Human3R license','识别方式':'Reconstruction Mode','标准识别':'Standard Recognition','简易识别（默认）':'Lightweight Recognition (Default)','下载约 21 MB，无需独立显卡':'About 21 MB to download. No dedicated GPU required.','建议 8 GB 内存及以上。':'8 GB of RAM or more recommended.','此功能需要 Windows / Linux x64':'Requires Windows or Linux x64.'};
 /** Product terminology: Scene = independent scene; Shot = a camera cut. */
 export const english: Record<string, string> = {
+    '已内置，无需安装。无需独立显卡。':'Included with the app. No installation or dedicated GPU required.',
+    '无需独立显卡':'No dedicated GPU required','内置组件':'Bundled components','旧组件':'Legacy components','清理旧组件':'Remove Legacy Components',
+    '清理旧版下载的组件？内置识别和转换结果会保留。':'Remove previously downloaded components? Bundled recognition and reconstruction results will be kept.',
+    '选择视频':'Choose Video','转换完成':'Reconstruction complete',
+    'WASD 移动 QE 转向 RF 升降':'WASD Move   QE Turn   RF Up/Down',
     ...liteEnglish,
+    '需要 NVIDIA 显卡。模型约 9.7 GB，建议预留 35 GB 空间。':'NVIDIA GPU required. About 9.7 GB of models; allow 35 GB of free space.',
+    '模型约 9.7 GB，建议预留 35 GB 空间。':'About 9.7 GB of models. Allow 35 GB of free space.',
+    '来源：FlowHMR · Windows 适配：FlowHMR-Windows':'Source: FlowHMR · Windows support: FlowHMR-Windows',
+    '模型仅限非商业用途；人体文件需在官网注册后下载。':'Models are for non-commercial use. Register on the official website to download the body model.',
+    '我已阅读并同意 FlowHMR 许可':'I have read and agree to the FlowHMR license',
+    '人体文件：Extended SMPL+H（smplh.tar.xz）':'Body model: Extended SMPL+H (smplh.tar.xz)',
+    '官网下载':'Official Download','导入人体文件':'Import Body Model','人体文件':'Body Model','未安装':'Not installed',
+    '原视频镜头':'Source Camera','移动镜头':'Moving Camera',
+    '卸载 FlowHMR？转换结果会保留。':'Uninstall FlowHMR? Your results will be kept.',
+    '请导入人体文件':'Import the body model to continue','人体文件已导入':'Body model imported',
+
     "先选择片段": "Select a clip first",
     "所选对象已锁定": "Selected objects are locked",
     "请重新选择片段": "Select the clip again",
@@ -22,7 +38,7 @@ export const english: Record<string, string> = {
     "添加到「{0}」": "Add to “{0}”",
     "在播放头处添加动作": "Add action at playhead",
     '人物外形':'Character Model','更换外形':'Replace Model','当前模型':'Current Model','已更换人物外形':'Character model replaced',
-    '白模':'Mannequin','下载约 7–9 GB，安装后约 9–12 GB；建议预留 25 GB 空间':'Download: about 7–9 GB. Installed: about 9–12 GB. Allow 25 GB of free space.','总占用':'Total storage','已用时':'Elapsed','总用时':'Total time','配置步骤':'Setup steps','校验已有文件':'Verifying existing file','连接下载源':'Connecting to download server','正在下载':'Downloading','下载计算组件':'Downloading compute components','安装计算组件':'Installing compute components','检查显卡':'Checking graphics card','准备运行环境':'Preparing runtime','等待':'Pending','失败':'Failed','人物预览':'Character preview','重新配置':'Set Up Again','配置进度':'Setup progress','查看配置进度':'View setup progress','配置失败':'Setup failed','配置已中断':'Setup interrupted','取消配置':'Cancel setup','下载基础组件':'Downloading base components','下载识别模型':'Downloading recognition model','解压组件':'Extracting components','安装识别依赖':'Installing recognition dependencies','启动组件':'Launcher','识别组件':'Recognition components','图像组件':'Image components','进行中':'In progress','已中断':'Interrupted','还原内容':'Reconstruct','仅人物':'People only','人物＋场景':'People and scene','生成人物':'Building people','此帧未识别到人物':'No people detected in this frame','视频反推':'Video to Project','下载视频重建模型':'Download Reconstruction Model','模型许可':'Model License',
+    '白模':'Mannequin','下载约 7–9 GB，安装后约 9–12 GB；建议预留 25 GB 空间':'Download: about 7–9 GB. Installed: about 9–12 GB. Allow 25 GB of free space.','总占用':'Total storage','已用时':'Elapsed','总用时':'Total time','配置步骤':'Setup steps','校验已有文件':'Verifying existing file','连接下载源':'Connecting to download server','正在下载':'Downloading','下载计算组件':'Downloading compute components','安装计算组件':'Installing compute components','检查显卡':'Checking graphics card','准备运行环境':'Preparing runtime','等待':'Pending','失败':'Failed','人物预览':'Character preview','重新配置':'Set Up Again','配置进度':'Setup progress','查看配置进度':'View setup progress','配置失败':'Setup failed','配置已中断':'Setup interrupted','取消配置':'Cancel setup','下载基础组件':'Downloading base components','下载识别模型':'Downloading recognition model','解压组件':'Extracting components','安装识别依赖':'Installing recognition dependencies','启动组件':'Launcher','识别组件':'Recognition components','图像组件':'Image components','进行中':'In progress','已中断':'Interrupted','还原内容':'Reconstruct','仅人物':'People only','人物＋场景':'People and scene','生成人物':'Building people','此帧未识别到人物':'No people detected in this frame','视频反推':'Video Reconstruction','下载视频重建模型':'Download Reconstruction Model','模型许可':'Model License',
     '此功能使用 Human3R，原许可仅允许非商业用途。商业使用需另行取得授权。':'This feature uses Human3R under a non-commercial license. Commercial use requires separate authorization.',
     '查看许可':'View License','官方许可':'Official License','同意并下载':'Agree and Download','同意并使用':'Agree and Continue','选择本地视频':'Choose a video',
     '当前工程有未保存更改':'The current project has unsaved changes.','保存并打开':'Save and Open',
@@ -37,7 +53,7 @@ export const english: Record<string, string> = {
     '机位与目标':'Camera & Target','请先取消对象对焦':'Disable target autofocus first.',
     '当前焦距 / mm':'Current Focal Length (mm)','变焦关键帧':'Zoom Keyframes',
     '请先关闭希区柯克变焦，再调整焦距':'Disable Dolly Zoom before editing the focal length.','焦距应在 8 到 300 mm 之间':'Focal length must be between 8 and 300 mm.',
-    '场景属性':'Scene Properties','剧情与提示词':'Story & Prompts',
+    '场景属性':'Scene Properties','剧情与提示词':'Story & Prompts','重命名项目':'Rename Project','移除视频':'Remove Video',
     '光学关键帧':'Lens Keyframes','机身关键帧':'Camera Motion Keyframes','成像':'Imaging','跟随响应':'Follow Response','运镜参数':'Camera Motion Settings','光学':'Optics','预览设置':'Preview Settings','工程资源':'Project Resources',
     '局部预览':'Range Preview','清除预览':'Clear Preview','生成预览':'Build Preview','预览已就绪':'Preview Ready','预览时间':'Preview Time','按切镜':'Shot Sequence',
     '场景已修改，请重新生成预览':'Scene changed. Rebuild the preview.','预览范围过大，请缩短范围或降低分辨率':'Preview is too large. Shorten the range or lower the resolution.',
@@ -106,6 +122,9 @@ Object.assign(english, {
     '原视频':'Source Video','识别预览':'Reconstruction Preview','当前分析画面':'Frame Being Analyzed','跟随镜头':'Follow Camera',
     '存储管理':'Storage','正在统计':'Calculating…','运行环境':'Runtime','缓存':'Cache','转换结果':'Results','清理缓存':'Clear Cache','移除运行环境':'Remove Runtime',
     '移除模型和运行环境？转换结果会保留。':'Remove the model and runtime? Your results will be kept.',
+    '卸载':'Uninstall','已卸载':'Uninstalled','缓存已清理':'Cache cleared',
+    '卸载轻量识别？转换结果会保留。':'Uninstall Lightweight Recognition? Your results will be kept.',
+    '卸载标准识别？转换结果会保留。':'Uninstall Standard Recognition? Your results will be kept.',
 });
 
 Object.assign(english, {'视频反推设置':'Video Reconstruction Settings','预览布局':'Preview Layout','识别':'Reconstruction','等待转换':'Waiting to reconstruct','正在分析':'Analyzing','此帧未识别到人物或场景':'No people or scene detected in this frame','转换':'Reconstruction','返回编辑':'Back to Editor','准备模型':'Set Up Model','首次使用需要下载模型':'Download the model to get started','重新转换':'Reconstruct Again','模型与存储':'Model & Storage','此视频无法预览，仍可转换':'Preview unavailable. You can still reconstruct this video.'});
@@ -119,3 +138,11 @@ Object.assign(english, {'人物模型':'Character Model','识别模型':'Reconst
 Object.assign(english, {'原识别外形':'Reconstructed Model','结果预览':'Result Preview','加载结果':'Loading result…','转换设置':'Reconstruction Settings','未识别到人物':'No people detected','播放位置':'Playback Position'});
 
 Object.assign(english, {'设备配置':'System Requirements','硬件':'Hardware','最低配置（估计）':'Estimated Minimum','推荐配置':'Recommended','显存':'VRAM','处理器':'Processor','可用空间':'Free Storage','4 核 8 线程':'4 cores / 8 threads','6 核 12 线程及以上':'6 cores / 12 threads or more','40 GB · SSD':'40 GB on SSD','Windows / Linux（64 位），NVIDIA RTX 20 / 30 / 40 / 50 系列显卡及兼容驱动。':'Windows / Linux (64-bit), an NVIDIA RTX 20 / 30 / 40 / 50 series GPU, and a compatible driver.','最低配置按短片段估计；长视频、多人场景建议分段转换。暂不支持 AMD、Intel 显卡或 macOS。':'The minimum is an estimate for short clips. Split longer videos and crowded scenes into shorter segments. AMD and Intel GPUs, and macOS, are not currently supported.'});
+
+Object.assign(english, {'预计剩余约':'Estimated remaining','正在估算剩余时间':'Estimating remaining time…'});
+
+Object.assign(english, {'导入 Blender 工程':'Import Blender Scene','工程文件':'Scene File','导入方式':'Import Mode','新建独立戏段':'Create a Separate Scene','加入当前戏段':'Add to Current Scene','作为独立工程打开':'Open as a Separate Project','导入动画':'Import Animation','未找到 Blender，请选择安装位置。':'Blender was not found. Select its executable.','正在查找 Blender…':'Looking for Blender…','正在读取 Blender 工程…':'Reading Blender scene…','正在转换模型…':'Converting models…','正在转换摄影机…':'Converting cameras…','正在转换灯光…':'Converting lights…','正在整理资源…':'Preparing assets…','正在导入…':'Importing…','导入完成':'Import complete','请选择 Blender 可执行文件':'Select the Blender executable.','所选程序不是 Blender':'The selected program is not Blender.','需要 Blender 4.2 或更新版本':'Blender 4.2 or later is required.','请在桌面版中导入 Blender 工程':'Import Blender scenes in the desktop app.'});
+
+Object.assign(english, {'模型修改器按导出形状保留；随时间变化的几何形变需检查结果。':'Modifiers are applied to the exported shape. Check any geometry that changes over time.','世界环境节点未转换；可在导演台中调整环境光。':'World shaders were not imported. Adjust environment lighting in DirectorDesk.','顶点或面实例未转换，请在 Blender 中将实例转为真实对象后导入。':'Vertex and face instances were not imported. Make them real in Blender before importing.','{0}：没有可导入的表面，已跳过。':'{0}: skipped because it has no importable surface.','未转换的对象类型：{0}':'Object type not imported: {0}','{0}：正交或全景摄影机暂不转换。':'{0}: orthographic and panoramic cameras are not supported yet.','{0}：灯光采用起始帧状态，灯光动画未导入。':'{0}: the initial light state was imported; light animation was not.','缺失贴图：{0}':'Missing texture: {0}','画幅已调整为 {0}。':'Aspect ratio adjusted to {0}.','帧率已调整为 {0} fps；动画仍按原秒数播放。':'Frame rate adjusted to {0} fps; animation timing is unchanged.','{0}：焦距已调整到 8–300 mm 范围。':'{0}: focal length was limited to the 8–300 mm range.','{0}：已放入第一段动画，其余动画保留在模型资源中。':'{0}: the first animation was placed on the timeline; the others remain in the model asset.'});
+
+Object.assign(english, {'正在转换材质…':'Converting materials…'});

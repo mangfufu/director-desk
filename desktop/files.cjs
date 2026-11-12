@@ -37,6 +37,7 @@ function attachFiles(window, { isBusy = () => false } = {}) {
                 const result = await dialog.showOpenDialog(window, { title: text(window, '保存位置'), defaultPath: typeof input.data === 'string' && path.isAbsolute(input.data) ? input.data : host.read().exports, properties: ['openDirectory', 'createDirectory'] });
                 return { ok: true, data: { path: result.canceled ? undefined : result.filePaths[0] } };
             }
+            if (input?.action === 'project-destination') return { ok: true, data: await host.projectDestination(input.data) };
             if (input?.action === 'save-project') return { ok: true, data: await host.saveProject(input.data) };
             if (input?.action === 'save-export') return { ok: true, data: await host.saveExport(input.data) };
             throw Error('未知文件操作');

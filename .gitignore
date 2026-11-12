@@ -33,6 +33,7 @@ release/
 /docs/*
 !/docs/images/
 !/docs/development.md
+!/docs/flowhmr-integration.md
 !/docs/轻量视频反推.md
 !/docs/制作效率与扩展开发计划.md
 !/docs/staging-workflow.md
@@ -169,3 +170,19 @@ file-locations.json
 !/scripts/verify-human-silhouettes.mjs
 !/docs/video-reconstruction.md
 !/docs/human-models.md
+!/docs/bundled-lightweight-recognition.md
+!/scripts/prepare-bundled-lite.mjs
+
+!/docs/blender-import.md
+
+!/scripts/test-blender-import.mjs
+!/scripts/test-blender-materials.mjs
+!/scripts/verify-model-image-sharing.mjs
+!/scripts/verify-shadow-cache.mjs
+!/scripts/verify-transform-drag.mjs
+!/scripts/verify-interaction-materials.mjs
+!/docs/shadow-cache-performance.md
+
+# Python runtime caches are never product source.
+__pycache__/
+*.py[cod]

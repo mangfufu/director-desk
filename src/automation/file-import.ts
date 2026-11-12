@@ -13,14 +13,17 @@ import { assertStagingAsset, stagingMetadata } from '../building/staging-asset.t
 import { saveStagingAsset } from '../building/staging-store.ts';
 
 export interface ImportRequest {
-    kind: 'project' | 'model' | 'motion' | 'staging'; path: string; dependencies?: string[];
-    mode?: 'open' | 'merge'; sourceSceneId?: string; offset?: Vec3; timeOffset?: number;
+    kind: 'project' | 'model' | 'motion' | 'staging' | 'blender'; path: string; dependencies?: string[];
+    animations?:boolean; blenderPath?:string;
+    mode?: 'scene' | 'open' | 'merge'; sourceSceneId?: string; offset?: Vec3; timeOffset?: number;
     scheduling?: MergeSceneOptions['scheduling']; cuts?: MergeSceneOptions['cuts'];
     name?: string; entityKind?: 'actor' | 'prop'; libraryOnly?: boolean; position?: Vec3;
     unitScale?: number; orientation?: Vec3; appearance?: 'original' | 'white' | 'color';
     animationIndex?: number; rig?: HumanoidRig; license?: string; source?: string;
 }
-export async function importFile(ctx: AppContext, args: ImportRequest, signal: AbortSignal, check: () => void) {
+export async function importFile(ctx: AppContext, args: ImportRequest, signal: AbortSignal, check: () => void, progress:(value:number)=>void=()=>{}) {
+    if(args.kind==='blender')return (await import('../import/blender-import.ts')).importBlender(ctx,args,signal,check,progress);
+    if(args.mode==='scene')throw Error('mode:scene 仅适用于 Blender 导入');
     const context = ctx.scenes.context;
     const commit = (write: () => void) => {
         signal.throwIfAborted(); check(); ctx.busy = false;

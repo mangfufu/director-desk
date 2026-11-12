@@ -12,6 +12,7 @@ async function cleanRun(root,directory,{discardFailed=false}={}){
     };
     const task=await read('task.json');
     if(task.kind==='convert'&&(task.status==='cancelled'||discardFailed&&['failed','interrupted'].includes(task.status))){
+        if(task.engine==='flowhmr')await removeFlowWork(dir);
         return removeGeneratedFiles(dir,(await fs.readdir(dir)).filter(name=>/^frame-\d{5,}\.npz$/.test(name)||/^(?:surface|environment|person)-[\w-]+\.glb$/.test(name)));
     }
     if(task.kind!=='convert'||task.status!=='completed')return 0;
@@ -31,7 +32,14 @@ async function cleanRun(root,directory,{discardFailed=false}={}){
         }catch(e){if(e.code!=='ENOENT')throw e;}
     }
     for(const frame of analysis.frames){if(!/^frame-\d{5,}\.npz$/.test(frame.file))throw Error('转换帧路径无效');names.push(frame.file);}
+    if(task.engine==='flowhmr')await removeFlowWork(dir);
     return removeGeneratedFiles(dir,names);
+}
+
+async function removeFlowWork(dir){
+    // Only this adapter's disposable folder; retain original predictions and the project.
+    const target=path.join(dir,'flow-work');
+    try{if((await fs.lstat(target)).isSymbolicLink()||await fs.realpath(target)!==target)throw Error('转换缓存目录无效');await fs.rm(target,{recursive:true,force:true});}catch(e){if(e.code!=='ENOENT')throw e;}
 }
 
 async function removeGeneratedFiles(dir,names){
@@ -46,11 +54,12 @@ async function removeGeneratedFiles(dir,names){
     return removed;
 }
 
-async function cleanInactiveRuns(root){
+async function cleanInactiveRuns(root,engine){
     const directory=path.join(await fs.realpath(root),'runs');let removed=0;
     try{
         if(await fs.realpath(directory)!==directory)throw Error('转换目录无效');
         for(const entry of await fs.readdir(directory,{withFileTypes:true}))if(entry.isDirectory()){
+            if(engine){const task=await fs.readFile(path.join(directory,entry.name,'task.json'),'utf8').then(JSON.parse).catch(()=>null);if(!task||(task.engine||'human3r')!==engine)continue;}
             // Never discard inputs for a corrupt completed project or active run.
             try{removed+=await cleanRun(root,path.join(directory,entry.name),{discardFailed:true});}catch{}
         }

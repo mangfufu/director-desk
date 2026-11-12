@@ -68,12 +68,12 @@ export function createToolService(ctx: AppContext): ToolService {
         validateToolInput(name, args);
         if(name==='director_reconstruct'){
             if(args.action==='open'){idle();await (await import('../ui/video-reconstruction-panel.ts')).openVideoReconstruction(ctx);}
-            if(['start','download'].includes(String(args.action))&&(typeof args.requestId!=='string'||!args.requestId||args.requestId.length>180))throw Error('需要唯一 requestId');
+            if(['start','download','import-body'].includes(String(args.action))&&(typeof args.requestId!=='string'||!args.requestId||args.requestId.length>180))throw Error('需要唯一 requestId');
             const {reconstruction}=await import('../reconstruction/client.ts');
             const state=await reconstruction(args.action==='open'?'state':String(args.action),args);
             // Keep the repeated status response small; the full license is available in the UI.
             if(args.action==='preview')return state?{jobId:state.jobId,sequence:state.sequence,frameIndex:state.frameIndex,frameCount:state.frameCount,time:state.time,people:state.actors?.length??0,scenePoints:(state.points?.length??0)/3,...(args.history?{frames:state.frames}:{} )}:null;
-            if(state?.model){const {licenseText,...model}=state.model;return {...state,model};}
+            if(state?.model){const {licenseText,...model}=state.model;const modes=Object.fromEntries(Object.entries(state.modes??{}).map(([key,value])=>{const mode=value as any;const {licenseText,...metadata}=mode.model;return [key,{...mode,model:metadata}];}));return {...state,model,modes};}
             return state;
         }
         if(name==='director_preview'){
@@ -164,9 +164,9 @@ export function createToolService(ctx: AppContext): ToolService {
             if (receipt) { if (receipt.args !== encoded) throw Error('requestId 已用于不同操作'); return receipt.result; }
             if (name === 'director_import') checkRevision(args.revision);
             const result = name === 'director_import'
-                ? job(async signal => {
+                ? job(async (signal,progress) => {
                     const before = ctx.project;
-                    const imported = await importFile(ctx, args as unknown as ImportRequest, signal, () => checkRevision(args.revision));
+                    const imported = await importFile(ctx, args as unknown as ImportRequest, signal, () => checkRevision(args.revision),progress);
                     const changeId = !sameProjectData(before, ctx.project) ? uid() : undefined;
                     if (changeId) recordEdits({ id: changeId, sceneId: ctx.scenes.context.sceneId,
                         sceneName: ctx.scenes.list().find(s => s.id === ctx.scenes.context.sceneId)?.name ?? ctx.project.name,

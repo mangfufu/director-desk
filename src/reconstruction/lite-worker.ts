@@ -1,3 +1,4 @@
+import {automaticPeopleDetector} from './auto-people.ts';
 import {Input,UrlSource,ALL_FORMATS,CanvasSink} from 'mediabunny';
 import {LiteTracker,poseJoints,LITE_BONES} from './lite-pose.ts';
 declare global {interface Window {liteTask:{send:(message:unknown)=>Promise<void>}}}
@@ -13,14 +14,15 @@ async function main(){
   if(duration<2/config.fps)throw Error('所选区间不足两帧');
   await send({type:'progress',message:'加载轻量模型',progress:3});
   const fileset=await FilesetResolver.forVisionTasks(new URL('.',location.href).href.replace(/\/$/,''));
-  model=await PoseLandmarker.createFromOptions(fileset,{baseOptions:{modelAssetPath:new URL('pose_landmarker_lite.task',location.href).href,delegate:'CPU'},runningMode:'VIDEO',numPoses:config.people??3,outputSegmentationMasks:false});
+  model=await PoseLandmarker.createFromOptions(fileset,{baseOptions:{modelAssetPath:new URL('pose_landmarker_lite.task',location.href).href,delegate:'CPU'},runningMode:'VIDEO',numPoses:2,outputSegmentationMasks:false});
+  const detect=automaticPeopleDetector(model);
   const aspect=track.displayWidth/track.displayHeight,height=Math.round(640/aspect),sink=new CanvasSink(track,{width:640,height,fit:'fill',poolSize:2,decoderOptions:{hardwareAcceleration:'prefer-software'}});
   const canvas=document.createElement('canvas');canvas.width=640;canvas.height=height;const ctx=canvas.getContext('2d')!;
   const count=Math.ceil(duration*config.fps),timestamps=Array.from({length:count},(_,i)=>start+i/config.fps),tracker=new LiteTracker();
   let i=0,inferenceMs=0;const began=performance.now();
   for await(const frame of sink.canvasesAtTimestamps(timestamps)){
    if(!frame)throw Error('无法读取所选视频帧');
-   ctx.drawImage(frame.canvas,0,0);const time=i/config.fps,before=performance.now(),result=model.detectForVideo(canvas,time*1000);inferenceMs+=performance.now()-before;
+   ctx.drawImage(frame.canvas,0,0);const time=i/config.fps,before=performance.now(),result=await detect(canvas,time*1000);inferenceMs+=performance.now()-before;
    const raw={time,landmarks:result.landmarks,worldLandmarks:result.worldLandmarks},people=tracker.update(raw,aspect);
    // Retain at most two preview images per second; raw keypoints retain every analysed frame.
    const preview=i===0||i===count-1||i%Math.max(1,Math.round(config.fps/2))===0?{
