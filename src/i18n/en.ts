@@ -3,6 +3,11 @@ import { panelEnglish } from './en-panels.ts';
 const liteEnglish={'轻量识别 · MediaPipe（默认）':'Lightweight · MediaPipe (Default)','标准识别 · Human3R':'Standard · Human3R','已安装':'Installed','来源：Google MediaPipe · Pose Landmarker Lite':'Source: Google MediaPipe · Pose Landmarker Lite','来源：Human3R · fanegg/Human3R':'Source: Human3R · fanegg/Human3R','标准识别使用 Human3R，原许可仅允许非商业用途。商业使用需另行取得授权。':'Standard Recognition uses Human3R, which is licensed for non-commercial use. Commercial use requires separate permission.','我已阅读并同意 Human3R 许可':'I have read and agree to the Human3R license','识别方式':'Reconstruction Mode','标准识别':'Standard Recognition','简易识别（默认）':'Lightweight Recognition (Default)','下载约 21 MB，无需独立显卡':'About 21 MB to download. No dedicated GPU required.','建议 8 GB 内存及以上。':'8 GB of RAM or more recommended.','此功能需要 Windows / Linux x64':'Requires Windows or Linux x64.'};
 /** Product terminology: Scene = independent scene; Shot = a camera cut. */
 export const english: Record<string, string> = {
+    '无法启动三维画面':'Unable to start the 3D view',
+    '无法启动导演台':'Unable to start DirectorDesk',
+    '请检查显卡驱动和硬件加速设置，然后重试。':'Check your graphics driver and hardware acceleration settings, then try again.',
+    '请重新打开软件，或安装最新版本后重试。':'Restart the app, or install the latest version and try again.',
+    '退出':'Quit',
     '已内置，无需安装。无需独立显卡。':'Included with the app. No installation or dedicated GPU required.',
     '无需独立显卡':'No dedicated GPU required','内置组件':'Bundled components','旧组件':'Legacy components','清理旧组件':'Remove Legacy Components',
     '清理旧版下载的组件？内置识别和转换结果会保留。':'Remove previously downloaded components? Bundled recognition and reconstruction results will be kept.',

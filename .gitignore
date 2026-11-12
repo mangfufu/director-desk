@@ -150,6 +150,7 @@ file-locations.json
 !/scripts/verify-timeline-insertion.mjs
 !/scripts/verify-timeline-insertion-desktop.mjs
 !/scripts/verify-language.mjs
+!/scripts/verify-startup.mjs
 !/scripts/verify-language-desktop.mjs
 !/scripts/verify-context-menus.mjs
 !/scripts/verify-context-menus-desktop.mjs

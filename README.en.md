@@ -8,7 +8,7 @@ A 3D previsualization tool for AI video production. Build sets, block character 
 
 ![Stage view, camera view, and timeline](docs/images/workspace-current-en.png)
 
-Latest release: [0.5.5](https://github.com/mangfufu/director-desk/releases/tag/v0.5.5). Interface screenshots show the current release.
+Latest release: [0.5.5.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.5.1). Interface screenshots show the current release.
 
 ## Features
 

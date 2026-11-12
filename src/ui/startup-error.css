@@ -1,0 +1,18 @@
+body:has(> #startup-error) {
+    margin: 0;
+    display: grid;
+    min-height: 100dvh;
+    place-items: center;
+    background: #111;
+    color: #eee;
+    font: 14px/1.6 system-ui, sans-serif;
+}
+#startup-error { width: min(480px, calc(100vw - 48px)); padding: 24px 0; }
+#startup-error h1 { margin: 0 0 12px; font-size: 22px; font-weight: 600; }
+#startup-error h1:focus { outline: none; }
+#startup-error p { margin: 0 0 24px; color: #bbb; }
+#startup-error > div { display: flex; gap: 8px; }
+#startup-error button { min-height: 36px; padding: 6px 20px; border: 1px solid #555; border-radius: 4px; background: #222; color: #eee; font: inherit; cursor: pointer; }
+#startup-error button:first-child { background: #eee; color: #111; border-color: #eee; }
+#startup-error button:hover { border-color: #fff; }
+#startup-error button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
