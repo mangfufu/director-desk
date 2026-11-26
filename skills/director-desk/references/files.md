@@ -35,7 +35,7 @@
 - 视频可传 `scenes:[{sceneId,filename}]` 批量导出，filename 可不带扩展名。支持 `format:"mp4"|"webm"`、`fps`（省略沿用各戏段）、`size:640|1280|1920`（长边）、`monochrome`。
 - `start/end/cameraId` 仅限单戏段；截图用 `time/cameraId`，省略为当前时间和节目机位。
 - 深度批量导出共用当前选定的深度范围。
-- 返回 `jobId`。仅当 `director_job` 返回 `result.files` 中 `saved:true`，才报告实际 `path` 已保存。取消用 `{id,cancel:true}`，已完成文件保留，未完成输出清理。
+- 返回 `jobId`。可用 `director_job({id:"任务 ID",waitMs:1500})` 等待结果，完成会提前返回。仅当 `result.files` 中有 `saved:true`，才报告实际 `path` 已保存。取消用 `{id,cancel:true}`，已完成文件保留。
 
 ## 时间轴
 

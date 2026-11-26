@@ -52,6 +52,8 @@ test('real stdio to HTTP transport preserves tools, arguments, results and domai
     const client = new Client({ name: 'transport-test', version: '1.0.0' });
     try {
         await client.connect(transport, { timeout: 10000 });
+        assert.deepEqual(client.getServerVersion(), { name: 'director-desk', version: '0.4.4' });
+        assert.match(client.getInstructions(), /director_skill/);
         assert.deepEqual((await client.listTools()).tools, definitions);
         const args = { revision: 6, requestId: 'one-write', operations: [{ op: 'add', name: '人物 A' }] };
         const result = await client.callTool({ name: 'director_apply', arguments: args });

@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ASSETS } from '../src/asset-catalog.ts';
-import { queryAssetCatalog } from '../src/assets/catalog-query.ts';
+import { queryAssetCatalog, readAssetCatalog } from '../src/assets/catalog-query.ts';
 import { ACTIONS, ASPECTS, FRAME_RATES, JOINTS, assertProject, entity, clip } from '../src/model.ts';
 import { SCENE_TEMPLATES, createScene, type SceneTemplate } from '../src/scenes.ts';
 import { parameterDefaults } from '../src/parametric-props.ts';
@@ -83,7 +83,7 @@ async function main(args: string[]) {
         if (rest.length) throw new Error('assets 仅接受可选的查询.json 文件');
         const query = file ? await read(file) : {};
         validateToolInput('director_assets', query);
-        console.log(JSON.stringify(queryAssetCatalog(query), null, 2)); return;
+        console.log(JSON.stringify(readAssetCatalog(query), null, 2)); return;
     }
     if (command === 'catalog') { console.log(JSON.stringify({ assets: ASSETS, templates: SCENE_TEMPLATES, actions: ACTIONS, joints: JOINTS, aspects: ASPECTS, frameRates: FRAME_RATES, parameters: parameterDefaults,
         entityDefaults: entity('actor', 'person', '人物'), cameraDefaults: entity('camera', 'camera', '摄影机').camera }, null, 2)); return; }
@@ -122,7 +122,7 @@ async function main(args: string[]) {
         const document = readSceneDocument(await read(file)), operation = await read(rest[0]); validateToolInput('director_scene', operation);
         if (operation.action === 'list' || operation.action === 'read') {
             if (rest.length !== 1) throw Error('只读戏段查询不接受输出文件');
-            console.log(JSON.stringify(operation.action === 'list' ? listDocumentScenes(document) : readIndependentScene(document, operation.sceneId), null, 2)); return;
+            console.log(JSON.stringify(operation.action === 'list' ? listDocumentScenes(document) : readIndependentScene(document, operation.sceneId, operation), null, 2)); return;
         }
         if (operation.action === 'continue') throw Error('实际末帧接拍需要运行中的场景求值；请使用网页“从末帧接拍”或 MCP director_scene continue，离线不伪造姿态');
         if (rest.length !== 2) throw Error('戏段修改需要新的输出.director 文件');

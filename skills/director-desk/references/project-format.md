@@ -14,11 +14,13 @@ node scripts/project-tool.mjs apply base.director operations.json finished.direc
 node scripts/project-tool.mjs validate finished.director
 ```
 
-上述是可用命令示例，不是每次必走的步骤。`query.json` 可写 `{"query":"桌","details":true}`；多种物件用 `{"queries":["desk","chair","blackboard"],"details":true}` 一次查询所需参数。query 内空格词取交集，queries 取并集；其他筛选条件仍取交集。空请求不返回目录，默认最多 8 条；found:false、missingQueries/missingIds 表示没有匹配。已知 ID 和参数直接 apply。只有用户明确要浏览整库才使用 `catalog`，不例行扫描或翻完全部页。
+按需使用各命令。`query.json` 可写 `{"searches":[{"query":"书桌","group":"桌台柜架"},{"query":"chair"},{"query":"blackboard"}]}`。每项单独返回候选，默认两项，found:false 表示未匹配。需要参数时用 `{"ids":["furniture-desk"],"details":true}`。传统 query 内空格词取交集，queries 取并集，分页默认 8 条。已知 ID 和参数直接 apply。用户明确要求浏览整库时使用 `catalog`。
 
 仅几何体模式通过 `{operation:"project",patch:{creationMode:"geometry"}}` 开启；`full` 恢复完整资产，省略时默认 full。模式按戏段保存，不转换、删除已有物体。几何模式复用 16 种形状：`shape-box`、`shape-sphere`、`shape-cylinder`、`shape-cone`、`shape-capsule`、`shape-torus`、`shape-pyramid`、`shape-plane`、`shape-wedge`、`shape-ramp`、`shape-arch`、`shape-hemisphere`、`shape-tube`、`shape-l`、`shape-u`、`shape-arc`，均为 prop。已知 ID 与尺寸时直接添加；圆弧 angle、截面 thickness、细分 segments 等参数未知时，使用 assets 命令以 `{ids:["具体ID"],details:true}` 定向查询，不扫描全库或人形动作。基本尺寸写 `patch.assetParameters:{width,height,depth}`（米，每轴 0.02—500，通常默认 1；shape-plane 的默认高度为 0.04），底面中心为 position，rotation 弧度，scale 默认 [1,1,1]，color 为 #RRGGBB。人物用单个胶囊命名上色加 path，不加人形动作；notes.actorId 留空，正文注明角色名。家具建筑组合静态形状，门洞留真实空隙；多个形状不会自动绑定移动。摄影机仍用 asset:camera。模块也导出 `geometryCreationGuide()` 供程序按需读取同一约定。
 
 create/apply/scene 写文件均不覆盖已有输出文件；修改现有工程先读用户提供的文件，另存新文件。create 支持 blank、room、park、street、courtyard、bedroom；改变模板总时长时，模板内现有路径、动作及切镜时间同比缩放。`catalog` 输出真实资产、动作、关节、场景模板和默认对象字段；`inspect` 提供对象完整信息，但不输出参考图图片字节。
+
+要查已有对象，用 `node scripts/project-tool.mjs scene base.director query.json`。查询文件可写 `{"action":"read","category":"建筑构件","entityName":"东侧门框"}`。名称只知道一部分时改用 `query`。类别可用 `{"action":"read","overview":true}` 查看。其他筛选与 `director_scene` 相同，返回的 `project.entityPage.nextOffset` 可作为下一次查询的 `offset`。
 
 `operations.json` 是与在线 director_apply 相同的操作数组，离线不需要 revision 或 requestId。例如在街道模板中添加一个有走位的人物：
 

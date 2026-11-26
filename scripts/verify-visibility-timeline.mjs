@@ -34,7 +34,7 @@ try{
  assert.deepEqual(joints,[false,false,true,true,false,false]);
  const outputStates=await page.evaluate(async id=>{
   const engine=window.__director.getEngine(),result=[],{collectSpatialReport}=await import('/src/spatial/report.ts');engine.exporting=true;
-  try{for(const time of [3,4,7.99,8]){await engine.prepareOutput(time);engine.renderOutput(time,640,360);const report=collectSpatialReport(engine,engine.cameraEntity().id,false);result.push({time,visible:engine.models.get(id).visible,enabled:report.objects.find(x=>x.entityId===id).enabled});}}
+  try{for(const time of [3,4,7.99,8]){await engine.prepareOutput(time);engine.renderOutput(time,640,360);const report=collectSpatialReport(engine,engine.cameraEntity().id,{includeCrowdMembers:false});result.push({time,visible:engine.models.get(id).visible,enabled:report.objects.find(x=>x.entityId===id).enabled});}}
   finally{engine.restorePreview(4);}return result;
  },id);
  assert.deepEqual(outputStates.map(x=>[x.visible,x.enabled]),[[false,false],[true,true],[true,true],[false,false]]);

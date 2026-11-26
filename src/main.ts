@@ -56,6 +56,7 @@ import './ui/video-panel.css';
 import './ui/workbench.css';
 import { entityPosition, shiftPath } from './timeline.ts';
 import { createCommands } from './ui/commands.ts';
+import { withActionFeedback } from './ui/action-feedback.ts';
 import type { AppContext } from './app-context.ts';
 import { createDialogs } from './ui/dialogs.ts';
 import { bindEvents } from './ui/events.ts';
@@ -360,6 +361,7 @@ const timelineUI = createTimeline(uiContext);
 const dialogsUI = createDialogs(uiContext);
 const videopanelUI = createVideoPanel(uiContext);
 const commandsUI = createCommands(uiContext, inspectorUI);
+const runAction = withActionFeedback(commandsUI.act, toast);
 const toolService = createToolService(uiContext);
 mountAI(uiContext);
 mountFileLocations(uiContext);
@@ -419,7 +421,7 @@ async function snapshot() { await videopanelUI.snapshot(); }
 function exportDialog() { videopanelUI.exportDialog(); }
 function updateExportSummary() { videopanelUI.updateExportSummary(); }
 async function startExport() { await videopanelUI.startExport(); }
-async function act(action: string, el: HTMLElement) { await commandsUI.act(action, el); }
+async function act(action: string, el: HTMLElement) { await runAction(action, el); }
 function addAsset(id: string, position?: Vec3) { editingTools.addAsset(id, position); }
 function makeCamera(fromView = false) { editingTools.makeCamera(fromView); }
 function startPath() { editingTools.startPath(); }

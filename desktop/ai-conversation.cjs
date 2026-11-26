@@ -10,6 +10,25 @@ const missingResult = (turn, call) => ({ id: call.id, result: {
         : '此调用尚未执行，上次任务在执行前结束。',
 } });
 
+function modelToolResults(turn) {
+    const outcomes = new Map(turn.results.map(outcome => [outcome.id, outcome]));
+    const receipts = new Map();
+    return turn.calls.map(call => {
+        const outcome = outcomes.get(call.id) ?? missingResult(turn, call);
+        const data = outcome.result.ok && outcome.result.data;
+        const requestId = call.args?.requestId;
+        if (call.name !== 'director_apply' || typeof requestId !== 'string' || data?.committed !== true || !Number.isFinite(data.revision)
+            || !Array.isArray(data.batchRequestIds) || !data.batchRequestIds.includes(requestId)) return outcome;
+        const key = JSON.stringify([data.revision, data.batchRequestIds]);
+        const first = receipts.get(key);
+        if (first === undefined) {
+            receipts.set(key, call.id);
+            return outcome;
+        }
+        return { id: call.id, result: { ok: true, data: { committed: true, revision: data.revision, requestId, sameBatchAs: first } } };
+    });
+}
+
 /** One durable conversation. Native provider data is retained; protocol conversion is a request view only. */
 function createConversation({ directory, safeStorage }) {
     const store = conversationStore(directory, safeStorage);
@@ -33,7 +52,7 @@ function createConversation({ directory, safeStorage }) {
                     + (entry.type === 'user' && typeof entry.context === 'string' ? '\n\n' + entry.context : '') });
                 continue;
             }
-            const outcomes = entry.calls.map(call => entry.results.find(r => r.id === call.id) ?? missingResult(entry, call));
+            const outcomes = modelToolResults(entry);
             let assistant = entry.assistant;
             if (entry.protocol !== profile.protocol || entry.profileId !== profile.id || entry.model !== profile.model || entry.baseUrl !== profile.baseUrl) {
                 // Signed thinking / response IDs belong to the original provider. Preserve text and complete tool pairs across channels.

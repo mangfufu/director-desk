@@ -1,6 +1,7 @@
 // Explicit public skill payload; never discover files by scanning a user's skills directory.
 const referenceFiles = [
     'references/online-workflow.md',
+    'references/operations.md',
     'references/prompt-writing.md',
     'references/camera.md',
     'references/media.md',

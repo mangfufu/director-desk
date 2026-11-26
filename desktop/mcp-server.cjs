@@ -17,7 +17,10 @@ async function startMcp(definitions, call, version, { port, token }) {
             req.setEncoding('utf8');
             let buffer = ''; for await (const part of req) { buffer += part; if (Buffer.byteLength(buffer) > 2_000_000) { res.writeHead(413).end(); return; } }
             const body = JSON.parse(buffer);
-            mcp = new Server({ name: 'director-desk', version }, { capabilities: { tools: {} } });
+            mcp = new Server({ name: 'director-desk', version }, {
+                capabilities: { tools: {} },
+                instructions: '工具连接当前工程。用 director_read 按需取数据。制作规则见 director_skill，已有同版本说明可直接复用。',
+            });
             mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: definitions }));
             mcp.setRequestHandler(CallToolRequestSchema, async request => {
                 const result = await call(request.params.name, request.params.arguments || {});

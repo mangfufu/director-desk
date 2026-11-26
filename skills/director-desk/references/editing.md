@@ -1,5 +1,9 @@
 # 编辑、空间与交付
 
+- `director_read({category:"建筑构件",entityName:"东侧门框"})` 按完整名称查，重名时返回匹配项。已有 ID 用 `ids`。部分名称、ID 或资产 ID 用 `query`，可加 `category` 或 `kind` 缩小范围。需要完整参数时带 `details:true`。
+- 普通读取超过 32 个场内对象时，默认返回 `entityCategories` 中的类别和数量。类别沿用内置资产。摄影机和普通外部模型分别归「摄影机」「导入模型」。需要查找时复用返回的类别名。
+- 用 `limit` 指定每页条数，默认 32 条，可设 1–100。接续查询沿用筛选条件和 `entityPage.nextOffset`。`entityPage.total` 是匹配数，`entityCount` 是整场数量。其他戏段用 `director_scene` 的 read，参数相同。只有确需完整场景时才用 `sections:["all"]`。
+
 - 每批携带 revision/requestId。id/kind/asset 不直接改写；锁定用 lock 操作，替换道具用 replace-prop，更换人物外形用 replace-actor。
 
 ### 更换人物外形

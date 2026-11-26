@@ -4,6 +4,7 @@ import { FULL_TOOL_DEFINITIONS, toolHelp } from '../src/automation/contract.ts';
 import { HELP_TOPICS } from '../src/automation/help-topics.ts';
 import { readBuiltinSkill } from '../src/automation/skill.ts';
 import { createToolService } from '../src/automation/service.ts';
+import { validateToolInput } from '../src/automation/validate.ts';
 import { assertProductionShape } from '../src/production/validation.ts';
 import type { AppContext } from '../src/app-context.ts';
 
@@ -28,6 +29,26 @@ test('default apply help is focused, while explicit full help retains the comple
     const service = createToolService({} as AppContext);
     assert.deepEqual((await service.call('director_help', { names: ['director_apply'] })).data, focused);
     assert.deepEqual((await service.call('director_help', { names: ['director_apply'], full: true })).data, full);
+});
+
+test('operation help batches only requested examples with a shared version', async () => {
+    const service = createToolService({} as AppContext);
+    const result = await service.call('director_help', { operations: ['motion', 'path', 'motion'] });
+    assert.equal(result.ok, true, result.error ?? 'operation help failed');
+    assert.deepEqual(result.data.guide.operations, ['motion', 'path']);
+    assert.equal(result.data.guide.version, readBuiltinSkill().version);
+    assert.match(result.data.guide.instructions, /"operation":"motion".*"asset":"basic-sit"/);
+    assert.ok(result.data.guide.instructions.length < toolHelp(undefined, { topic: 'editing' }).guide!.instructions!.length / 5);
+    for (const args of [{ operations: ['missing'] }, { operations: ['motion'], names: ['director_apply'] }, { operations: ['motion'], topic: 'editing' }]) {
+        assert.equal((await service.call('director_help', args)).ok, false);
+    }
+});
+
+test('every published operation example can be passed directly to its tool schema', () => {
+    const instructions = readBuiltinSkill(undefined, 'references/operations.md').instructions!;
+    const examples = [...instructions.matchAll(/\x60(director_[a-z_]+)\((\{[^\n]*?\})\)\x60/g)];
+    assert.ok(examples.length > 15);
+    for (const [, name, args] of examples) validateToolInput(name, JSON.parse(args));
 });
 
 test('production errors identify the field without repeating the complete guide', () => {

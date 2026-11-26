@@ -12,7 +12,7 @@ import {importMedia} from '../media/source.ts';
 import {defaultSurfaceLayer} from '../media/model.ts';
 import type { AppContext } from '../app-context.ts';
 import { GEOMETRY_ASSET_IDS } from '../assets/creation-mode.ts';
-import { queryAssetCatalog, type AssetQuery } from '../assets/catalog-query.ts';
+import { readAssetCatalog, type AssetCatalogQuery } from '../assets/catalog-query.ts';
 import { clone, outputSize, uid } from '../model.ts';
 import { applyOperationsWithResources, changeSummary, type EditOperation } from './edits.ts';
 import { motionPresets } from '../animation/motion-catalog.ts';
@@ -41,7 +41,8 @@ import { exportFiles, type FileExportRequest } from './file-export.ts';
 import { versionAction } from './versions.ts';
 import { pluginAction } from './plugins.ts';
 import { navigationPlan } from './navigation.ts';
-export interface ToolResult { ok: boolean; data?: any; error?: string; revision?: number }
+import { createToolJobs, EditorBusyError, type BusyJob } from './jobs.ts';
+export interface ToolResult { ok: boolean; data?: any; error?: string; revision?: number; code?: 'EDITOR_BUSY'; job?: BusyJob }
 interface ToolService { call(name: string, args?: Record<string, unknown>): Promise<ToolResult> }
 const services = new WeakMap<AppContext, ToolService>();
 export function createToolService(ctx: AppContext): ToolService {
@@ -51,19 +52,9 @@ export function createToolService(ctx: AppContext): ToolService {
     let revision = Date.now() * 1000 + Math.floor(Math.random() * 1000), fingerprint = '', sequence = Promise.resolve<unknown>(null);
     const receipts = new Map<string, { args: string; result: unknown }>();
     const previews = new Map<string, { revision: number; operations: EditOperation[]; userMotions: Map<string, UserMotionAsset> }>();
-    const jobs = new Map<string, { id: string; status: string; progress: number; result?: unknown; error?: string; aborter: AbortController }>();
+    const jobs = createToolJobs(ctx), idle = jobs.assertIdle;
     function currentRevision() { const next = JSON.stringify([ctx.scenes?.context, ctx.revision]); if (next !== fingerprint) { fingerprint = next; revision++; } return revision; }
-    function idle() { if (ctx.busy || ctx.draft || ctx.history.pending || ctx.engine.exporting) throw new Error('当前正在编辑、绘制或执行长任务，请等待或取消'); }
     function checkRevision(value: unknown) { const actual = currentRevision(); if (value !== actual) throw new Error(`REVISION_CONFLICT：请求版本 ${value}，当前版本 ${actual}；请重新读取工程`); }
-    function job(run: (signal: AbortSignal, progress: (p: number) => void, report: (value: unknown) => void) => Promise<unknown>) {
-        idle(); ctx.busy = true; ctx.playing = false; ctx.updateTimeUI();
-        const id = uid(), task = { id, status: 'running', progress: 0, aborter: new AbortController() } as typeof jobs extends Map<string, infer V> ? V : never;
-        jobs.set(id, task);
-        void run(task.aborter.signal, p => { task.progress = p; }, value => { task.result = value; }).then(result => { task.result = result; task.status = 'completed'; task.progress = 1; })
-            .catch(e => { task.status = e.name === 'AbortError' ? 'canceled' : 'failed'; task.error = e.message; })
-            .finally(() => { ctx.busy = false; ctx.updateTimeUI(); if (jobs.size > 30) jobs.delete(jobs.keys().next().value!); });
-        return { jobId: id, status: task.status };
-    }
     async function execute(name: string, args: Record<string, unknown>): Promise<unknown> {
         validateToolInput(name, args);
         if(name==='director_reconstruct'){
@@ -85,7 +76,7 @@ export function createToolService(ctx: AppContext): ToolService {
             const key=name+':'+args.requestId,encoded=JSON.stringify(args),receipt=receipts.get(key);
             if(receipt){if(receipt.args!==encoded)throw Error('requestId 已用于不同操作');return receipt.result;}
             idle();
-            const result=args.action==='build'?job((signal,progress)=>runtime.buildPreviewCache(ctx,args as any,signal,progress)):(runtime.clearPreviewCache(ctx),await runtime.previewCacheState(ctx));
+            const result=args.action==='build'?jobs.start(name,(signal,progress)=>runtime.buildPreviewCache(ctx,args as any,signal,progress)):(runtime.clearPreviewCache(ctx),await runtime.previewCacheState(ctx));
             receipts.set(key,{args:encoded,result});if(receipts.size>200)receipts.delete(receipts.keys().next().value!);return result;
         }
         if (name === 'director_versions' || name === 'director_plugins' || name === 'director_navigate') {
@@ -104,7 +95,7 @@ export function createToolService(ctx: AppContext): ToolService {
             if (name !== 'director_plugins' || args.action === 'run') checkRevision(args.revision);
             ctx.playing = false;
             if (name === 'director_navigate') {
-                const result = job(async (signal,progress) => {
+                const result = jobs.start(name, async (signal,progress) => {
                     progress(.1);
                     const planned = await navigationPlan(ctx,args,signal); signal.throwIfAborted(); progress(.8);
                     ctx.busy = false;
@@ -164,7 +155,7 @@ export function createToolService(ctx: AppContext): ToolService {
             if (receipt) { if (receipt.args !== encoded) throw Error('requestId 已用于不同操作'); return receipt.result; }
             if (name === 'director_import') checkRevision(args.revision);
             const result = name === 'director_import'
-                ? job(async (signal,progress) => {
+                ? jobs.start(name, async (signal,progress) => {
                     const before = ctx.project;
                     const imported = await importFile(ctx, args as unknown as ImportRequest, signal, () => checkRevision(args.revision),progress);
                     const changeId = !sameProjectData(before, ctx.project) ? uid() : undefined;
@@ -173,7 +164,7 @@ export function createToolService(ctx: AppContext): ToolService {
                         created: Date.now(), label: args.kind === 'project' ? args.mode === 'merge' ? '合并工程' : '打开工程' : '导入模型', locations: editLocations(before, ctx.project) });
                     return { ...imported, revision: currentRevision(), ...(changeId ? { changeId } : {}) };
                 })
-                : job((signal, progress, report) => exportFiles(ctx, args as unknown as FileExportRequest, signal, progress, report));
+                : jobs.start(name, (signal, progress, report) => exportFiles(ctx, args as unknown as FileExportRequest, signal, progress, report));
             if (key) { receipts.set(key, { args: encoded, result }); if (receipts.size > 200) receipts.delete(receipts.keys().next().value!); }
             return result;
         }
@@ -251,7 +242,8 @@ export function createToolService(ctx: AppContext): ToolService {
                 const result={revision:currentRevision(),resourceId:resource.id,name:resource.name,width:resource.width,height:resource.height,duration:resource.duration,entityId:target?.id};receipts.set(args.requestId,{args:encoded,result});if(receipts.size>200)receipts.delete(receipts.keys().next().value!);return result;
             }finally{ctx.busy=false;ctx.updateTimeUI();}
         }
-        if (name === 'director_help') return toolHelp(args.names as string[] | undefined, { topic: args.topic as string | undefined, full: args.full as boolean | undefined });
+        if (name === 'director_help') return toolHelp(args.names as string[] | undefined, { topic: args.topic as string | undefined,
+            operations: args.operations as string[] | undefined, full: args.full as boolean | undefined });
         if (name === 'director_scene') {
             if (args.action === 'list') return { revision: currentRevision(), sceneContext: ctx.scenes.context, scenes: ctx.scenes.list() };
             if (args.action === 'read') return { revision: currentRevision(), ...ctx.scenes.readScene(args.sceneId as string | undefined, args) };
@@ -292,7 +284,7 @@ export function createToolService(ctx: AppContext): ToolService {
             try { ctx.engine.sample(time); return { revision: currentRevision(), time, ...ctx.engine.externalModels.nodes(ctx.project, String(args.entityId), args as { path?: string; query?: string; offset?: number; limit?: number }) }; }
             finally { ctx.engine.sample(previous); }
         }
-        if (name === 'director_assets') return queryAssetCatalog(args as AssetQuery, ctx.project.creationMode === 'geometry' ? GEOMETRY_ASSET_IDS : undefined);
+        if (name === 'director_assets') return readAssetCatalog(args as AssetCatalogQuery, ctx.project.creationMode === 'geometry' ? GEOMETRY_ASSET_IDS : undefined);
         if (name === 'director_motions') {
             if (args.source === 'user') {
                 const offset = Number(args.offset ?? 0), limit = Number(args.limit ?? 20);
@@ -304,10 +296,7 @@ export function createToolService(ctx: AppContext): ToolService {
             }
             return { presets: motionPresets(String(args.query ?? '')), note: '内置人形动作，通过 director_apply 的 motion 操作加入人物或群演；duration 可指定持续秒数，省略使用各动作推荐时长，整场坐姿需显式指定全程时长；basicAction 使用手工编排的关节关键姿态，无需附加素材，单次动作加长会放慢表演，循环动作按 speed 控制节奏；pose/poseKeys 可用度数或 XYZ 度数数组调整人形关节；其他动作的素材资源随工程保存，导入人物需完整人形骨架。' };
         }
-        if (name === 'director_job') {
-            const task = jobs.get(String(args.id)); if (!task) throw new Error('任务不存在'); if (args.cancel) task.aborter.abort();
-            const { aborter: _aborter, ...data } = task; return data;
-        }
+        if (name === 'director_job') return jobs.read(String(args.id), args.cancel as boolean | undefined, args.waitMs as number | undefined);
         idle();
         if (name === 'director_path_surface') return { revision: currentRevision(), ...checkPathSurfaces(ctx.project, pathSurfaceModels(ctx.engine), { entityId: String(args.entityId), surfaceId: args.surfaceId as string | undefined, clearance: args.clearance as number | undefined, tolerance: args.tolerance as number | undefined }) };
         if (name === 'director_stride') {
@@ -336,7 +325,8 @@ export function createToolService(ctx: AppContext): ToolService {
                 checkRevision(args.revision);
                 if (ctx.project !== before || ctx.draft || ctx.history.pending || ctx.engine.exporting) throw Error('REVISION_CONFLICT：准备资源期间工程或编辑状态已变化');
                 ctx.busy = false;
-                if (!args.preview && !ctx.change(() => { ctx.project = after; })) throw new Error('修改提交失败');
+                const rebuild = operations.some(op => op.operation !== 'production' && op.operation !== 'notes');
+                if (!args.preview && !ctx.change(() => { ctx.project = after; }, rebuild)) throw new Error('修改提交失败');
                 const previewId = args.preview ? uid() : undefined;
                 if (previewId) { previews.set(previewId, { revision: currentRevision(), operations: clone(operations), userMotions }); if (previews.size > 20) previews.delete(previews.keys().next().value!); }
                 const changeId = !args.preview && summary.hasChanges ? uid() : undefined;
@@ -354,18 +344,25 @@ export function createToolService(ctx: AppContext): ToolService {
             } finally { ctx.busy = false; ctx.engine.externalModels.retain([ctx.project, ...ctx.history.undoStack, ...ctx.history.redoStack]); ctx.updateTimeUI(); }
         }
         if (name === 'director_spatial') {
+            const ids = args.ids as string[] | undefined, times = args.times as number[] | undefined;
+            const options = { time: args.time as number | undefined, cameraId: args.cameraId as string | undefined,
+                occlusionKeys: args.occlusionKeys as string[] | undefined, ids };
+            if (times && (args.time !== undefined || args.mode !== 'framing')) throw Error('times 用于构图摘要，与 time 分开使用');
             if (args.depthRange === true) {
-                idle();
+                if (args.mode === 'framing') throw Error('depthRange 与构图摘要分开查询');
                 const time = (args.time ?? ctx.time) as number, cameraId = (args.cameraId ?? ctx.preview) as string;
-                return { revision: currentRevision(), time, cameraId, depthRange: ctx.engine.suggestDepthRange(time, cameraId, args.ids as string[] | undefined), scope: args.ids ? 'selected-surfaces' : 'frame', applied: false };
+                return { revision: currentRevision(), time, cameraId, depthRange: ctx.engine.suggestDepthRange(time, cameraId, ids), scope: ids ? 'selected-surfaces' : 'frame', applied: false };
             }
-            const report = ctx.engine.spatialReport({ time: args.time as number | undefined, cameraId: args.cameraId as string | undefined, occlusionKeys: args.occlusionKeys as string[] | undefined });
-            // Filter only the response: walls and other unrequested objects must still occlude.
-            if (!Array.isArray(args.ids)) return report;
-            const ids = new Set(args.ids);
-            return { ...report, objects: report.objects.filter(o => ids.has(o.entityId)), filter: { ids: args.ids, countsScope: 'entire-scene' } };
+            if (args.mode === 'framing') {
+                if (!ids?.length) throw Error('构图摘要需要对象 ids');
+                const existing = new Set(ctx.project.entities.map(entity => entity.id));
+                return { aspect: ctx.project.aspect, frames: ctx.engine.spatialFraming(options, times),
+                    missingIds: [...new Set(ids)].filter(id => !existing.has(id)) };
+            }
+            const report = ctx.engine.spatialReport(options);
+            return ids ? { ...report, filter: { ids, countsScope: 'entire-scene' } } : report;
         }
-        if (name === 'director_scan') return job((signal, progress) => scanSpatialRange(ctx.engine, args as unknown as SpatialRangeOptions, signal, (done, total) => progress(done / total)));
+        if (name === 'director_scan') return jobs.start(name, (signal, progress) => scanSpatialRange(ctx.engine, args as unknown as SpatialRangeOptions, signal, (done, total) => progress(done / total)));
         if (name === 'director_view') return controlView(ctx, args);
         if (name === 'director_history') {
             checkRevision(args.revision); if (!['undo', 'redo'].includes(String(args.action))) throw new Error('无效历史操作');
@@ -384,7 +381,7 @@ export function createToolService(ctx: AppContext): ToolService {
             if(kind==='contact-sheet'){
                 if(['size','start','end','promptMode'].some(key=>args[key]!==undefined))throw Error('联系表不支持这些导出参数');
                 const doc=ctx.scenes.document(),id=String(args.sceneId??doc.activeSceneId),scene=doc.scenes.find(s=>s.id===id);if(!scene)throw Error('戏段不存在');
-                return job(async(signal,progress)=>{
+                return jobs.start(name, async(signal,progress)=>{
                     const {contactSheetBlob}=await import('../production/contact-render.ts');
                     const {projectForScene}=await import('../scenes/sequence-project.ts');
                     const blob=await contactSheetBlob(ctx.engine,projectForScene(doc,id),scene.name,signal,progress);
@@ -394,7 +391,7 @@ export function createToolService(ctx: AppContext): ToolService {
             if (kind === 'project') { ctx.saveProject(); return { status: 'save-requested' }; }
             if (kind === 'screenshot') { await ctx.snapshot(); return { status: 'save-requested' }; }
             const project = clone(ctx.project);
-            return job(async (signal, progress) => {
+            return jobs.start(name, async (signal, progress) => {
                 if (kind === 'bundle') { const zip = await createZip(await productionEntries(project, undefined, ctx.scenes?.document()), signal, (a, b) => progress(a / b)); download(zip, safeFilename(project.name) + '-制作素材包.zip'); }
                 else { const { exportVideo } = await import('../export.ts'); const [width, height] = outputSize(project.aspect, Number(args.size ?? 1280));
                     const blob = await exportVideo(ctx.engine, { start: Number(args.start ?? 0), end: Number(args.end ?? project.duration), fps: project.fps, width, height, cameraId: 'program', format: 'mp4', monochrome: false, ...(kind === 'depth-video' ? { depth: project.depthVideo ?? DEFAULT_DEPTH_VIDEO } : {}) }, signal, progress);
@@ -404,8 +401,21 @@ export function createToolService(ctx: AppContext): ToolService {
         }
         throw new Error('工具未实现');
     }
+    async function invoke(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+        try { return { ok: true, data: await execute(name, args) }; }
+        catch (error) {
+            const result: ToolResult = { ok: false, error: (error as Error).message, revision: currentRevision() };
+            if (error instanceof EditorBusyError) {
+                result.code = 'EDITOR_BUSY';
+                if (error.job) result.job = error.job;
+            }
+            return result;
+        }
+    }
     const service: ToolService = { call(name: string, args: Record<string, unknown> = {}) {
-        const pending = sequence.then(async () => { try { return { ok: true, data: await execute(name, args) }; } catch (error) { return { ok: false, error: (error as Error).message, revision: currentRevision() }; } });
+        // A job wait must not block edits, status checks or cancellation in the service queue.
+        if (name === 'director_job') return invoke(name, args);
+        const pending = sequence.then(() => invoke(name, args));
         sequence = pending; return pending;
     } };
     services.set(ctx,service); return service;

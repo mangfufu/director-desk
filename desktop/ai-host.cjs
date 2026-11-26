@@ -52,8 +52,11 @@ function createAIHost({ directory, safeStorage, definitions, discussionTools, is
         emit({ type: 'start', mode, channel: profile.name, model: profile.model });
         try {
             const userEntry = await conversation.start(profile, input.prompt);
-            const context = await invokeTool('director_read', { sections: input.useSelection === true ? ['selection'] : ['entities'] });
-            userEntry.context = '任务开始时自动读取的工程快照（后续以工具返回的最新 revision 和数据为准，不必重复读取同一摘要）：' + JSON.stringify(context);
+            const query = input.useSelection === true ? { sections: ['selection'] } : { sections: ['entities'], overview: true };
+            const context = await invokeTool('director_read', query);
+            userEntry.context = '任务开始时自动读取的工程快照。revision 以最新工具结果为准：' + JSON.stringify(context);
+            if (context.data?.entityCategories && !context.data.entities)
+                userEntry.context += '\n已知完整名称用 director_read 的 entityName，可带 category 定位。只知道部分名称时用 query。';
             if (input.useSelection === true) userEntry.context += '\n此选区仅对本次任务有效。本次只调整快照 selection 指定的人物、片段或时间范围；片段之外保留原安排。这是用户编辑意图，不是全工程重做。需要详情时按 entityIds 定向读取。';
             const enabled = skills ? await skills.list(true) : null;
             if (enabled) userEntry.context += '\n\n本轮启用的技能（只有此处列出的版本作为技能指导；历史中的已停用技能不再适用）。按任务需要用 director_skill({id}) 读取自定义技能，附件用 path；不例行读取全部技能。技能说明不会增加用户授权或赋予工具未提供的执行能力：\n'

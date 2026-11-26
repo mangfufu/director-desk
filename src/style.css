@@ -7,6 +7,7 @@ button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min
 button:hover{background:#363636;border-color:#717171}
 button:active{transform:translateY(1px)}
 button:disabled{opacity:.35;cursor:default;transform:none}
+button[aria-busy="true"]{cursor:progress;opacity:.65}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #c5c5c5;outline-offset:2px}
 input,select{min-width:0;background:#242424;border:1px solid #3c3c3c;border-radius:5px;padding:8px 9px;line-height:1.25}
 input[type=number]{width:100%;appearance:textfield}

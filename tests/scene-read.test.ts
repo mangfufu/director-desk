@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
 import { createRequire } from 'node:module';
-import { demoProject, type ProductionData } from '../src/model.ts';
+import { demoProject, entity, type ProductionData } from '../src/model.ts';
 import type { AppContext } from '../src/app-context.ts';
 import { createToolService } from '../src/automation/service.ts';
 import { applyOperations } from '../src/automation/edits.ts';
 import { validateToolInput } from '../src/automation/validate.ts';
 import { MCP_TOOL_DEFINITIONS, TOOL_DEFINITIONS } from '../src/automation/contract.ts';
+import { readIndependentScene } from '../src/scenes/scene-query.ts';
+import { readSceneDocument } from '../src/scenes/sequence-project.ts';
 
 function fixture() {
     const project = demoProject();
@@ -98,8 +100,53 @@ test('MCP and built-in assistant use the same validated section selector', () =>
     assert.throws(() => validateToolInput('director_read', { sections: 'all' }), /sections/);
 });
 
-test('real MCP HTTP transport advertises sections and returns only requested content', async () => {
-    const { service } = fixture();
+test('large reads default to category counts and exact lookups reuse the current index', async () => {
+    const { ctx, service } = fixture();
+    const small = (await service.call('director_read', { overview: true })).data!;
+    assert.equal(small.entities.length, ctx.project.entities.length);
+
+    const door = { ...entity('prop', 'structure-doorframe', '东侧门框'), id: 'east-door' };
+    const chairs = Array.from({ length: 40 }, (_, i) => entity('prop', 'chair', i === 39 ? '东侧门框' : '椅子 ' + i));
+    let unrelatedReads = 0;
+    Object.defineProperty(chairs[0], 'asset', { get() { unrelatedReads++; return 'chair'; } });
+    ctx.project.entities.push(...chairs, door);
+    const overview = (await service.call('director_read')).data!;
+    assert.equal(Object.hasOwn(overview, 'entities'), false);
+    assert.equal(overview.entityCount, ctx.project.entities.length);
+    assert.ok(overview.entityCategories.some((item: { category: string, count: number }) => item.category === '家具' && item.count >= 40));
+    assert.equal(overview.entityCategories.reduce((sum: number, item: { count: number }) => sum + item.count, 0), overview.entityCount);
+    const afterOverview = unrelatedReads;
+    const lookup = { category: '建筑构件', entityName: ' 东侧门框 ' };
+    const result = (await service.call('director_read', lookup)).data!;
+    assert.deepEqual(result.entities.map((e: { id: string }) => e.id), [door.id]);
+    assert.deepEqual((await service.call('director_read', { entityName: lookup.entityName })).data!.entities.map((e: { id: string }) => e.id), [chairs[39].id, door.id]);
+    assert.deepEqual((await service.call('director_read', { ids: [door.id, 'missing', chairs[39].id, door.id] })).data!.entities.map((e: { id: string }) => e.id), [chairs[39].id, door.id]);
+    assert.equal(unrelatedReads, afterOverview);
+    const firstPage = (await service.call('director_read', { overview: false })).data!;
+    assert.equal(firstPage.entities.length, 32);
+    assert.equal(firstPage.entityPage.nextOffset, 32);
+    const detailed = (await service.call('director_read', { details: true })).data!;
+    assert.equal(detailed.entities.length, 32);
+    assert.equal(detailed.entityPage.total, overview.entityCount);
+    const doc = readSceneDocument(ctx.project), saved = readIndependentScene(doc).project;
+    assert.equal(saved.entities, undefined);
+    assert.deepEqual(saved.entityCategories, overview.entityCategories);
+    assert.equal(readIndependentScene(doc, undefined, { sections: ['all'] }).project.entities?.length, overview.entityCount);
+    door.name = '东门框';
+    door.asset = 'cube';
+    Object.assign(ctx, { revision: ctx.revision + 1 });
+    assert.deepEqual((await service.call('director_read', lookup)).data!.entities, []);
+    const moved = (await service.call('director_read', { category: '搭建', entityName: door.name })).data!;
+    assert.deepEqual(moved.entities.map((e: { id: string }) => e.id), [door.id]);
+});
+
+test('real MCP HTTP advertises object filters, reads matching pages and retains existing section behavior', async () => {
+    const { ctx, service } = fixture();
+    ctx.project.entities.push(
+        { ...entity('prop', 'cube', 'Gallery Entrance'), id: 'door-a' },
+        { ...entity('prop', 'cube', 'Gallery Exit'), id: 'door-b' },
+        { ...entity('camera', 'camera', 'Gallery Camera'), id: 'gallery-camera' },
+    );
     const { startMcp } = createRequire(import.meta.url)('../desktop/mcp-server.cjs');
     const server = await startMcp(MCP_TOOL_DEFINITIONS, service.call, '0.0.0-test', { port: 0, token: 'local-test-only' });
     let id = 0;
@@ -111,7 +158,8 @@ test('real MCP HTTP transport advertises sections and returns only requested con
     };
     try {
         const list = await request('tools/list', {});
-        assert.ok(list.tools.find((t: any) => t.name === 'director_read').inputSchema.properties.sections);
+        const schema = list.tools.find((t: any) => t.name === 'director_read').inputSchema.properties;
+        for (const key of ['sections', 'query', 'entityName', 'kind', 'category', 'overview', 'offset', 'limit']) assert.ok(schema[key], key);
         assert.ok(list.tools.find((t: any) => t.name === 'director_help').inputSchema.properties.topic.enum.includes('camera'));
         const help = await request('tools/call', { name: 'director_help', arguments: { topic: 'camera' } });
         assert.equal(help.isError, false);
@@ -126,5 +174,30 @@ test('real MCP HTTP transport advertises sections and returns only requested con
             assert.equal(Object.hasOwn(result.data, 'production'), sections[0] === 'production');
             assert.equal(Object.hasOwn(result.data, 'entities'), sections[0] === 'entities');
         }
+        const read = async (args: unknown) => {
+            const raw = await request('tools/call', { name: 'director_read', arguments: args });
+            return JSON.parse(raw.content[0].text);
+        };
+        const query = { query: ' GALLERY ', kind: 'prop', category: '搭建', limit: 1, details: true };
+        const first = await read(query);
+        assert.equal(first.ok, true);
+        assert.deepEqual(first.data.entities.map((e: { id: string }) => e.id), ['door-a']);
+        assert.deepEqual(first.data.entities[0].rotation, [0, 0, 0]);
+        assert.deepEqual(first.data.entityPage, { total: 2, offset: 0, limit: 1, nextOffset: 1 });
+        assert.equal(first.data.entityCount, ctx.project.entities.length);
+        const second = await read({ ...query, offset: first.data.entityPage.nextOffset });
+        assert.deepEqual(second.data.entities.map((e: { id: string }) => e.id), ['door-b']);
+        assert.equal(second.data.entityPage.nextOffset, null);
+        assert.equal(second.data.revision, first.data.revision);
+        const none = await read({ query: 'missing door' });
+        assert.deepEqual(none.data.entities, []);
+        assert.equal(none.data.entityPage.total, 0);
+        const ids = await read({ ...query, ids: ['door-a', 'gallery-camera', 'missing-id'] });
+        assert.deepEqual(ids.data.missingIds, ['missing-id']);
+        assert.equal(ids.data.entityPage.total, 1);
+        const exact = await read({ category: '搭建', entityName: ' GALLERY ENTRANCE ' });
+        assert.deepEqual(exact.data.entities.map((e: { id: string }) => e.id), ['door-a']);
+        assert.match((await read({ limit: 101 })).error, /limit/);
+        assert.match((await read({ offset: 0.5 })).error, /offset/);
     } finally { await server.close(); }
 });

@@ -1,6 +1,7 @@
 import { Box3 } from 'three';
 import type { Engine } from '../engine.ts';
-import type { MotionPath } from '../model.ts';
+import { clone, type MotionPath } from '../model.ts';
+import { sameProjectData } from '../resources/package-validation.ts';
 import { activeCameraId } from '../timeline.ts';
 import { frameBounds } from './geometry.ts';
 import { sceneTargets, type SceneTarget } from './scene-targets.ts';
@@ -65,12 +66,13 @@ export async function scanSpatialRange(engine: Engine, options: SpatialRangeOpti
     const project = engine.project, cameraId = options.cameraId ?? 'program';
     if (options.end > project.duration) throw new Error('检查结束时间超出场景时长');
     if (cameraId !== 'program' && !engine.cameras.has(cameraId)) throw new Error('检查摄影机不存在');
-    const checkpoint = JSON.stringify(project);
+    const checkpoint = clone(project);
     const bodies = sceneTargets(engine); // Physical walls remain obstacles even if the filming camera hides them.
     const select = (key: string) => bodies.filter(b => key === 'all-people' ? b.person : b.key === key || (key.startsWith('entity:') && b.entityId === key.slice(7)));
     const targets = select(options.targetKey), others = options.compareKey ? select(options.compareKey) : bodies;
     if (!targets.length || !others.length) throw new Error('请选择显示中的人物、群演或道具进行区间检查');
     if (options.compareKey === options.targetKey) throw new Error('区间检查需要两个不同对象，或让 B 保持“不比较”以检查全部障碍');
+    const participants = options.compareKey ? [...new Set([...targets, ...others])] : bodies;
     const times = rangeSampleTimes(options.start, options.end, options.sampleFps, project.entities.flatMap(e => [
         ...e.clips.flatMap(c => [c.start, c.end]), ...e.poseKeys.map(k => k.time),
         ...pathCheckTimes(e.path)
@@ -90,7 +92,7 @@ export async function scanSpatialRange(engine: Engine, options: SpatialRangeOpti
         const at = times[index], originalTime = engine.time, nextActive = new Map<string, SpatialFinding>();
         try {
             engine.sample(at);
-            const current = new Map(bodies.map(b => [b.key, bounds(b)]));
+            const current = new Map(participants.map(b => [b.key, bounds(b)]));
             function record(type: SpatialFinding['type'], target: SceneTarget, start: number, end: number, description: string, other?: SceneTarget) {
                 const previewTime = start === end ? start : (start + end) / 2;
                 const realCamera = cameraId === 'program' ? activeCameraId(project, previewTime) : cameraId;
@@ -135,10 +137,10 @@ export async function scanSpatialRange(engine: Engine, options: SpatialRangeOpti
         // Restore the live scene before yielding, so progress/cancel never renders a sampled future frame.
         if (index % 4 === 0) {
             await new Promise(resolve => setTimeout(resolve, 0));
-            if (JSON.stringify(engine.project) !== checkpoint) throw new Error('检查期间工程发生修改，请重新检查');
+            if (!sameProjectData(engine.project, checkpoint)) throw new Error('检查期间工程发生修改，请重新检查');
         }
     }
     signal?.throwIfAborted();
-    if (JSON.stringify(engine.project) !== checkpoint) throw new Error('检查期间工程发生修改，请重新检查');
+    if (!sameProjectData(engine.project, checkpoint)) throw new Error('检查期间工程发生修改，请重新检查');
     report.complete = true; return report;
 }

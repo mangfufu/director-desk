@@ -18,6 +18,8 @@ test('short discovery preserves every validation rule and exposes full advanced 
     assert.equal(isDiscussionToolCall('director_staging', { action: 'list', query: '街道' }), true);
     assert.equal(isDiscussionToolCall('director_staging', { action: 'read', id: 'a' }), true);
     assert.equal(isDiscussionToolCall('director_staging', { action: 'insert', id: 'a' }), false);
+    assert.equal(isDiscussionToolCall('director_scene', { action: 'read', query: '门框', kind: 'prop', category: '建筑构件', offset: 5, limit: 5 }), true);
+    assert.equal(isDiscussionToolCall('director_scene', { action: 'switch', sceneId: 'b' }), false);
     assert.equal(isDiscussionToolCall('director_staging', { action: 'save', entityIds: ['a'] }), false);
     assert.equal(isDiscussionToolCall('director_arrange', { action: 'array' }), false);
     assert.throws(() => toolHelp(['unknown']), /未知/);

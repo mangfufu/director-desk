@@ -5,11 +5,13 @@ const path = require('node:path');
 const os = require('node:os');
 const http = require('node:http');
 const { createAIHost } = require('../desktop/ai-host.cjs');
+const { conversationStore } = require('../desktop/conversation-store.cjs');
 const { TOOL_DEFINITIONS, DISCUSSION_TOOLS, isDiscussionToolCall } = require('../src/automation/contract.ts');
 
 for (const lost of [false, true]) test(`assistant coalesces edits and persists each original outcome (lost=${lost})`, async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'director-batch-'));
     let rounds = 0, writes = 0; const requests = [];
+    const summary = { added: Array.from({ length: 40 }, (_, i) => ({ id: 'object-' + i, name: '布景对象 ' + (i + 1) })) };
     const server = http.createServer(async (req, res) => {
         if (req.method === 'GET') { res.end(JSON.stringify({ data: [] })); return; }
         let raw = ''; for await (const chunk of req) raw += chunk;
@@ -24,7 +26,7 @@ for (const lost of [false, true]) test(`assistant coalesces edits and persists e
             if (name === 'director_read') return { ok: true, data: { revision: 1 } };
             writes++; assert.equal(args.requests.length, 2); assert.equal(args.revision, 1);
             if (lost) throw Error('lost renderer result');
-            return { ok: true, data: { revision: 2, committed: true, batchRequestIds: ['a', 'b'] } };
+            return { ok: true, data: { revision: 2, committed: true, batchRequestIds: ['a', 'b'], summary } };
         } };
     try {
         let host = createAIHost(dependencies);
@@ -39,7 +41,15 @@ for (const lost of [false, true]) test(`assistant coalesces edits and persists e
         assert.deepEqual(results.map(r => r.id), ['a', 'b']);
         for (const result of results) {
             if (lost) assert.equal(result.execution, 'unknown');
-            else { assert.equal(result.data.committed, true); assert.deepEqual(result.data.batchRequestIds, ['a', 'b']); }
+            else assert.equal(result.data.committed, true);
+        }
+        if (!lost) {
+            assert.deepEqual(results[0].data.summary, summary);
+            assert.deepEqual(results[0].data.batchRequestIds, ['a', 'b']);
+            assert.deepEqual(results[1].data, { committed: true, revision: 2, requestId: 'b', sameBatchAs: 'a' });
+            const disk = await conversationStore(directory, dependencies.safeStorage).load();
+            const original = disk.entries.find(e => e.type === 'turn' && e.calls.length === 2);
+            assert.deepEqual(original.results.map(r => r.result.data.summary), [summary, summary]);
         }
         assert.equal(writes, 1);
     } finally {

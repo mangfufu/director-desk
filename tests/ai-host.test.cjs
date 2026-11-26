@@ -18,8 +18,9 @@ test('task snapshots follow stable system/history prefixes and timing separates 
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     try {
         const host = createAIHost({ directory, safeStorage: { isEncryptionAvailable: () => false }, ...toolPolicy, send() {}, callTool: async (name, args) => {
-            assert.equal(name, 'director_read'); assert.deepEqual(args, { sections: ['entities'] });
-            await new Promise(r => setTimeout(r, 10)); return { ok: true, data: { revision } };
+            assert.equal(name, 'director_read'); assert.deepEqual(args, { sections: ['entities'], overview: true });
+            await new Promise(r => setTimeout(r, 10));
+            return { ok: true, data: { revision, entityCount: 1000, entityCategories: [{ category: '建筑构件', count: 1000 }] } };
         } });
         const [profile] = await host.configure({ baseUrl: `http://127.0.0.1:${server.address().port}/v1`, protocol: 'chat', model: 'mock', stream: false, maxTokens: 1000 });
         const first = await host.run({ profileId: profile.id, prompt: '保留这个要求' }); revision = 2;
@@ -28,6 +29,7 @@ test('task snapshots follow stable system/history prefixes and timing separates 
         assert.equal(bodies[0].messages[0].content, bodies[1].messages[0].content);
         assert.ok(!bodies[0].messages[0].content.includes('"revision":1'));
         assert.match(bodies[0].messages.at(-1).content, /"revision":1/); assert.match(bodies[1].messages.at(-1).content, /"revision":2/);
+        assert.match(bodies[0].messages.at(-1).content, /"entityCategories":\[\{"category":"建筑构件","count":1000\}\]/);
         assert.match(JSON.stringify(bodies[1].messages), /保留这个要求/);
         for (const result of [first, second]) {
             assert.equal(result.timing.rounds, 1); assert.equal(result.timing.toolCalls, 1);
@@ -141,7 +143,7 @@ test('selected-range tasks read the live scope once and retain it with the task 
         assert.deepEqual(calls[0], { name: 'director_read', args: { sections: ['selection'] } });
         assert.match(bodies[0].messages.at(-1).content, /walk-a/); assert.match(bodies[0].messages.at(-1).content, /仅对本次任务有效/);
         await host.run({ profileId: profile.id, prompt: '再看整个戏段', useSelection: false });
-        assert.deepEqual(calls[1].args, { sections: ['entities'] });
+        assert.deepEqual(calls[1].args, { sections: ['entities'], overview: true });
         assert.doesNotMatch(bodies[1].messages.at(-1).content, /walk-a/);
         assert.match(JSON.stringify(bodies[1].messages), /walk-a/); assert.equal(calls.length, 2);
     } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); await cleanup(directory); }

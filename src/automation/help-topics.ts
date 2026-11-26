@@ -17,3 +17,20 @@ export function topicHelp(topic: string) {
     const path = HELP_TOPICS[topic as keyof typeof HELP_TOPICS];
     return { topic, ...readBuiltinSkill(undefined, path) };
 }
+
+const guide = readBuiltinSkill(undefined, 'references/operations.md');
+const sections = guide.instructions!.split(/^## ([a-z-]+)$/m);
+const operations = new Map<string, string>();
+for (let i = 1; i < sections.length; i += 2) operations.set(sections[i], sections[i + 1].trim());
+export const HELP_OPERATIONS = [...operations.keys()];
+
+export function operationHelp(requested: readonly string[]) {
+    const selected = [...new Set(requested)];
+    if (!selected.length) throw Error('请指定要查的操作');
+    const instructions = selected.map(operation => {
+        const section = operations.get(operation);
+        if (!section) throw Error('未知帮助操作：' + operation);
+        return '## ' + operation + '\n\n' + section;
+    }).join('\n\n');
+    return { operations: selected, name: guide.name, version: guide.version, releaseVersion: guide.releaseVersion, path: guide.path, instructions };
+}

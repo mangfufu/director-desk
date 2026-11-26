@@ -44,6 +44,7 @@ test('desktop launcher preserves spaced paths, removes Node mode, isolates profi
     assert.equal(probe.nodeMode, undefined);
     assert.deepEqual(probe.args, ['--example=a value', `--director-test-profile=${path.join(root, '.local/desktop-dev-profile')}`]);
     assert.equal((await fs.stat(path.join(root, '.local/desktop-dev-profile'))).isDirectory(), true);
+    assert.deepEqual(await fs.readdir(path.join(root, 'tmp/desktop-runs')), []);
     const custom = run(['--director-test-profile=another profile']);
     assert.equal(custom.status, 0, custom.stderr);
     const customProbe = JSON.parse(custom.stdout.split(/\r?\n/).find(line => line.startsWith('PROBE:')).slice(6));
@@ -59,8 +60,22 @@ test('desktop launcher explains how to build missing prepared files', async t =>
 });
 
 test('desktop launcher reports Electron start failure as nonzero', async t => {
-    const { run } = await fixture(t, true, path.join(os.tmpdir(), 'missing-electron-executable'));
+    const { root, run } = await fixture(t, true, path.join(os.tmpdir(), 'missing-electron-executable'));
     const result = run();
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Could not start Electron/);
+    assert.deepEqual(await fs.readdir(path.join(root, 'tmp/desktop-runs')), []);
+});
+
+test('preparing another build cannot remove the running desktop assets', async t => {
+    const {root,run}=await fixture(t);
+    await fs.writeFile(path.join(root,'.audit/desktop-app/desktop/main.cjs'),`
+        const fs=require('node:fs'),path=require('node:path');
+        fs.writeFileSync(path.join(process.cwd(),'.audit/desktop-app/dist/index.html'),'new build');
+        console.log('SNAPSHOT:'+fs.readFileSync(path.join(__dirname,'../dist/index.html'),'utf8'));
+    `);
+    const result=run();assert.equal(result.status,0,result.stderr);
+    assert.match(result.stdout,/SNAPSHOT:<html><\/html>/);
+    assert.equal(await fs.readFile(path.join(root,'.audit/desktop-app/dist/index.html'),'utf8'),'new build');
+    assert.deepEqual(await fs.readdir(path.join(root,'tmp/desktop-runs')),[]);
 });

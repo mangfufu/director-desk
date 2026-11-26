@@ -42,9 +42,10 @@ test('inactive scene query selects before copying, leaves active scene and retur
 
 test('combined edits commit once, preserve individual receipts and reject stale/invalid writes atomically', async () => {
     let commits = 0;
+    const rebuilds: boolean[] = [];
     const ctx = { project: demoProject(), revision: 0, time: 0, preview: 'program', selected: '', busy: false,
         history: { pending: false, undoStack: [], redoStack: [] }, engine: { exporting: false, externalModels: { retain() {} } },
-        updateTimeUI() {}, change(fn: () => void) { fn(); (ctx as any).revision++; commits++; return true; },
+        updateTimeUI() {}, change(fn: () => void, rebuild = true) { fn(); (ctx as any).revision++; commits++; rebuilds.push(rebuild); return true; },
     } as unknown as AppContext;
     const service = createToolService(ctx);
     const initial = await service.call('director_read', { sections: [] }); const revision = (initial.data as any).revision;
@@ -67,4 +68,12 @@ test('combined edits commit once, preserve individual receipts and reject stale/
     assert.equal(commits, 1);
     assert.throws(() => validateToolInput('director_apply', { ...args, operations: [] }));
     assert.throws(() => validateToolInput('director_apply', { ...args, requests: [requests[0], { ...requests[1], revision: revision + 1 }] }));
+    const current = await service.call('director_read', { sections: [] });
+    const saved = await service.call('director_apply', {
+        revision: current.data.revision, requestId: 'save-prompts',
+        operations: [{ operation: 'production', patch: { promptText: '参考视频文稿', textOnlyPrompt: '纯文字文稿' } }],
+    });
+    assert.equal(saved.ok, true, saved.error ?? 'production save failed');
+    assert.equal(ctx.project.production?.textOnlyPrompt, '纯文字文稿');
+    assert.deepEqual(rebuilds, [true, false]);
 });

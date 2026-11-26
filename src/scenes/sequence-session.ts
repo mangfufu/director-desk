@@ -51,7 +51,7 @@ export class SceneSession {
     get undoCount() { return this.#undo.length; }
     get redoCount() { return this.#redo.length; }
     sceneList() { return this.#document.scenes.map(({ id, name, state, origin }) => ({ id, name, duration: state.duration, fps: state.fps, aspect: state.aspect, entityCount: state.entities.length, hasOrigin: !!origin })); }
-    readScene(id?: string, options?: SavedSceneReadOptions) { return readIndependentScene(this.#document, id, options); }
+    readScene(id?: string, options?: SavedSceneReadOptions) { return readIndependentScene(this.#document, id, options, this.#revision); }
     exportDocument(): SceneDocument { return clone(this.#document); }
     project(id = this.#document.activeSceneId): Project {
         // The session owns already-validated snapshots. Only the requested scene escapes, as a copy.

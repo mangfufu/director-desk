@@ -28,7 +28,7 @@ export async function continueScene(engine: Engine, document: SceneDocument, nam
     let objects: ContinuityOrigin['objects'];
     try {
         engine.sample(time);
-        const report = collectSpatialReport(engine, cameraId, true);
+        const report = collectSpatialReport(engine, cameraId);
         objects = report.objects.map(o => ({ key: o.key, entityId: o.entityId, memberIndex: o.memberIndex, name: o.name, kind: o.kind,
             position: o.origin, forward: o.forward, action: o.action, enabled: o.enabled, bounds: o.bounds ? { min: o.bounds.min, max: o.bounds.max } : null }));
         for (const entity of project.entities) {

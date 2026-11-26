@@ -18,7 +18,7 @@ npm run dev
 npm run desktop:dev
 ```
 
-这个命令复用 `desktop:prepare`，先构建网页与独立桌面运行目录，再启动 Electron，无需制作安装包。Windows、macOS 和 Linux 使用同一命令。首次使用需安装本机 Chrome/Chromium，或通过 `CHROME_PATH` 指定浏览器可执行文件路径。
+这个命令复用 `desktop:prepare`，先构建网页与桌面载荷，再复制到独立的 `tmp/desktop-runs/run-*` 目录启动 Electron，无需制作安装包。每个进程使用自己的运行副本，重新准备或打包不会删除已打开测试版的延迟加载资源；退出后自动删除该副本，用户配置仍保留。Windows、macOS 和 Linux 使用同一命令。首次使用需安装本机 Chrome/Chromium，或通过 `CHROME_PATH` 指定浏览器可执行文件路径。
 
 开发版默认将配置、会话和自动恢复数据保存在 `.local/desktop-dev-profile/`，与安装版分开，重启后保留。源码修改后重新运行 `desktop:dev`；此入口不提供热更新。如果没有改代码，只想再次打开已经准备好的版本，可以运行：
 
@@ -104,6 +104,16 @@ AI → 技能中的“检查技能更新”和“更新技能”独立于软件�
 客户端只下载经过校验的说明 JSON，不下载脚本。校验失败、断网或写入失败保留现有版本；重启选用兼容的新版本，损坏副本回退内置版本。已安装在外部 Agent 目录的离线技能不会被自动覆盖。
 
 验证：`tests/official-skill.test.cjs`、`tests/ai-host.test.cjs`，以及 `npm run desktop:prepare` 后的 `node scripts/test-skills-desktop.mjs`。桌面检查使用隔离配置和模拟更新内容，覆盖真实更新按钮、MCP、渲染端版本、重启及自定义技能。
+
+## Linux 图形回退与 AppImage 目录检查
+
+Linux 启动时允许 Chromium 使用内置 SwiftShader 回退；不强制切换 GPU 后端，不关闭沙箱，显式 `--disable-software-rasterizer` 仍生效。软件渲染用于无法创建硬件 WebGL 的环境，复杂工程性能仍取决于 CPU。启动语言和图形失败页继续独立初始化。
+
+2026-11-13 按 AppImage 目录仓库 `12de5f17545ffff1e7484c6047b84902f3b9971c` 的检查脚本核对：下载／SquashFS 挂载／图标与条目名称／窗口存活、空白画面、错误文字及默认语言会影响检查；文件名带 `linux`、深色主题与使用系统 glibc 本次不是失败原因。深色警告仍可能需要维护者人工审阅，不等于自动收录。
+
+本机 Ubuntu 24.04/WSL、Xvfb 800×600、IceWM，实际 AppImage 不传外部图形参数，从独立空配置启动，约 2 秒进入英文编辑器；验证三维像素和视频反推入口。原版 `check-screenshot.sh` 检查窗口及全屏截图均退出 0，只有深色警告。另以发行版 Firejail 0.9.72、`--noprofile --net=none --appimage` 启动，截图检查同样退出 0。线上使用 Ubuntu 22.04 和其固定 Firejail 构建，本机结果不代替远端 CI。日志和截图集中于 `tmp/optimization-20261113/appimage/`，Linux 测试包在 WSL 的 `/home/staya/.cache/director-optimization-20261113/`，未上传测试安装包。
+
+重复验证：在 Linux/Xvfb + IceWM 会话中运行 `node scripts/verify-appimage.mjs <AppImage 路径>`；可用 `DIRECTOR_CHECK_OUTPUT` 指定输出目录。该脚本不添加图形启动参数，检查英文、真实三维画面、页面打开及页面异常。截图再交给对应版本的上游检查脚本；不要直接在工作环境运行会改写系统目录的整个上游 worker。
 
 ## 界面语言
 

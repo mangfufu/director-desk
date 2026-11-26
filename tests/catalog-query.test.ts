@@ -53,6 +53,31 @@ test('alternative asset queries return a deduplicated union with normal filters 
     assert.throws(() => queryAssetCatalog({ queries: [''] }), /queries/);
     assert.throws(() => queryAssetCatalog({ group: 'invented' }), /可用 group/);
 });
+
+test('ranked asset requirements each keep a result slot and report misses explicitly', async () => {
+    const project = demoProject();
+    const service = createToolService({ project } as AppContext);
+    const searches = [
+        { query: 'chair', group: '座具' },
+        { query: '  desk  ', group: '桌台柜架' },
+        { query: 'light-point', group: '灯光' },
+        { query: 'chair', group: '交通工具' },
+        { query: 'shape-box' },
+    ];
+    const result = await service.call('director_assets', { searches, limit: 1 });
+    assert.equal(result.ok, true, result.error ?? 'grouped lookup failed');
+    const results = result.data.results;
+    assert.deepEqual(results.map((item: any) => item.assets.map((asset: any) => asset.id)),
+        [['furniture-chair'], ['furniture-desk'], ['light-point'], [], ['shape-box']]);
+    assert.ok(results[0].total > 1, 'the chair match earns its slot among multiple candidates');
+    assert.equal(results[3].found, false);
+    assert.deepEqual(Object.keys(results[1].assets[0]).sort(), ['group', 'id', 'kind', 'name']);
+    assert.equal((await service.call('director_assets', { searches, details: true })).ok, false);
+    project.creationMode = 'geometry';
+    const geometry = await service.call('director_assets', { searches, limit: 1 });
+    assert.equal(geometry.ok, true, geometry.error ?? 'geometry lookup failed');
+    assert.deepEqual(geometry.data.results.map((item: any) => item.found), [false, false, false, false, true]);
+});
 test('detail returns real parameter and species joint contracts without exposing mutable catalog state', () => {
     const result = queryAssetCatalog({ ids: ['vehicle-bus', 'animal-fish'], details: true });
     const bus = result.assets.find(a => a.id === 'vehicle-bus')!;

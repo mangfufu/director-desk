@@ -39,6 +39,7 @@ import { SceneModels } from './resources/scene-models.ts';
 import { isExternalModel } from './resources/project-resources.ts';
 import { makeCrowd } from './assets/crowd.ts';
 import { collectSpatialReport, type SpatialOptions } from './spatial/report.ts';
+import { framingSummary } from './spatial/framing-summary.ts';
 import * as T from 'three';
 import { objectBounds, findObjectSnap, type SnapBounds } from './editor/object-snapping.ts';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -456,12 +457,17 @@ export class Engine {
     cameraEntity(id = this.previewId) { const realId = id === 'program' ? activeCameraId(this.project, this.time) : id; return this.project.entities.find(e => e.id === realId && e.kind === 'camera') ?? this.project.entities.find(e => e.kind === 'camera')!; }
     getShotCamera(id = this.previewId) { return this.cameras.get(this.cameraEntity(id).id)!; }
     spatialReport(options: SpatialOptions = {}) {
+        return this.sampleSpatial([options.time ?? this.time], options.cameraId, cameraId => collectSpatialReport(this, cameraId, options))[0];
+    }
+    spatialFraming(options: SpatialOptions, times = [options.time ?? this.time]) {
+        return this.sampleSpatial(times, options.cameraId, cameraId => framingSummary(collectSpatialReport(this, cameraId, options)));
+    }
+    private sampleSpatial<T>(times: readonly number[], cameraId = this.previewId, collect: (id: string) => T) {
         if (this.exporting || this.dragging || this.drawingPath || this.disposed) throw new Error('请先结束导出、拖动或画路径操作，再查询空间');
-        const at = options.time ?? this.time, cameraId = options.cameraId ?? this.previewId;
-        if (!Number.isFinite(at) || at < 0 || at > this.project.duration) throw new Error('查询时间必须在场景时长内');
+        if (times.some(at => !Number.isFinite(at) || at < 0 || at > this.project.duration)) throw new Error('查询时间必须在场景时长内');
         if (cameraId !== 'program' && !this.cameras.has(cameraId)) throw new Error('查询摄影机不存在');
         const previous = this.time;
-        try { this.sample(at); return collectSpatialReport(this, cameraId, options.includeCrowdMembers ?? true, options.occlusionKeys); }
+        try { return times.map(at => { this.sample(at); return collect(cameraId); }); }
         finally { this.sample(previous); }
     }
     select(id: string, point = -1) { if(this.selectedJoint&&(id!==this.jointOwner||point>=0))this.selectJoint(''); this.selected = id; this.selectedPoint = point; this.setPlacementSnap(this.placementSnap); this.refreshHelpers(); this.syncProxy(); const e = this.project.entities.find(e => e.id === id); if (e && !e.locked && !this.drawingPath && editorEntityVisible(this.project, e,this.time) && !this.jointEditingBlocked())

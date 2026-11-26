@@ -27,6 +27,16 @@ test('shipped offline CLI shares group/array and portable staging rules across i
         await write('scene.json', { action: 'copy', name: '第二场', newSceneId: 'second' });
         run('scene', file('groups.director'), file('scene.json'), file('multi.director'));
         const before = await read('multi.director');
+        const firstScene = before.scenes[0];
+        await write('query.json', { action: 'read', sceneId: firstScene.id, query: 'CUBE', category: '搭建', kind: 'prop', offset: 1, limit: 1, details: true });
+        const page = JSON.parse(run('scene', file('multi.director'), file('query.json')));
+        const matches = firstScene.state.entities.filter((e: { kind: string; asset: string }) => e.kind === 'prop' && e.asset === 'cube');
+        assert.equal(page.active, false);
+        assert.deepEqual(page.project.entities, [matches[1]]);
+        assert.deepEqual(page.project.entityPage, { total: matches.length, offset: 1, limit: 1, nextOffset: 2 });
+        await write('exact.json', { action: 'read', sceneId: firstScene.id, entityName: matches[1].name, ids: [matches[1].id] });
+        const exact = JSON.parse(run('scene', file('multi.director'), file('exact.json')));
+        assert.deepEqual(exact.project.entities.map((e: { id: string }) => e.id), [matches[1].id]);
         await write('placement.json', { position: [10, 1, 0] });
         run('staging-insert', file('multi.director'), file('module.staging'), file('result.director'), file('placement.json'));
         assert.equal(JSON.parse(run('validate', file('result.director'))).ok, true);

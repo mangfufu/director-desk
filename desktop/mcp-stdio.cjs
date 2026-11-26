@@ -20,29 +20,30 @@ async function startBridge(env = process.env, input = process.stdin, output = pr
         requestInit: { headers: { Authorization: 'Bearer ' + token }, redirect: 'error' },
         reconnectionOptions: { maxRetries: 0 },
     });
-    const server = new Server({ name: 'director-desk', version: '1.0.0' }, {
-        capabilities: { tools: {} }, instructions: '先按需读取 director_skill。当前对话已包含同版本说明时无需重读。工具操作运行中的导演台当前工程。',
-    });
+    let server;
     let closed = false;
     const onEnd = () => { void close(); };
     const close = async () => {
         if (closed) return; closed = true;
         input.off('end', onEnd); output.off('error', onEnd);
-        await Promise.allSettled([server.close(), upstream.close()]);
+        await Promise.allSettled([server?.close(), upstream.close()]);
     };
-    server.onclose = () => { void close(); };
     // Protocol output is exclusively JSON-RPC. Never print upstream errors that
     // could contain credentials, nor automatically replay an interrupted write.
-    server.onerror = () => {};
     upstream.onerror = () => {};
     const forward = async task => {
         try { return await task(); }
         catch { throw new McpError(ErrorCode.InternalError, '导演台连接中断、凭据失效或请求失败；写入结果可能尚未确认。请检查本机 MCP 并回读工程，不要直接重复写入。'); }
     };
-    server.setRequestHandler(ListToolsRequestSchema, (request, extra) => forward(() => upstream.listTools(request.params, { signal: extra.signal, timeout: 10000 })));
-    server.setRequestHandler(CallToolRequestSchema, (request, extra) => forward(() => upstream.callTool(request.params, undefined, { signal: extra.signal, timeout: 75000 })));
     try {
         await upstream.connect(http, { timeout: 10000 });
+        server = new Server(upstream.getServerVersion(), {
+            capabilities: { tools: {} }, instructions: upstream.getInstructions(),
+        });
+        server.onclose = () => { void close(); };
+        server.onerror = () => {};
+        server.setRequestHandler(ListToolsRequestSchema, (request, extra) => forward(() => upstream.listTools(request.params, { signal: extra.signal, timeout: 10000 })));
+        server.setRequestHandler(CallToolRequestSchema, (request, extra) => forward(() => upstream.callTool(request.params, undefined, { signal: extra.signal, timeout: 75000 })));
         await server.connect(new StdioServerTransport(input, output));
         input.once('end', onEnd); output.once('error', onEnd);
     } catch {

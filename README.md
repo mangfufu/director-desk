@@ -8,7 +8,7 @@
 
 ![布景、摄影机画面与时间轴](docs/images/workspace-current-zh.png)
 
-当前发布版：[0.5.5.1](https://github.com/mangfufu/director-desk/releases/tag/v0.5.5.1)。
+当前发布版为 [0.5.6](https://github.com/mangfufu/director-desk/releases/tag/v0.5.6)。
 
 ## 核心功能
 

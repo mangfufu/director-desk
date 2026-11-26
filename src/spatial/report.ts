@@ -18,7 +18,7 @@ import type { FootPlantState } from '../animation/foot-plant.ts';
 import { visibilityChecks, type VisibilityResult } from './visibility.ts';
 import { boundsData, boxRelationship, frameBounds, geometryBounds, type BoundsData, type FrameData } from './geometry.ts';
 
-export interface SpatialOptions { time?: number; cameraId?: string; includeCrowdMembers?: boolean; occlusionKeys?: string[] }
+export interface SpatialOptions { time?: number; cameraId?: string; includeCrowdMembers?: boolean; occlusionKeys?: string[]; ids?: readonly string[] }
 export interface SpatialObject {
     physics?: { mode:string; active:boolean; ragdoll:boolean; bodies:number };
     zoneIds?: string[];
@@ -62,13 +62,15 @@ export interface SpatialReport {
 }
 
 /** Read an already sampled scene. Query orchestration/restoration belongs to Engine. */
-export function collectSpatialReport(engine: Engine, cameraId: string, includeCrowdMembers: boolean, occlusionKeys: string[] = []): SpatialReport {
+export function collectSpatialReport(engine: Engine, cameraId: string,
+    { includeCrowdMembers = true, occlusionKeys = [], ids }: SpatialOptions = {}): SpatialReport {
     const p = engine.project, cameraEntity = engine.cameraEntity(cameraId), config = cameraEntity.camera!;
     const camera = engine.getShotCamera(cameraId), objects: SpatialObject[] = [];
+    const selected = ids && new Set(ids);
+    const occlusion = new Set(occlusionKeys), unresolved = new Set(occlusion);
     const hiddenHeadId = config.mode === 'pov' && engine.rigs.has(config.targetId) ? config.targetId : null;
     const direction = (root: Object3D) => new Vector3(0, 0, 1).applyQuaternion(root.getWorldQuaternion(new Quaternion())).normalize();
-    function item(root: Object3D, data: Pick<SpatialObject, 'key' | 'entityId' | 'memberIndex' | 'name' | 'kind' | 'asset' | 'enabled' | 'action'>, forward = direction(root), excluded?: Object3D) {
-        const entity = p.entities.find(e => e.id === data.entityId);
+    function item(root: Object3D, entity: Entity | undefined, data: Pick<SpatialObject, 'key' | 'entityId' | 'memberIndex' | 'name' | 'kind' | 'asset' | 'enabled' | 'action'>, forward = direction(root), excluded?: Object3D) {
         const enabled = data.enabled && (!entity || shotEntityVisible(p, entity, config,engine.time));
         const box = data.kind === 'camera' || entity?.light ? null : geometryBounds(root);
         const shotBox = excluded ? geometryBounds(root, excluded) : box;
@@ -88,9 +90,17 @@ export function collectSpatialReport(engine: Engine, cameraId: string, includeCr
         }
     }
     for (const e of p.entities) {
+        const key = `entity:${e.id}`;
+        const crowd = includeCrowdMembers && e.kind === 'crowd' ? engine.crowdRigs.get(e.id)! : undefined;
+        if (unresolved.size && e.kind !== 'camera') {
+            unresolved.delete(key);
+            if (unresolved.size) crowd?.forEach((_, index) => unresolved.delete(`crowd:${e.id}:${index}`));
+        }
+        if (selected && !selected.has(e.id)) continue;
+
         const root = e.kind === 'camera' ? engine.cameras.get(e.id)! : engine.models.get(e.id)!;
         const rig = engine.rigs.get(e.id);
-        item(root, { key: `entity:${e.id}`, entityId: e.id, memberIndex: null, name: e.name, kind: e.kind, asset: e.asset, enabled: e.visible,
+        item(root, e, { key, entityId: e.id, memberIndex: null, name: e.name, kind: e.kind, asset: e.asset, enabled: e.visible,
             action: e.kind === 'actor' || e.kind === 'crowd' ? sampledAction(e, engine.time).action : null },
             e.kind === 'camera' ? root.getWorldDirection(new Vector3()) : direction(rig?.hips ?? root), hiddenHeadId === e.id ? rig?.head : undefined);
         const sample = e.external ? nativeSample(e, engine.time) : null;
@@ -113,7 +123,7 @@ export function collectSpatialReport(engine: Engine, cameraId: string, includeCr
         const contact = engine.externalModels.humanContactState(e.id); if (contact && !objects.at(-1)!.physics?.active) objects.at(-1)!.footGrounding = contact;
         const plants = engine.externalModels.humanPlantState(e.id); if (plants && !objects.at(-1)!.physics?.active) objects.at(-1)!.footPlant = plants;
         const transition = engine.externalModels.motionTransitionState(e.id); if (transition && !objects.at(-1)!.physics?.active) objects.at(-1)!.motionTransition = transition;
-        if (includeCrowdMembers && e.kind === 'crowd') engine.crowdRigs.get(e.id)!.forEach((r, index) => { item(r.root, {
+        crowd?.forEach((r, index) => { item(r.root, e, {
             key: `crowd:${e.id}:${index}`, entityId: e.id, memberIndex: index, name: `${e.name} / 第 ${index + 1} 人`,
             kind: 'crowd-member', asset: 'person', enabled: e.visible, action: sampledAction(e, engine.time).action
         }, direction(r.hips)); annotateRetarget(crowdAnimationPhase(e.seed, index));
@@ -123,15 +133,23 @@ export function collectSpatialReport(engine: Engine, cameraId: string, includeCr
         });
     }
     const wallNames: Record<string, string> = { north: '北墙（−Z）', south: '南墙（+Z）', east: '东墙（+X）', west: '西墙（−X）', ceiling: '天花板' };
-    if (p.room.enabled) {
-        for (const [side, root] of engine.walls) item(root, { key: `room:${side}`, entityId: null, memberIndex: null, name: wallNames[side],
-            kind: 'room', asset: side, enabled: !config.hideWalls.includes(side), action: null });
+    if (p.room.enabled && (!selected || unresolved.size)) {
+        for (const [side, root] of engine.walls) {
+            const key = `room:${side}`;
+            unresolved.delete(key);
+            if (!selected) item(root, undefined, { key, entityId: null, memberIndex: null, name: wallNames[side],
+                kind: 'room', asset: side, enabled: !config.hideWalls.includes(side), action: null });
+        }
         const wallRoots = new Set<Object3D>(engine.walls.values());
         const floor = engine.roomGroup.children.find(root => !wallRoots.has(root));
-        if (floor) item(floor, { key: 'room:floor', entityId: null, memberIndex: null, name: '房间地板', kind: 'room', asset: 'floor', enabled: true, action: null });
+        if (floor) {
+            unresolved.delete('room:floor');
+            if (!selected) item(floor, undefined, { key: 'room:floor', entityId: null, memberIndex: null, name: '房间地板', kind: 'room', asset: 'floor', enabled: true, action: null });
+        }
     }
-    if (occlusionKeys.some(key => !objects.some(o => o.key === key && o.kind !== 'camera'))) throw new Error('遮挡查询对象不存在，或对象是摄影机');
-    const visibility = visibilityChecks(engine, cameraId, occlusionKeys);
+    if (unresolved.size) throw new Error('遮挡查询对象不存在，或对象是摄影机');
+    // The ray scene remains global even when the returned geometry details are scoped.
+    const visibility = visibilityChecks(engine, cameraId, selected ? objects.filter(o => occlusion.has(o.key)).map(o => o.key) : occlusionKeys);
     for (const object of objects) if (visibility.has(object.key)) { object.visibility = visibility.get(object.key); object.framing.occlusion = 'sampled'; }
     const people = p.entities.filter(e => (e.kind === 'actor' || e.kind === 'crowd') && !isAnimalAsset(e.asset));
     const animals = p.entities.filter(e => isAnimalAsset(e.asset));

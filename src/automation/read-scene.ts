@@ -10,6 +10,7 @@ import { productionData } from '../production/notes.ts';
 import { sceneResourceReport } from '../resources/render-statistics.ts';
 import { resourceUsage } from '../resources/resource-usage.ts';
 import { inheritedPoseAt } from '../scenes/initial-pose.ts';
+import { selectSceneEntities } from '../scenes/entity-query.ts';
 import { BUILTIN_SKILL } from './skill.ts';
 
 import { READ_SECTIONS, type ReadSection, type SceneReadOptions } from './read-sections.ts';
@@ -34,15 +35,18 @@ export function readScene(ctx: AppContext, revision: number, args: SceneReadOpti
     };
     if (sections.has('selection')) result.selection = editorSelection(project, ctx.selected);
     if (sections.has('entities')) {
-        const entities = project.entities.filter(e => !args.ids || args.ids.includes(e.id));
-        result.entities = entities.map(e => args.details ? {
-            ...clone(e), ...(e.initialPose ? { initialPose: { active: inheritedPoseAt(e, ctx.time), nodeCount: e.initialPose.nodes.length,
-                description: '接拍姿态；原始节点数组保存在工程文件中，新动作开始后不再保持' } } : {}),
-        } : { id: e.id, name: e.name, asset: e.asset, kind: e.kind, color: e.color, reference: e.reference, locked: e.locked, visible: e.visible, visibleAtTime: entityVisibleAt(e,ctx.time), visibilityClips: e.visibility?.length, position: e.position, ...(e.memberPaths ? {memberRoutes:memberPathSummary(e)} : {}) });
-        if (args.ids) result.missingIds = args.ids.filter(id => !entities.some(e => e.id === id));
-        if (args.details) result.structureModules = entities.filter(e => structurePorts(e).length).map(e => ({
-            id: e.id, localPorts: structurePorts(e), worldPorts: !e.path && !e.handBinding && !e.clips.length ? worldStructurePorts(e) : [], link: e.structureLink ?? null,
-        }));
+        const cachedRevision = ctx.draft || ctx.history?.pending ? undefined : revision;
+        const { entities, ...entityInfo } = selectSceneEntities(project.entities, args, { revision: cachedRevision, fullList: requested.includes('all') });
+        Object.assign(result, entityInfo);
+        if (entities) {
+            result.entities = entities.map(e => args.details ? clone({
+                ...e, ...(e.initialPose ? { initialPose: { active: inheritedPoseAt(e, ctx.time), nodeCount: e.initialPose.nodes.length,
+                    description: '接拍姿态；原始节点数组保存在工程文件中，新动作开始后不再保持' } } : {}),
+            }) : { id: e.id, name: e.name, asset: e.asset, kind: e.kind, color: e.color, reference: e.reference, locked: e.locked, visible: e.visible, visibleAtTime: entityVisibleAt(e,ctx.time), visibilityClips: e.visibility?.length, position: e.position, ...(e.memberPaths ? {memberRoutes:memberPathSummary(e)} : {}) });
+            if (args.details) result.structureModules = entities.filter(e => structurePorts(e).length).map(e => ({
+                id: e.id, localPorts: structurePorts(e), worldPorts: !e.path && !e.handBinding && !e.clips.length ? worldStructurePorts(e) : [], link: e.structureLink ?? null,
+            }));
+        }
     }
     if (sections.has('scene')) Object.assign(result, { scenes: ctx.scenes?.list(), room: project.room, extensions: project.extensions, physics:project.physics, lighting: project.lighting, depthVideo: project.depthVideo ?? DEFAULT_DEPTH_VIDEO,
         floors: project.floors ?? [], zones: project.zones ?? [], groups: project.groups ?? [], editorView: project.editorView });

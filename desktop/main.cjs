@@ -14,6 +14,10 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'director', privileges: { standa
 if (!app.isPackaged && app.commandLine.hasSwitch('director-test-profile'))
     app.setPath('userData', path.resolve(app.commandLine.getSwitchValue('director-test-profile')));
 app.setName('DirectorDesk');
+const softwareFallback = process.platform === 'linux' && app.isPackaged
+    && !['use-gl', 'use-angle', 'disable-gpu', 'disable-software-rasterizer'].some(name => app.commandLine.hasSwitch(name));
+let gpuInfoReady = false;
+if (softwareFallback) app.on('gpu-info-update', () => { gpuInfoReady = true; });
 let window;
 let extensions;
 let integration;
@@ -49,7 +53,22 @@ async function createWindow() {
         if (updates.isQuitting()) { event.preventDefault(); return; }
         files.preventUnload(event);
     });
-    window.once('ready-to-show', () => window.show());
+    window.once('ready-to-show', () => {
+        if (softwareFallback && gpuInfoReady) {
+            const gpu = app.getGPUFeatureStatus();
+            if (gpu.gpu_compositing === 'disabled_software' && !gpu.webgl?.startsWith('enabled')) {
+                // Restart before showing the editor. Software GL also enables
+                // composition, unlike the WebGL-only software fallback.
+                const args = process.argv.slice(1).concat('--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader');
+                const image = process.env.APPIMAGE;
+                const execPath = image && path.isAbsolute(image) && image.toLowerCase().endsWith('.appimage') && fsSync.existsSync(image) ? image : undefined;
+                app.relaunch({ args, execPath });
+                app.exit(0);
+                return;
+            }
+        }
+        window.show();
+    });
     window.on('closed', () => { window = null; });
     try { await files.ready; } catch { dialog.showErrorBox('文件位置不可用', '请检查默认目录或本机文件位置配置。'); }
     void window.loadURL(origin + '/');
